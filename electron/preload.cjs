@@ -14,4 +14,13 @@ contextBridge.exposeInMainWorld('tools', {
     ipcRenderer.on('video:progress', listener);
     return () => ipcRenderer.removeListener('video:progress', listener);
   },
+  selectNormalizeFolders: () => ipcRenderer.invoke('normalizer:select-folders'),
+  scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
+  startNormalization: (data) => ipcRenderer.invoke('normalizer:start', data),
+  cancelNormalization: () => ipcRenderer.invoke('normalizer:cancel'),
+  onNormalizeProgress: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('normalizer:progress', listener);
+    return () => ipcRenderer.removeListener('normalizer:progress', listener);
+  },
 });

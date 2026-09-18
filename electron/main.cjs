@@ -3,8 +3,11 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
+const { scanMedia, normalizeMedia } = require('./audioNormalizer.cjs');
 let videoCancelled = false;
 let activeVideoProcess = null;
+let normalizeCancelled = false;
+let activeNormalizeProcess = null;
 const TYPES = {
   video: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.m4v', '.flv'],
   audio: ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma', '.opus'],
@@ -199,6 +202,72 @@ app.whenReady().then(() => {
       if (process.platform === 'win32')
         execFile('taskkill', ['/pid', String(activeVideoProcess.pid), '/T', '/F'], () => {});
       else activeVideoProcess.kill('SIGTERM');
+    }
+    return true;
+  });
+  ipcMain.handle('normalizer:select-folders', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+  ipcMain.handle('normalizer:scan', (_event, data) => scanMedia(data.folders, data.type));
+  ipcMain.handle('normalizer:start', async (event, { files, type, targetDb }) => {
+    normalizeCancelled = false;
+    let completed = 0;
+    for (const file of files) {
+      if (normalizeCancelled) break;
+      event.sender.send('normalizer:progress', {
+        type: 'file-start',
+        file: file.name,
+        current: completed,
+        total: files.length,
+      });
+      try {
+        await normalizeMedia({
+          input: file.path,
+          type,
+          targetDb,
+          isCancelled: () => normalizeCancelled,
+          onProcess: (process) => {
+            activeNormalizeProcess = process;
+          },
+          onProgress: (percent) =>
+            event.sender.send('normalizer:progress', {
+              type: 'file-progress',
+              file: file.name,
+              percent,
+            }),
+        });
+        completed += 1;
+        event.sender.send('normalizer:progress', {
+          type: 'file-done',
+          file: file.name,
+          current: completed,
+          total: files.length,
+        });
+      } catch (error) {
+        if (error.code !== 'CANCELLED')
+          event.sender.send('normalizer:progress', {
+            type: 'error',
+            file: file.name,
+            message: error.message,
+          });
+      }
+    }
+    activeNormalizeProcess = null;
+    event.sender.send('normalizer:progress', {
+      type: normalizeCancelled ? 'cancelled' : 'done',
+      completed,
+      total: files.length,
+    });
+  });
+  ipcMain.handle('normalizer:cancel', () => {
+    normalizeCancelled = true;
+    if (activeNormalizeProcess && !activeNormalizeProcess.killed) {
+      if (process.platform === 'win32')
+        execFile('taskkill', ['/pid', String(activeNormalizeProcess.pid), '/T', '/F'], () => {});
+      else activeNormalizeProcess.kill('SIGTERM');
     }
     return true;
   });

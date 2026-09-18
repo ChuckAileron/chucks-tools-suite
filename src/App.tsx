@@ -2,7 +2,8 @@ import { useState } from 'react';
 import MoverTool from './MoverTool';
 import RenameTool from './RenameTool';
 import VideoTool from './VideoTool';
-type Tool = 'mover' | 'rename' | 'video';
+import NormalizeTool from './NormalizeTool';
+type Tool = 'mover' | 'rename' | 'video' | 'normalize';
 export default function App() {
   const [tool, setTool] = useState<Tool>('mover');
   return (
@@ -38,6 +39,16 @@ export default function App() {
               <small>Conversión a 480p</small>
             </span>
           </button>
+          <button
+            className={tool === 'normalize' ? 'active' : ''}
+            onClick={() => setTool('normalize')}
+          >
+            <i>LU</i>
+            <span>
+              <strong>Normalizar volumen</strong>
+              <small>Audio y video</small>
+            </span>
+          </button>
         </nav>
         <div className="local">
           <b>● Todo permanece local</b>
@@ -49,7 +60,15 @@ export default function App() {
       </aside>
       <main className="content">
         <div className="mobile-brand">CHUCK's Tools Suite</div>
-        {tool === 'mover' ? <MoverTool /> : tool === 'rename' ? <RenameTool /> : <VideoTool />}
+        {tool === 'mover' ? (
+          <MoverTool />
+        ) : tool === 'rename' ? (
+          <RenameTool />
+        ) : tool === 'video' ? (
+          <VideoTool />
+        ) : (
+          <NormalizeTool />
+        )}
       </main>
     </div>
   );

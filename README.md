@@ -54,6 +54,20 @@ Características:
 
 Esta herramienta requiere que los ejecutables `ffmpeg` y `ffprobe` estén instalados y disponibles en la variable de entorno `PATH`.
 
+### Normalizar volumen
+
+Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio contenidas en videos.
+
+- Procesamiento de varias carpetas.
+- Objetivo configurable entre -50 y -5 LUFS.
+- Valor recomendado de -16 LUFS para contenido general.
+- Progreso por archivo y cancelación del proceso activo.
+- Video copiado sin recodificar para evitar pérdida visual y reducir el tiempo de proceso.
+- Resultado guardado junto al original con el sufijo `_normalized`.
+- Los archivos originales nunca se reemplazan.
+
+La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya terminados en `_normalized` se excluyen del siguiente escaneo para evitar procesarlos repetidamente.
+
 ## Requisitos
 
 - Node.js 20 o posterior.
@@ -139,6 +153,7 @@ CHUCK's Tools Suite/
 │   ├── MoverTool.tsx     # Herramienta para mover por tipo
 │   ├── RenameTool.tsx    # Herramienta para renombrar
 │   ├── VideoTool.tsx     # Conversión de videos a SD
+│   ├── NormalizeTool.tsx # Normalización de volumen
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API

@@ -31,6 +31,16 @@ export type VideoProgress = {
   total?: number;
   percent?: number;
 };
+export type NormalizeFile = { path: string; name: string; folder: string; size: number };
+export type NormalizeProgress = {
+  type: string;
+  file?: string;
+  message?: string;
+  current?: number;
+  total?: number;
+  completed?: number;
+  percent?: number;
+};
 declare global {
   interface Window {
     tools: {
@@ -60,6 +70,18 @@ declare global {
       }): Promise<void>;
       cancelVideoConversion(): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
+      selectNormalizeFolders(): Promise<string[]>;
+      scanNormalizeFiles(data: {
+        folders: string[];
+        type: 'audio' | 'video';
+      }): Promise<NormalizeFile[]>;
+      startNormalization(data: {
+        files: NormalizeFile[];
+        type: 'audio' | 'video';
+        targetDb: number;
+      }): Promise<void>;
+      cancelNormalization(): Promise<boolean>;
+      onNormalizeProgress(callback: (data: NormalizeProgress) => void): () => void;
     };
   }
 }
