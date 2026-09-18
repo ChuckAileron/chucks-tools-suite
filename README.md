@@ -25,7 +25,7 @@ Características:
 - Creación de una carpeta de destino dentro de la carpeta de origen.
 - Devolución opcional del lote a la raíz del origen después de mover y limpiar.
 - Acción Deshacer para restaurar las ubicaciones originales y recrear su estructura.
-- Reset de pantalla para limpiar carpetas, resultados, filtros y opciones.
+- Reset de pantalla para limpiar selección de carpetas, resultados, filtros y opciones.
 - Eliminación opcional del destino temporal creado por la aplicación después de devolver el lote.
 
 > **Advertencia:** la opción para eliminar carpetas hijas borra recursivamente las subcarpetas y cualquier contenido que permanezca dentro de ellas. La carpeta de origen nunca se elimina. La interfaz solicita confirmación antes de ejecutar esta acción.

@@ -189,7 +189,7 @@ export default function MoverTool() {
           disabled={busy || (!source && !destination)}
           onClick={reset}
         >
-          Limpiar carpetas
+          Limpiar selección
         </button>
         <button disabled={!source || busy} onClick={() => setShowCreate((current) => !current)}>
           + Crear destino dentro de la carpeta de origen
