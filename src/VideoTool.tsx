@@ -24,8 +24,8 @@ export default function VideoTool() {
           addLog(`Procesando: ${data.folder}`);
         }
         if (data.type === 'info' && data.message) addLog(data.message);
-        if (data.type === 'global' && data.total)
-          setGlobalProgress(Math.floor(((data.current || 0) / data.total) * 100));
+        if (data.type === 'queue-progress')
+          setGlobalProgress(data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0);
         if (data.type === 'file-start') {
           setActiveFile(data.file || 'Archivo');
           setFileProgress(0);
@@ -77,13 +77,24 @@ export default function VideoTool() {
           };
       return next;
     });
+    return results;
   };
 
   const addFolders = async () => {
     const paths = await window.tools.selectVideoFolders();
     if (!paths.length) return;
     try {
-      await inspect(paths);
+      const results = await inspect(paths);
+      if (running) {
+        const appended = await window.tools.appendVideoFolders({
+          folders: results.map((folder) => folder.folder),
+          codec,
+        });
+        if (appended)
+          addLog(
+            `${results.length} carpeta${results.length === 1 ? '' : 's'} añadida${results.length === 1 ? '' : 's'} a la cola.`,
+          );
+      }
     } catch (error) {
       addLog(`No se pudieron inspeccionar las carpetas: ${String(error)}`, 'error');
     }
@@ -124,7 +135,7 @@ export default function VideoTool() {
   };
 
   const removeFolder = async (folder: string) => {
-    if (running) await window.tools.skipVideoFolder(folder);
+    if (running && !(await window.tools.skipVideoFolder(folder))) return;
     setFolders((current) => current.filter((item) => item.folder !== folder));
   };
 
@@ -156,9 +167,7 @@ export default function VideoTool() {
           </div>
         </div>
         <div className="video-folder-actions">
-          <button disabled={running} onClick={addFolders}>
-            + Añadir carpetas
-          </button>
+          <button onClick={addFolders}>+ Añadir carpetas</button>
           <button disabled={running || !folders.length} onClick={() => setFolders([])}>
             Limpiar
           </button>

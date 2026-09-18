@@ -1,6 +1,6 @@
 {
   "name": "chucks-tools-suite",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "type": "module",
   "description": "Suite de herramientas locales para archivos",

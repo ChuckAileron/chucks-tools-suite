@@ -20,10 +20,12 @@ Características:
 - Resolución automática de nombres duplicados mediante sufijos numéricos.
 - Compatibilidad con movimientos entre unidades o discos diferentes.
 - Eliminación opcional de las carpetas hijas del origen.
+- Creación de una carpeta de destino dentro de la carpeta de origen.
+- Reversión del último lote para devolver los archivos a sus ubicaciones originales.
 
 > **Advertencia:** la opción para eliminar carpetas hijas borra recursivamente las subcarpetas y cualquier contenido que permanezca dentro de ellas. La carpeta de origen nunca se elimina. La interfaz solicita confirmación antes de ejecutar esta acción.
 
-La carpeta de destino debe ser diferente de la carpeta de origen y no puede encontrarse dentro de ella.
+La carpeta de destino debe ser diferente de la carpeta de origen. Si está dentro del origen, se excluye automáticamente del escaneo y se conserva durante la limpieza de carpetas hijas.
 
 ### Renombrar archivos
 

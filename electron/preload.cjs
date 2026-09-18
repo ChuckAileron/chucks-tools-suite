@@ -3,6 +3,8 @@ contextBridge.exposeInMainWorld('tools', {
   selectDirectory: () => ipcRenderer.invoke('directory:select'),
   scan: (data) => ipcRenderer.invoke('mover:scan', data),
   move: (data) => ipcRenderer.invoke('mover:move', data),
+  undoMove: (data) => ipcRenderer.invoke('mover:undo', data),
+  createDestination: (data) => ipcRenderer.invoke('directory:create-child', data),
   list: (directory) => ipcRenderer.invoke('rename:list', directory),
   rename: (data) => ipcRenderer.invoke('rename:execute', data),
   selectVideoFolders: () => ipcRenderer.invoke('video:select-folders'),
@@ -10,6 +12,7 @@ contextBridge.exposeInMainWorld('tools', {
   startVideoConversion: (data) => ipcRenderer.invoke('video:start', data),
   cancelVideoConversion: () => ipcRenderer.invoke('video:cancel'),
   skipVideoFolder: (folder) => ipcRenderer.invoke('video:skip-folder', folder),
+  appendVideoFolders: (data) => ipcRenderer.invoke('video:append-folders', data),
   onVideoProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('video:progress', listener);

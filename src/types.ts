@@ -6,6 +6,7 @@ export type ScannedFile = {
   extension: string;
   size: number;
 };
+export type MoveRecord = { originalPath: string; movedPath: string };
 export type VideoTrack = {
   index: number;
   codec: string;
@@ -47,6 +48,7 @@ declare global {
       selectDirectory(): Promise<string | null>;
       scan(data: {
         source: string;
+        destination?: string;
         types: FileType[];
         customExtensions: string[];
       }): Promise<ScannedFile[]>;
@@ -55,7 +57,13 @@ declare global {
         destination: string;
         files: ScannedFile[];
         deleteChildFolders: boolean;
-      }): Promise<{ moved: number; deletedFolders: number; errors: string[] }>;
+      }): Promise<{ moved: number; deletedFolders: number; errors: string[]; moves: MoveRecord[] }>;
+      undoMove(data: {
+        source: string;
+        destination: string;
+        moves: MoveRecord[];
+      }): Promise<{ moved: number; errors: string[] }>;
+      createDestination(data: { source: string; name: string }): Promise<string>;
       list(directory: string): Promise<string[]>;
       rename(data: { directory: string; oldName: string; newName: string }): Promise<boolean>;
       selectVideoFolders(): Promise<string[]>;
@@ -70,6 +78,7 @@ declare global {
       }): Promise<void>;
       cancelVideoConversion(): Promise<boolean>;
       skipVideoFolder(folder: string): Promise<boolean>;
+      appendVideoFolders(data: { folders: string[]; codec: 'h264' | 'h265' }): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
       selectNormalizeFolders(): Promise<string[]>;
       scanNormalizeFiles(data: {

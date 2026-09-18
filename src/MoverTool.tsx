@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FileType, ScannedFile } from './types';
+import type { FileType, MoveRecord, ScannedFile } from './types';
 const OPTIONS: { id: FileType; label: string; extensions: string; icon: string }[] = [
   { id: 'video', label: 'Videos', extensions: 'MP4, MKV, AVI, MOV...', icon: '▶' },
   { id: 'audio', label: 'Audio', extensions: 'MP3, WAV, FLAC, AAC...', icon: '♫' },
@@ -25,6 +25,13 @@ export default function MoverTool() {
   const [remove, setRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [createName, setCreateName] = useState('archivos-organizados');
+  const [showCreate, setShowCreate] = useState(false);
+  const [lastMove, setLastMove] = useState<{
+    source: string;
+    destination: string;
+    moves: MoveRecord[];
+  } | null>(null);
   const choose = async (kind: 'source' | 'destination') => {
     const path = await window.tools.selectDirectory();
     if (!path) return;
@@ -32,7 +39,9 @@ export default function MoverTool() {
       alert('La carpeta de destino debe ser diferente de la carpeta de origen.');
       return;
     }
-    (kind === 'source' ? setSource : setDestination)(path);
+    if (kind === 'source') setSource(path);
+    else setDestination(path);
+    setLastMove(null);
     setFiles([]);
     setSelected(new Set());
   };
@@ -49,6 +58,7 @@ export default function MoverTool() {
     try {
       const result = await window.tools.scan({
         source,
+        destination,
         types: [...types],
         customExtensions: custom.split(/[,;\s]+/).filter(Boolean),
       });
@@ -78,8 +88,38 @@ export default function MoverTool() {
       setMessage(
         `${result.moved} archivos movidos${result.errors.length ? `, ${result.errors.length} errores` : ''}.`,
       );
+      setLastMove(result.moves.length ? { source, destination, moves: result.moves } : null);
       setFiles([]);
       setSelected(new Set());
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const createDestination = async () => {
+    setBusy(true);
+    try {
+      const path = await window.tools.createDestination({ source, name: createName });
+      setDestination(path);
+      setShowCreate(false);
+      setLastMove(null);
+      setMessage(`Carpeta de destino creada: ${path}`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const undo = async () => {
+    if (!lastMove) return;
+    setBusy(true);
+    try {
+      const result = await window.tools.undoMove(lastMove);
+      setMessage(
+        `${result.moved} archivos devueltos al origen${result.errors.length ? `, ${result.errors.length} errores` : ''}.`,
+      );
+      if (!result.errors.length) setLastMove(null);
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -105,6 +145,23 @@ export default function MoverTool() {
           value={destination}
           onClick={() => choose('destination')}
         />
+      </div>
+      <div className="destination-create">
+        <button disabled={!source || busy} onClick={() => setShowCreate((current) => !current)}>
+          + Crear destino dentro de la carpeta de origen
+        </button>
+        {showCreate && (
+          <div>
+            <input
+              value={createName}
+              onChange={(event) => setCreateName(event.target.value)}
+              placeholder="Nombre de la nueva carpeta"
+            />
+            <button disabled={!createName.trim() || busy} onClick={createDestination}>
+              Crear y usar
+            </button>
+          </div>
+        )}
       </div>
       <Divider />
       <Step
@@ -148,15 +205,22 @@ export default function MoverTool() {
           <input type="checkbox" checked={remove} onChange={(e) => setRemove(e.target.checked)} />
           <span>
             <strong>Eliminar carpetas hijas al finalizar</strong>
-            <small>También elimina su contenido restante.</small>
+            <small>También elimina su contenido restante, excepto el destino.</small>
           </span>
         </label>
-        <button
-          disabled={!destination || same(source, destination) || !selected.size || busy}
-          onClick={move}
-        >
-          Mover {selected.size || ''} archivos →
-        </button>
+        <div className="mover-actions">
+          {lastMove && (
+            <button className="undo-button" disabled={busy} onClick={undo}>
+              ↶ Devolver al origen
+            </button>
+          )}
+          <button
+            disabled={!destination || same(source, destination) || !selected.size || busy}
+            onClick={move}
+          >
+            Mover {selected.size || ''} archivos →
+          </button>
+        </div>
       </div>
     </ToolFrame>
   );

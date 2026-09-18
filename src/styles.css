@@ -226,6 +226,63 @@ nav button small {
 .paths > b {
   color: #aab0ac;
 }
+.destination-create {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 9px;
+}
+.destination-create > button,
+.destination-create div button {
+  padding: 7px 10px;
+  border: 1px solid #b9ded9;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.destination-create > div {
+  display: flex;
+  gap: 7px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dfe3de;
+  border-radius: 10px;
+  background: #fafbf8;
+}
+.destination-create > div input {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #d6d9d4;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.destination-create > div button {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.destination-create > button:disabled,
+.destination-create div button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.mover-actions {
+  display: flex;
+  gap: 8px;
+}
+.tool-action .mover-actions .undo-button {
+  min-width: auto;
+  border: 1px solid #9fcfc9;
+  background: #fff;
+  color: var(--brand-ink);
+  box-shadow: none;
+}
+.tool-action .mover-actions .undo-button:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
 .path {
   flex: 1;
   min-width: 0;
@@ -1008,6 +1065,15 @@ nav button i {
     flex-direction: column;
   }
   .paths > .path {
+    width: 100%;
+  }
+  .destination-create,
+  .destination-create > div,
+  .mover-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .mover-actions button {
     width: 100%;
   }
   .paths > b {
