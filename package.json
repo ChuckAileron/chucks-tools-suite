@@ -1,1 +1,38 @@
-{"name":"chucks-tools-suite","version":"1.0.0","private":true,"type":"module","description":"Suite de herramientas locales para archivos","main":"electron/main.cjs","scripts":{"dev":"concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron . --dev\"","build":"tsc && vite build","start":"electron ."},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","typescript":"latest","react":"latest","react-dom":"latest"},"devDependencies":{"@types/react":"latest","@types/react-dom":"latest","concurrently":"latest","electron":"latest","wait-on":"latest"}}
+{
+  "name": "chucks-tools-suite",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Suite de herramientas locales para archivos",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron . --dev\"",
+    "build": "tsc && vite build",
+    "start": "electron .",
+    "lint": "eslint src vite.config.ts",
+    "lint:fix": "eslint src vite.config.ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm run build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "concurrently": "latest",
+    "electron": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "globals": "latest",
+    "prettier": "latest",
+    "typescript-eslint": "latest",
+    "wait-on": "latest"
+  }
+}
