@@ -1,13 +1,55 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import MoverTool from './MoverTool';
 import RenameTool from './RenameTool';
 import VideoTool from './VideoTool';
 import NormalizeTool from './NormalizeTool';
 import UrlBypassTool from './UrlBypassTool';
 import DownloadsTool from './DownloadsTool';
+import type { DownloadsState, VideoState } from './types';
 type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads';
+const EMPTY_DOWNLOADS: DownloadsState = {
+  settings: {
+    defaultDirectory: '',
+    concurrency: 3,
+    autoExtract: true,
+    clipboard: true,
+    googleDriveApiKey: '',
+  },
+  tasks: [],
+};
+const EMPTY_VIDEO: VideoState = {
+  running: false,
+  codec: 'h264',
+  folders: [],
+  trackSelections: {},
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Ningún archivo en proceso',
+  activeFolder: '',
+  logs: [],
+};
 export default function App() {
   const [tool, setTool] = useState<Tool>('downloads');
+  const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
+  const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
+  useEffect(() => {
+    window.tools.getDownloads().then(setDownloads);
+    window.tools.getVideoState().then(setVideo);
+    const stopDownloads = window.tools.onDownloadsState(setDownloads);
+    const stopVideo = window.tools.onVideoState(setVideo);
+    return () => {
+      stopDownloads();
+      stopVideo();
+    };
+  }, []);
+  const downloadProgress = downloads.tasks.length
+    ? Math.round(
+        downloads.tasks.reduce(
+          (total, task) => total + (task.status === 'completed' ? 100 : task.progress),
+          0,
+        ) / downloads.tasks.length,
+      )
+    : 0;
   return (
     <div className="suite">
       <aside className="sidebar">
@@ -28,6 +70,13 @@ export default function App() {
             <span>
               <strong>Descargas</strong>
               <small>Gestor de enlaces</small>
+              <SidebarProgress
+                value={downloadProgress}
+                label={downloads.tasks.length ? `${downloadProgress}% global` : 'Sin tareas'}
+                active={downloads.tasks.some((task) =>
+                  ['pending', 'downloading', 'extracting'].includes(task.status),
+                )}
+              />
             </span>
             <em className="wip-badge">WIP</em>
           </button>
@@ -50,6 +99,11 @@ export default function App() {
             <span>
               <strong>Video a SD</strong>
               <small>Conversión a 480p</small>
+              <SidebarProgress
+                value={video.globalProgress}
+                label={video.folders.length ? `${video.globalProgress}% global` : 'Sin tareas'}
+                active={video.running}
+              />
             </span>
           </button>
           <button
@@ -96,5 +150,24 @@ export default function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function SidebarProgress({
+  value,
+  label,
+  active,
+}: {
+  value: number;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <span className={`sidebar-progress ${active ? 'running' : ''}`}>
+      <i>
+        <b style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+      </i>
+      <small>{label}</small>
+    </span>
   );
 }

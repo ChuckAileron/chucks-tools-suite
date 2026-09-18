@@ -85,6 +85,17 @@ export type VideoProgress = {
   total?: number;
   percent?: number;
 };
+export type VideoState = {
+  running: boolean;
+  codec: 'h264' | 'h265';
+  folders: VideoFolder[];
+  trackSelections: Record<string, { audio: number[]; subtitles: number[] }>;
+  globalProgress: number;
+  fileProgress: number;
+  activeFile: string;
+  activeFolder: string;
+  logs: { text: string; tone?: string }[];
+};
 export type NormalizeFile = { path: string; name: string; folder: string; size: number };
 export type NormalizeProgress = {
   type: string;
@@ -151,6 +162,7 @@ declare global {
         folders: string[];
         codec: 'h264' | 'h265';
       }): Promise<VideoFolder[]>;
+      getVideoState(): Promise<VideoState>;
       startVideoConversion(data: {
         folders: string[];
         codec: 'h264' | 'h265';
@@ -160,6 +172,7 @@ declare global {
       skipVideoFolder(folder: string): Promise<boolean>;
       appendVideoFolders(data: { folders: string[]; codec: 'h264' | 'h265' }): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
+      onVideoState(callback: (state: VideoState) => void): () => void;
       selectNormalizeFolders(): Promise<string[]>;
       scanNormalizeFiles(data: {
         folders: string[];

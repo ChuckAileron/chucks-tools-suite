@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { VideoFolder, VideoTrack } from './types';
+import type { VideoFolder, VideoState, VideoTrack } from './types';
 
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
@@ -17,42 +17,21 @@ export default function VideoTool() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
 
-  useEffect(
-    () =>
-      window.tools.onVideoProgress((data) => {
-        if (data.type === 'folder-start') {
-          setActiveFolder(data.folder || '');
-          addLog(`Procesando: ${data.folder}`);
-        }
-        if (data.type === 'info' && data.message) addLog(data.message);
-        if (data.type === 'queue-progress')
-          setGlobalProgress(data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0);
-        if (data.type === 'file-start') {
-          setActiveFile(data.file || 'Archivo');
-          setFileProgress(0);
-          addLog(`Convirtiendo ${data.file}`);
-        }
-        if (data.type === 'file-progress') setFileProgress(data.percent || 0);
-        if (data.type === 'file-done') {
-          setFileProgress(100);
-          addLog(`${data.file} completado`, 'success');
-        }
-        if (data.type === 'folder-done') {
-          setActiveFolder('');
-          addLog(`Carpeta completada: ${data.folder}`, 'success');
-        }
-        if (data.type === 'error') addLog(`Error: ${data.message}`, 'error');
-        if (data.type === 'cancelled' || data.type === 'all-done') {
-          addLog(
-            data.type === 'cancelled' ? 'Conversión cancelada.' : 'Conversión finalizada.',
-            data.type === 'cancelled' ? 'error' : 'success',
-          );
-          setRunning(false);
-          setActiveFolder('');
-        }
-      }),
-    [],
-  );
+  useEffect(() => {
+    const hydrate = (state: VideoState) => {
+      setFolders(state.folders);
+      setCodec(state.codec);
+      setSelections(state.trackSelections);
+      setRunning(state.running);
+      setGlobalProgress(state.globalProgress);
+      setFileProgress(state.fileProgress);
+      setActiveFile(state.activeFile);
+      setActiveFolder(state.activeFolder);
+      setLogs(state.logs);
+    };
+    window.tools.getVideoState().then(hydrate);
+    return window.tools.onVideoState(hydrate);
+  }, []);
 
   function addLog(text: string, tone?: string) {
     setLogs((current) => [...current.slice(-99), { text, tone }]);

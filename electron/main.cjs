@@ -15,9 +15,60 @@ let videoQueue = [];
 let activeVideoFolder = '';
 let videoCompletedFiles = 0;
 let videoTotalFiles = 0;
-let videoProgressSender = null;
+let videoState = {
+  running: false,
+  codec: 'h264',
+  folders: [],
+  trackSelections: {},
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Ningún archivo en proceso',
+  activeFolder: '',
+  logs: [],
+};
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
+function emitVideoProgress(data) {
+  const addLog = (text, tone) => {
+    videoState.logs = [...videoState.logs.slice(-99), { text, tone }];
+  };
+  if (data.type === 'folder-start') {
+    videoState.activeFolder = data.folder || '';
+    addLog(`Procesando: ${data.folder}`);
+  } else if (data.type === 'info' && data.message) addLog(data.message);
+  else if (data.type === 'queue-progress')
+    videoState.globalProgress = data.total
+      ? Math.floor(((data.current || 0) / data.total) * 100)
+      : 0;
+  else if (data.type === 'file-start') {
+    videoState.activeFile = data.file || 'Archivo';
+    videoState.fileProgress = 0;
+    addLog(`Convirtiendo ${data.file}`);
+  } else if (data.type === 'file-progress') videoState.fileProgress = data.percent || 0;
+  else if (data.type === 'file-done') {
+    videoState.fileProgress = 100;
+    addLog(`${data.file} completado`, 'success');
+  } else if (data.type === 'folder-done') {
+    videoState.activeFolder = '';
+    videoState.folders = videoState.folders.map((folder) =>
+      folder.folder === data.folder ? { ...folder, processed: true } : folder,
+    );
+    addLog(`Carpeta completada: ${data.folder}`, 'success');
+  } else if (data.type === 'error') addLog(`Error: ${data.message}`, 'error');
+  else if (data.type === 'cancelled' || data.type === 'all-done') {
+    videoState.running = false;
+    videoState.activeFolder = '';
+    if (data.type === 'all-done') videoState.globalProgress = 100;
+    addLog(
+      data.type === 'cancelled' ? 'Conversión cancelada.' : 'Conversión finalizada.',
+      data.type === 'cancelled' ? 'error' : 'success',
+    );
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('video:progress', data);
+    window.webContents.send('video:state-changed', videoState);
+  }
+}
 const TYPES = {
   video: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.m4v', '.flv'],
   audio: ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma', '.opus'],
@@ -335,19 +386,35 @@ app.whenReady().then(() => {
   ipcMain.handle('video:inspect', (_event, { folders, codec }) =>
     Promise.all(folders.map((folder) => inspectFolder(path.resolve(folder), codec))),
   );
-  ipcMain.handle('video:start', async (event, { folders, codec, trackSelections }) => {
+  ipcMain.handle('video:state', () => videoState);
+  ipcMain.handle('video:start', async (_event, { folders, codec, trackSelections }) => {
+    if (videoState.running) throw new Error('Ya hay una conversión de video en curso.');
     videoCancelled = false;
     videoCompletedFiles = 0;
-    videoProgressSender = event.sender;
-    videoQueue = await Promise.all(
+    const inspectedFolders = await Promise.all(
       folders.map(async (folder) => {
         const absolute = path.resolve(folder);
         const info = await inspectFolder(absolute, codec);
-        return { folder: absolute, total: info.videos.length };
+        return info;
       }),
     );
+    videoQueue = inspectedFolders.map((info) => ({
+      folder: info.folder,
+      total: info.videos.length,
+    }));
     videoTotalFiles = videoQueue.reduce((total, item) => total + item.total, 0);
-    event.sender.send('video:progress', {
+    videoState = {
+      running: true,
+      codec,
+      folders: inspectedFolders,
+      trackSelections,
+      globalProgress: 0,
+      fileProgress: 0,
+      activeFile: 'Ningún archivo en proceso',
+      activeFolder: '',
+      logs: [],
+    };
+    emitVideoProgress({
       type: 'queue-progress',
       current: 0,
       total: videoTotalFiles,
@@ -358,7 +425,7 @@ app.whenReady().then(() => {
       const absolute = item.folder;
       activeVideoFolder = absolute;
       let completedInFolder = 0;
-      event.sender.send('video:progress', { type: 'folder-start', folder: absolute });
+      emitVideoProgress({ type: 'folder-start', folder: absolute });
       try {
         await convertFolder(
           absolute,
@@ -368,13 +435,13 @@ app.whenReady().then(() => {
             if (data.type === 'file-done') {
               completedInFolder += 1;
               videoCompletedFiles += 1;
-              event.sender.send('video:progress', {
+              emitVideoProgress({
                 type: 'queue-progress',
                 current: videoCompletedFiles,
                 total: videoTotalFiles,
               });
             }
-            event.sender.send('video:progress', data);
+            emitVideoProgress(data);
           },
           {
             isCancelled: () => videoCancelled,
@@ -383,16 +450,16 @@ app.whenReady().then(() => {
             },
           },
         );
-        event.sender.send('video:progress', { type: 'folder-done', folder: absolute });
+        emitVideoProgress({ type: 'folder-done', folder: absolute });
       } catch (error) {
         videoTotalFiles -= Math.max(0, item.total - completedInFolder);
-        event.sender.send('video:progress', {
+        emitVideoProgress({
           type: 'queue-progress',
           current: videoCompletedFiles,
           total: videoTotalFiles,
         });
         if (error.code !== 'CANCELLED')
-          event.sender.send('video:progress', {
+          emitVideoProgress({
             type: 'error',
             folder: absolute,
             message: error.message,
@@ -402,8 +469,7 @@ app.whenReady().then(() => {
     }
     activeVideoProcess = null;
     activeVideoFolder = '';
-    videoProgressSender = null;
-    event.sender.send('video:progress', { type: videoCancelled ? 'cancelled' : 'all-done' });
+    emitVideoProgress({ type: videoCancelled ? 'cancelled' : 'all-done' });
   });
   ipcMain.handle('video:cancel', () => {
     videoCancelled = true;
@@ -422,7 +488,7 @@ app.whenReady().then(() => {
     if (index >= 0) {
       const [removed] = videoQueue.splice(index, 1);
       videoTotalFiles -= removed.total;
-      videoProgressSender?.send('video:progress', {
+      emitVideoProgress({
         type: 'queue-progress',
         current: videoCompletedFiles,
         total: videoTotalFiles,
@@ -431,19 +497,20 @@ app.whenReady().then(() => {
     return true;
   });
   ipcMain.handle('video:append-folders', async (_event, { folders, codec }) => {
-    if (!videoProgressSender) return false;
+    if (!videoState.running) return false;
     const known = new Set([activeVideoFolder, ...videoQueue.map((item) => item.folder)]);
     const additions = [];
     for (const folder of folders) {
       const absolute = path.resolve(folder);
       if (known.has(absolute)) continue;
       const info = await inspectFolder(absolute, codec);
-      additions.push({ folder: absolute, total: info.videos.length });
+      additions.push({ folder: absolute, total: info.videos.length, info });
       known.add(absolute);
     }
-    videoQueue.push(...additions);
+    videoQueue.push(...additions.map(({ folder, total }) => ({ folder, total })));
+    videoState.folders.push(...additions.map(({ info }) => info));
     videoTotalFiles += additions.reduce((total, item) => total + item.total, 0);
-    videoProgressSender?.send('video:progress', {
+    emitVideoProgress({
       type: 'queue-progress',
       current: videoCompletedFiles,
       total: videoTotalFiles,

@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('tools', {
   rename: (data) => ipcRenderer.invoke('rename:execute', data),
   selectVideoFolders: () => ipcRenderer.invoke('video:select-folders'),
   inspectVideoFolders: (data) => ipcRenderer.invoke('video:inspect', data),
+  getVideoState: () => ipcRenderer.invoke('video:state'),
   startVideoConversion: (data) => ipcRenderer.invoke('video:start', data),
   cancelVideoConversion: () => ipcRenderer.invoke('video:cancel'),
   skipVideoFolder: (folder) => ipcRenderer.invoke('video:skip-folder', folder),
@@ -41,6 +42,11 @@ contextBridge.exposeInMainWorld('tools', {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('video:progress', listener);
     return () => ipcRenderer.removeListener('video:progress', listener);
+  },
+  onVideoState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('video:state-changed', listener);
+    return () => ipcRenderer.removeListener('video:state-changed', listener);
   },
   selectNormalizeFolders: () => ipcRenderer.invoke('normalizer:select-folders'),
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
