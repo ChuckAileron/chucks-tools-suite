@@ -6,6 +6,7 @@ const handbrake = require('handbrake-js');
 const VIDEO_PATTERN =
   /\.(mp4|m4v|mov|avi|mkv|webm|wmv|flv|mpg|mpeg|ts|mts|m2ts|vob|ogv|3gp|3g2|asf)$/i;
 const FFMPEG_PATTERN = /\.(mp4|mov|avi|mkv|webm)$/i;
+const MP4_SUBTITLE_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
 const videoFiles = (directory) =>
   fs
     .readdirSync(directory)
@@ -13,8 +14,7 @@ const videoFiles = (directory) =>
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 const outputPath = (directory, output, file) => {
   const sourceExtension = path.extname(file);
-  const extension = FFMPEG_PATTERN.test(file) ? sourceExtension : '.mp4';
-  return path.join(output, `${path.basename(file, sourceExtension)}_SD${extension}`);
+  return path.join(output, `${path.basename(file, sourceExtension)}_SD.mp4`);
 };
 const run = (command, args) =>
   new Promise((resolve, reject) =>
@@ -96,7 +96,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
           '-v',
           'error',
           '-show_entries',
-          'format=duration:stream=index,codec_type,height',
+          'format=duration:stream=index,codec_type,codec_name,height',
           '-of',
           'json',
           input,
@@ -106,12 +106,23 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
     const height = metadata.streams?.find((stream) => stream.codec_type === 'video')?.height || 0;
     const chosen = selections[input];
     const args = ['-y', '-i', input, '-map', '0:v:0'];
+    let subtitleCount = 0;
     if (chosen) {
       for (const track of chosen.audio || []) args.push('-map', `0:${track}`);
-      for (const track of chosen.subtitles || []) args.push('-map', `0:${track}`);
+      for (const track of chosen.subtitles || []) {
+        const stream = metadata.streams?.find((item) => item.index === track);
+        if (stream && MP4_SUBTITLE_CODECS.has(stream.codec_name)) {
+          args.push('-map', `0:${track}`);
+          subtitleCount += 1;
+        }
+      }
     } else {
       args.push('-map', '0:a?');
-      if (/\.mkv$/i.test(file)) args.push('-map', '0:s?');
+      for (const stream of metadata.streams || [])
+        if (stream.codec_type === 'subtitle' && MP4_SUBTITLE_CODECS.has(stream.codec_name)) {
+          args.push('-map', `0:${stream.index}`);
+          subtitleCount += 1;
+        }
     }
     if (height >= 480) args.push('-vf', 'scale=-2:480');
     args.push(
@@ -126,7 +137,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
       '-b:a',
       '128k',
     );
-    if (/\.mkv$/i.test(file)) args.push('-c:s', 'copy');
+    if (subtitleCount) args.push('-c:s', 'mov_text');
     args.push(temporary);
     const duration = Number.parseFloat(metadata.format?.duration) || 0;
     await new Promise((resolve, reject) => {

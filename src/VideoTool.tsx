@@ -3,6 +3,7 @@ import type { VideoFolder, VideoTrack } from './types';
 
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
+const MP4_SUBTITLE_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
 
 export default function VideoTool() {
   const [folders, setFolders] = useState<VideoFolder[]>([]);
@@ -73,7 +74,9 @@ export default function VideoTool() {
         for (const video of folder.videos)
           next[video.path] ||= {
             audio: video.audio.map((track) => track.index),
-            subtitles: video.subtitles.map((track) => track.index),
+            subtitles: video.subtitles
+              .filter((track) => MP4_SUBTITLE_CODECS.has(track.codec))
+              .map((track) => track.index),
           };
       return next;
     });
@@ -220,9 +223,9 @@ export default function VideoTool() {
         <aside className="sd-disclaimer">
           <strong>Qué implica convertir a SD</strong>
           <span>
-            El video se reduce hasta 480p y se vuelve a comprimir, por lo que perderá detalle fino.
-            El audio se convierte a AAC de 128 kbps; esto reduce espacio, pero también puede
-            disminuir su fidelidad. Los archivos originales no se modifican.
+            El video se reduce hasta 480p y se comprime en MP4, por lo que perderá detalle fino. El
+            audio se convierte a AAC de 128 kbps. Los subtítulos de texto se convierten a mov_text;
+            PGS y VobSub se omiten por incompatibilidad con MP4. Los originales no se modifican.
           </span>
         </aside>
         <div className="video-progress">
@@ -369,19 +372,23 @@ function TrackGroup({
   return (
     <section>
       <strong>{title}</strong>
-      {tracks.map((track) => (
-        <label key={track.index}>
-          <input
-            type="checkbox"
-            disabled={disabled}
-            checked={selected.includes(track.index)}
-            onChange={() => onToggle(track.index)}
-          />{' '}
-          Pista {track.index}:{' '}
-          {[track.language, track.codec, track.title].filter(Boolean).join(' · ')}
-          {track.default ? ' (predeterminada)' : ''}
-        </label>
-      ))}
+      {tracks.map((track) => {
+        const incompatible = title === 'Subtítulos' && !MP4_SUBTITLE_CODECS.has(track.codec);
+        return (
+          <label className={incompatible ? 'track-incompatible' : ''} key={track.index}>
+            <input
+              type="checkbox"
+              disabled={disabled || incompatible}
+              checked={selected.includes(track.index)}
+              onChange={() => onToggle(track.index)}
+            />{' '}
+            Pista {track.index}:{' '}
+            {[track.language, track.codec, track.title].filter(Boolean).join(' · ')}
+            {track.default ? ' (predeterminada)' : ''}
+            {incompatible ? ' · no compatible con MP4' : ''}
+          </label>
+        );
+      })}
     </section>
   );
 }

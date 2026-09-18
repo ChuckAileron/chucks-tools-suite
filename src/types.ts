@@ -111,10 +111,12 @@ declare global {
         files: ScannedFile[];
         deleteChildFolders: boolean;
         returnToSource: boolean;
+        deleteCreatedDestination: boolean;
       }): Promise<{
         moved: number;
         returned: number;
         deletedFolders: number;
+        deletedDestination: boolean;
         errors: string[];
         moves: MoveRecord[];
       }>;
@@ -123,7 +125,10 @@ declare global {
         destination: string;
         moves: MoveRecord[];
       }): Promise<{ moved: number; errors: string[] }>;
-      createDestination(data: { source: string; name: string }): Promise<string>;
+      createDestination(data: { source: string; name: string }): Promise<{
+        path: string;
+        created: boolean;
+      }>;
       resolveUrl(url: string): Promise<UrlResult>;
       openUrl(url: string): Promise<boolean>;
       copyText(text: string): void;

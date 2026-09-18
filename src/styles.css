@@ -241,7 +241,13 @@ nav button .wip-badge {
 .destination-create {
   display: flex;
   justify-content: flex-end;
+  gap: 7px;
   margin-top: 9px;
+}
+.destination-create > .reset-folders {
+  border-color: #d6d9d4;
+  background: #fff;
+  color: #5f6964;
 }
 .destination-create > button,
 .destination-create div button {
@@ -786,6 +792,14 @@ nav button i {
   display: block;
   padding: 3px 0;
   color: #747c77;
+}
+.tracks label.track-incompatible {
+  color: #a07b72;
+  text-decoration: line-through;
+  text-decoration-color: #d8b8b0;
+}
+.tracks label.track-incompatible input {
+  opacity: 0.45;
 }
 .tracks input {
   accent-color: var(--brand);

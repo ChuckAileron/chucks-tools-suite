@@ -25,12 +25,16 @@ Características:
 - Creación de una carpeta de destino dentro de la carpeta de origen.
 - Devolución opcional del lote a la raíz del origen después de mover y limpiar.
 - Acción Deshacer para restaurar las ubicaciones originales y recrear su estructura.
+- Reset de pantalla para limpiar carpetas, resultados, filtros y opciones.
+- Eliminación opcional del destino temporal creado por la aplicación después de devolver el lote.
 
 > **Advertencia:** la opción para eliminar carpetas hijas borra recursivamente las subcarpetas y cualquier contenido que permanezca dentro de ellas. La carpeta de origen nunca se elimina. La interfaz solicita confirmación antes de ejecutar esta acción.
 
 La carpeta de destino debe ser diferente de la carpeta de origen. Si está dentro del origen, se excluye automáticamente del escaneo y se conserva durante la limpieza de carpetas hijas.
 
 El flujo de staging puede configurarse como: origen > destino temporal > limpieza opcional de carpetas hijas > devolución a la raíz del origen. La devolución aplana el lote en la raíz para no recrear las carpetas eliminadas. La acción Deshacer es distinta: restaura cada archivo en su ruta original y resuelve colisiones sin sobrescribir archivos.
+
+La opción para eliminar el destino temporal solo aparece cuando la aplicación creó realmente una carpeta dentro del origen y está activada la devolución. La carpeta se elimina únicamente si quedó vacía; un destino preexistente nunca se elimina automáticamente.
 
 ### Renombrar archivos
 
@@ -48,7 +52,7 @@ Características:
 
 ### Video a SD
 
-Convierte videos a una resolución máxima de 480p mediante FFmpeg, conservando siempre los archivos originales.
+Convierte videos a una resolución máxima de 480p y los guarda siempre como MP4, conservando los archivos originales.
 
 Características:
 
@@ -56,6 +60,9 @@ Características:
 - Procesamiento de MP4, M4V, MOV, AVI, MKV, WEBM, WMV, FLV, MPG, MPEG, TS, MTS, M2TS, VOB, OGV, 3GP, 3G2 y ASF.
 - Códec H.264 para máxima compatibilidad o H.265 para mayor compresión.
 - Selección de pistas de audio y subtítulos en contenedores MKV.
+- Conversión de pistas de audio seleccionadas a AAC de 128 kbps.
+- Conversión de subtítulos de texto compatibles a `mov_text` para MP4.
+- Exclusión visible de subtítulos basados en imagen, como PGS y VobSub.
 - Progreso global y por archivo en tiempo real.
 - Cancelación del proceso activo.
 - Cola dinámica: permite añadir carpetas mientras la conversión está en curso.
@@ -65,7 +72,7 @@ Características:
 - Salida en `sd-output-h264` o `sd-output-h265` dentro de cada carpeta seleccionada.
 - Sufijo `_SD` para evitar modificar o reemplazar los originales.
 - Conversión mediante FFmpeg para los formatos principales y `handbrake-js` para las entradas adicionales.
-- Las entradas adicionales se escriben como MP4 para asegurar un contenedor de salida compatible.
+- Todas las entradas se escriben como MP4 para obtener una salida uniforme.
 - Aviso integrado sobre pérdida de detalle visual y compresión de audio.
 
 Esta herramienta requiere que los ejecutables `ffmpeg` y `ffprobe` estén instalados y disponibles en la variable de entorno `PATH`.

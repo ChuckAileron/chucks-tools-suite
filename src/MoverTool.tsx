@@ -24,6 +24,8 @@ export default function MoverTool() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [remove, setRemove] = useState(false);
   const [returnToSource, setReturnToSource] = useState(false);
+  const [deleteCreatedDestination, setDeleteCreatedDestination] = useState(false);
+  const [createdDestination, setCreatedDestination] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [createName, setCreateName] = useState('archivos-organizados');
@@ -40,8 +42,12 @@ export default function MoverTool() {
       alert('La carpeta de destino debe ser diferente de la carpeta de origen.');
       return;
     }
-    if (kind === 'source') setSource(path);
-    else setDestination(path);
+    if (kind === 'source') {
+      setSource(path);
+      setDestination('');
+    } else setDestination(path);
+    setCreatedDestination('');
+    setDeleteCreatedDestination(false);
     setLastMove(null);
     setFiles([]);
     setSelected(new Set());
@@ -86,13 +92,20 @@ export default function MoverTool() {
         files: files.filter((x) => selected.has(x.path)),
         deleteChildFolders: remove,
         returnToSource,
+        deleteCreatedDestination:
+          returnToSource && deleteCreatedDestination && createdDestination === destination,
       });
       setMessage(
-        `${result.moved} archivos movidos${result.returned ? ` · ${result.returned} devueltos al origen` : ''}${result.errors.length ? ` · ${result.errors.length} errores` : ''}.`,
+        `${result.moved} archivos movidos${result.returned ? ` · ${result.returned} devueltos al origen` : ''}${result.deletedDestination ? ' · carpeta temporal eliminada' : ''}${result.errors.length ? ` · ${result.errors.length} errores` : ''}.`,
       );
       setLastMove(result.moves.length ? { source, destination, moves: result.moves } : null);
       setFiles([]);
       setSelected(new Set());
+      if (result.deletedDestination) {
+        setDestination('');
+        setCreatedDestination('');
+        setDeleteCreatedDestination(false);
+      }
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -102,16 +115,38 @@ export default function MoverTool() {
   const createDestination = async () => {
     setBusy(true);
     try {
-      const path = await window.tools.createDestination({ source, name: createName });
-      setDestination(path);
+      const result = await window.tools.createDestination({ source, name: createName });
+      setDestination(result.path);
+      setCreatedDestination(result.created ? result.path : '');
+      setDeleteCreatedDestination(false);
       setShowCreate(false);
       setLastMove(null);
-      setMessage(`Carpeta de destino creada: ${path}`);
+      setMessage(
+        result.created
+          ? `Carpeta de destino creada: ${result.path}`
+          : `La carpeta ya existía y se usará como destino: ${result.path}`,
+      );
     } catch (error) {
       setMessage(String(error));
     } finally {
       setBusy(false);
     }
+  };
+  const reset = () => {
+    setSource('');
+    setDestination('');
+    setFiles([]);
+    setSelected(new Set());
+    setTypes(new Set(['video', 'audio']));
+    setCustom('');
+    setRemove(false);
+    setReturnToSource(false);
+    setDeleteCreatedDestination(false);
+    setCreatedDestination('');
+    setLastMove(null);
+    setMessage('');
+    setShowCreate(false);
+    setCreateName('archivos-organizados');
   };
   const undo = async () => {
     if (!lastMove) return;
@@ -149,6 +184,13 @@ export default function MoverTool() {
         />
       </div>
       <div className="destination-create">
+        <button
+          className="reset-folders"
+          disabled={busy || (!source && !destination)}
+          onClick={reset}
+        >
+          Limpiar carpetas
+        </button>
         <button disabled={!source || busy} onClick={() => setShowCreate((current) => !current)}>
           + Crear destino dentro de la carpeta de origen
         </button>
@@ -215,13 +257,29 @@ export default function MoverTool() {
             <input
               type="checkbox"
               checked={returnToSource}
-              onChange={(e) => setReturnToSource(e.target.checked)}
+              onChange={(e) => {
+                setReturnToSource(e.target.checked);
+                if (!e.target.checked) setDeleteCreatedDestination(false);
+              }}
             />
             <span>
               <strong>Devolver al origen</strong>
               <small>Al final, devuelve el lote a la raíz de la carpeta fuente.</small>
             </span>
           </label>
+          {returnToSource && createdDestination === destination && (
+            <label>
+              <input
+                type="checkbox"
+                checked={deleteCreatedDestination}
+                onChange={(e) => setDeleteCreatedDestination(e.target.checked)}
+              />
+              <span>
+                <strong>Eliminar destino temporal creado</strong>
+                <small>Se elimina después de devolver el lote, solo si quedó vacío.</small>
+              </span>
+            </label>
+          )}
         </div>
         <div className="mover-actions">
           {lastMove && (

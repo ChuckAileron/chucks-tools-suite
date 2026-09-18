@@ -8,6 +8,7 @@ const { resolveUrl, validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
 let downloadManager;
 let lastClipboard = '';
+const createdDestinationFolders = new Set();
 let videoCancelled = false;
 let activeVideoProcess = null;
 let videoQueue = [];
@@ -147,7 +148,27 @@ async function move(data) {
       }
     }
   }
-  return { moved, returned, deletedFolders, errors, moves };
+  let deletedDestination = false;
+  if (data.returnToSource && data.deleteCreatedDestination) {
+    const destinationRelative = path.relative(root, destination);
+    if (
+      createdDestinationFolders.has(destination) &&
+      destinationRelative &&
+      !destinationRelative.startsWith('..') &&
+      !path.isAbsolute(destinationRelative)
+    ) {
+      try {
+        await fs.rmdir(destination);
+        createdDestinationFolders.delete(destination);
+        deletedDestination = true;
+      } catch (error) {
+        errors.push(
+          `No se pudo eliminar la carpeta temporal porque no quedó vacía: ${error.message}`,
+        );
+      }
+    }
+  }
+  return { moved, returned, deletedFolders, deletedDestination, errors, moves };
 }
 async function undoMove(data) {
   validate(data.source, data.destination);
@@ -159,10 +180,14 @@ async function undoMove(data) {
     const current = path.resolve(record.movedPath);
     const original = path.resolve(record.originalPath);
     const currentRelative = path.relative(destination, current);
+    const currentSourceRelative = path.relative(source, current);
     const originalRelative = path.relative(source, original);
+    const currentIsInDestination =
+      !currentRelative.startsWith('..') && !path.isAbsolute(currentRelative);
+    const currentIsInSource =
+      !currentSourceRelative.startsWith('..') && !path.isAbsolute(currentSourceRelative);
     if (
-      currentRelative.startsWith('..') ||
-      path.isAbsolute(currentRelative) ||
+      (!currentIsInDestination && !currentIsInSource) ||
       originalRelative.startsWith('..') ||
       path.isAbsolute(originalRelative)
     ) {
@@ -249,8 +274,15 @@ app.whenReady().then(() => {
     )
       throw new Error('Ingresa un nombre de carpeta válido.');
     const destination = path.join(path.resolve(source), normalized);
+    let created = false;
+    try {
+      await fs.access(destination);
+    } catch {
+      created = true;
+    }
     await fs.mkdir(destination, { recursive: true });
-    return destination;
+    if (created) createdDestinationFolders.add(destination);
+    return { path: destination, created };
   });
   ipcMain.handle('url:resolve', (_event, url) => resolveUrl(url));
   ipcMain.handle('url:open', async (_event, value) => {
