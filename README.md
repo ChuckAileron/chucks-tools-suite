@@ -37,11 +37,29 @@ Características:
 - Selección individual o global de archivos.
 - Conservación de la extensión original.
 
+### Video a SD
+
+Convierte videos a una resolución máxima de 480p mediante FFmpeg, conservando siempre los archivos originales.
+
+Características:
+
+- Selección de varias carpetas en una misma ejecución.
+- Procesamiento de archivos MP4, MOV, AVI y MKV del nivel principal de cada carpeta.
+- Códec H.264 para máxima compatibilidad o H.265 para mayor compresión.
+- Selección de pistas de audio y subtítulos en contenedores MKV.
+- Progreso global y por archivo en tiempo real.
+- Cancelación del proceso activo.
+- Salida en `sd-output-h264` o `sd-output-h265` dentro de cada carpeta seleccionada.
+- Sufijo `_SD` para evitar modificar o reemplazar los originales.
+
+Esta herramienta requiere que los ejecutables `ffmpeg` y `ffprobe` estén instalados y disponibles en la variable de entorno `PATH`.
+
 ## Requisitos
 
 - Node.js 20 o posterior.
 - npm 10 o posterior.
 - Un entorno de escritorio compatible con Electron.
+- FFmpeg y FFprobe para utilizar el módulo Video a SD.
 
 ## Instalación
 
@@ -120,6 +138,7 @@ CHUCK's Tools Suite/
 │   ├── App.tsx           # Layout principal y navegación lateral
 │   ├── MoverTool.tsx     # Herramienta para mover por tipo
 │   ├── RenameTool.tsx    # Herramienta para renombrar
+│   ├── VideoTool.tsx     # Conversión de videos a SD
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API

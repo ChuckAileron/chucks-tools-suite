@@ -1,6 +1,10 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { execFile } = require('node:child_process');
+const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
+let videoCancelled = false;
+let activeVideoProcess = null;
 const TYPES = {
   video: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.m4v', '.flv'],
   audio: ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma', '.opus'],
@@ -146,6 +150,56 @@ app.whenReady().then(() => {
     if (!directory || !oldName || !newName || path.basename(newName) !== newName)
       throw new Error('Nombre de archivo inválido.');
     await fs.rename(path.join(directory, oldName), path.join(directory, newName));
+    return true;
+  });
+  ipcMain.handle('video:select-folders', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+  ipcMain.handle('video:inspect', (_event, { folders, codec }) =>
+    Promise.all(folders.map((folder) => inspectFolder(path.resolve(folder), codec))),
+  );
+  ipcMain.handle('video:start', async (event, { folders, codec, trackSelections }) => {
+    videoCancelled = false;
+    for (const folder of folders) {
+      if (videoCancelled) break;
+      const absolute = path.resolve(folder);
+      event.sender.send('video:progress', { type: 'folder-start', folder: absolute });
+      try {
+        await convertFolder(
+          absolute,
+          codec,
+          trackSelections,
+          (data) => event.sender.send('video:progress', data),
+          {
+            isCancelled: () => videoCancelled,
+            setProcess: (process) => {
+              activeVideoProcess = process;
+            },
+          },
+        );
+        event.sender.send('video:progress', { type: 'folder-done', folder: absolute });
+      } catch (error) {
+        if (error.code !== 'CANCELLED')
+          event.sender.send('video:progress', {
+            type: 'error',
+            folder: absolute,
+            message: error.message,
+          });
+      }
+    }
+    activeVideoProcess = null;
+    event.sender.send('video:progress', { type: videoCancelled ? 'cancelled' : 'all-done' });
+  });
+  ipcMain.handle('video:cancel', () => {
+    videoCancelled = true;
+    if (activeVideoProcess && !activeVideoProcess.killed) {
+      if (process.platform === 'win32')
+        execFile('taskkill', ['/pid', String(activeVideoProcess.pid), '/T', '/F'], () => {});
+      else activeVideoProcess.kill('SIGTERM');
+    }
     return true;
   });
   createWindow();

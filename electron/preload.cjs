@@ -5,4 +5,13 @@ contextBridge.exposeInMainWorld('tools', {
   move: (data) => ipcRenderer.invoke('mover:move', data),
   list: (directory) => ipcRenderer.invoke('rename:list', directory),
   rename: (data) => ipcRenderer.invoke('rename:execute', data),
+  selectVideoFolders: () => ipcRenderer.invoke('video:select-folders'),
+  inspectVideoFolders: (data) => ipcRenderer.invoke('video:inspect', data),
+  startVideoConversion: (data) => ipcRenderer.invoke('video:start', data),
+  cancelVideoConversion: () => ipcRenderer.invoke('video:cancel'),
+  onVideoProgress: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('video:progress', listener);
+    return () => ipcRenderer.removeListener('video:progress', listener);
+  },
 });

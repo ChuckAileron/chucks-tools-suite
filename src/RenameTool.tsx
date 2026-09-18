@@ -1,11 +1,38 @@
 import { useMemo, useState } from 'react';
-type Ops = { search: string; replace: string; prefix: string; suffix: string };
-const INITIAL = { search: '', replace: '', prefix: '', suffix: '' };
+type Ops = {
+  search: string;
+  replace: string;
+  backwardFind: string;
+  backwardReplace: string;
+  forwardFind: string;
+  forwardReplace: string;
+  prefix: string;
+  suffix: string;
+};
+const INITIAL: Ops = {
+  search: '',
+  replace: '',
+  backwardFind: '',
+  backwardReplace: '',
+  forwardFind: '',
+  forwardReplace: '',
+  prefix: '',
+  suffix: '',
+};
 function transform(file: string, o: Ops) {
   const i = file.lastIndexOf('.'),
     base = i > 0 ? file.slice(0, i) : file,
     ext = i > 0 ? file.slice(i) : '';
-  return o.prefix + (o.search ? base.replaceAll(o.search, o.replace) : base) + o.suffix + ext;
+  let name = o.search ? base.replaceAll(o.search, o.replace) : base;
+  if (o.backwardFind) {
+    const index = name.indexOf(o.backwardFind);
+    if (index >= 0) name = o.backwardReplace + name.slice(index + o.backwardFind.length);
+  }
+  if (o.forwardFind) {
+    const index = name.lastIndexOf(o.forwardFind);
+    if (index >= 0) name = name.slice(0, index) + o.forwardReplace;
+  }
+  return o.prefix + name + o.suffix + ext;
 }
 export default function RenameTool() {
   const [directory, setDirectory] = useState('');
@@ -97,6 +124,20 @@ export default function RenameTool() {
             second={ops.replace}
             setFirst={update('search')}
             setSecond={update('replace')}
+          />
+          <Row
+            label="Desde texto hacia atrás"
+            first={ops.backwardFind}
+            second={ops.backwardReplace}
+            setFirst={update('backwardFind')}
+            setSecond={update('backwardReplace')}
+          />
+          <Row
+            label="Desde texto hacia adelante"
+            first={ops.forwardFind}
+            second={ops.forwardReplace}
+            setFirst={update('forwardFind')}
+            setSecond={update('forwardReplace')}
           />
           <Row
             label="Añadir al nombre"

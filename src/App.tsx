@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import MoverTool from './MoverTool';
 import RenameTool from './RenameTool';
-type Tool = 'mover' | 'rename';
+import VideoTool from './VideoTool';
+type Tool = 'mover' | 'rename' | 'video';
 export default function App() {
   const [tool, setTool] = useState<Tool>('mover');
   return (
@@ -30,6 +31,13 @@ export default function App() {
               <small>Edición en lote</small>
             </span>
           </button>
+          <button className={tool === 'video' ? 'active' : ''} onClick={() => setTool('video')}>
+            <i>SD</i>
+            <span>
+              <strong>Video a SD</strong>
+              <small>Conversión a 480p</small>
+            </span>
+          </button>
         </nav>
         <div className="local">
           <b>● Todo permanece local</b>
@@ -41,7 +49,7 @@ export default function App() {
       </aside>
       <main className="content">
         <div className="mobile-brand">CHUCK's Tools Suite</div>
-        {tool === 'mover' ? <MoverTool /> : <RenameTool />}
+        {tool === 'mover' ? <MoverTool /> : tool === 'rename' ? <RenameTool /> : <VideoTool />}
       </main>
     </div>
   );
