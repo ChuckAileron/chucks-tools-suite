@@ -29,6 +29,7 @@ export default function App() {
               <strong>Descargas</strong>
               <small>Gestor de enlaces</small>
             </span>
+            <em className="wip-badge">WIP</em>
           </button>
           <button className={tool === 'mover' ? 'active' : ''} onClick={() => setTool('mover')}>
             <i>↗</i>
@@ -67,6 +68,7 @@ export default function App() {
               <strong>Bypass de URLs</strong>
               <small>Enlaces cortos y ads</small>
             </span>
+            <em className="wip-badge">WIP</em>
           </button>
         </nav>
         <div className="local">
@@ -74,7 +76,7 @@ export default function App() {
           <small>Tus archivos nunca salen de este equipo.</small>
         </div>
         <footer>
-          CHUCK's Tools Suite <span>v1.3</span>
+          CHUCK's Tools Suite <span>v1.5</span>
         </footer>
       </aside>
       <main className="content">

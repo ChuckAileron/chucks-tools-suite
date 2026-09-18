@@ -111,6 +111,18 @@ nav button small {
   color: #8fac9f;
   font-size: 11px;
 }
+nav button .wip-badge {
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid rgba(93, 193, 185, 0.45);
+  border-radius: 5px;
+  background: rgba(93, 193, 185, 0.14);
+  color: #b9ece8;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
 .local {
   margin-top: auto;
   padding: 13px;
@@ -271,6 +283,19 @@ nav button small {
 .mover-actions {
   display: flex;
   gap: 8px;
+}
+.mover-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mover-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mover-options input {
+  accent-color: var(--brand);
 }
 .tool-action .mover-actions .undo-button {
   min-width: auto;
@@ -1591,6 +1616,7 @@ nav button i {
   .suite-brand div,
   nav p,
   nav button span,
+  nav button .wip-badge,
   .local,
   .sidebar footer {
     display: none;

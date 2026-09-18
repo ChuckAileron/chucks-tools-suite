@@ -2,7 +2,9 @@
 
 Aplicación de escritorio para Windows, macOS y Linux que reúne herramientas locales de gestión de archivos en una sola interfaz. Está construida con Electron, React, TypeScript y Vite.
 
-Todos los archivos se procesan en el equipo del usuario. La aplicación no sube información ni requiere servicios externos para funcionar.
+Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. Los módulos Bypass de URLs y Descargas realizan solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
+
+> **Estado del proyecto:** Bypass de URLs y Descargas aparecen como **WIP** en el menú porque la compatibilidad con servicios externos requiere mantenimiento continuo.
 
 ## Herramientas incluidas
 
@@ -21,11 +23,14 @@ Características:
 - Compatibilidad con movimientos entre unidades o discos diferentes.
 - Eliminación opcional de las carpetas hijas del origen.
 - Creación de una carpeta de destino dentro de la carpeta de origen.
-- Reversión del último lote para devolver los archivos a sus ubicaciones originales.
+- Devolución opcional del lote a la raíz del origen después de mover y limpiar.
+- Acción Deshacer para restaurar las ubicaciones originales y recrear su estructura.
 
 > **Advertencia:** la opción para eliminar carpetas hijas borra recursivamente las subcarpetas y cualquier contenido que permanezca dentro de ellas. La carpeta de origen nunca se elimina. La interfaz solicita confirmación antes de ejecutar esta acción.
 
 La carpeta de destino debe ser diferente de la carpeta de origen. Si está dentro del origen, se excluye automáticamente del escaneo y se conserva durante la limpieza de carpetas hijas.
+
+El flujo de staging puede configurarse como: origen > destino temporal > limpieza opcional de carpetas hijas > devolución a la raíz del origen. La devolución aplana el lote en la raíz para no recrear las carpetas eliminadas. La acción Deshacer es distinta: restaura cada archivo en su ruta original y resuelve colisiones sin sobrescribir archivos.
 
 ### Renombrar archivos
 
@@ -34,6 +39,8 @@ Permite modificar los nombres de los archivos del nivel principal de una carpeta
 Características:
 
 - Búsqueda y reemplazo de texto.
+- Reemplazo desde el inicio hasta incluir un texto determinado.
+- Reemplazo desde un texto determinado, incluyéndolo, hasta el final.
 - Adición de prefijos y sufijos.
 - Vista previa del resultado antes de aplicar cambios.
 - Selección individual o global de archivos.
@@ -51,10 +58,15 @@ Características:
 - Selección de pistas de audio y subtítulos en contenedores MKV.
 - Progreso global y por archivo en tiempo real.
 - Cancelación del proceso activo.
+- Cola dinámica: permite añadir carpetas mientras la conversión está en curso.
+- Eliminación de carpetas pendientes sin interrumpir la carpeta activa.
+- Recálculo del progreso global cuando cambia la cola.
+- Carpetas colapsables con selección persistente de pistas.
 - Salida en `sd-output-h264` o `sd-output-h265` dentro de cada carpeta seleccionada.
 - Sufijo `_SD` para evitar modificar o reemplazar los originales.
 - Conversión mediante FFmpeg para los formatos principales y `handbrake-js` para las entradas adicionales.
 - Las entradas adicionales se escriben como MP4 para asegurar un contenedor de salida compatible.
+- Aviso integrado sobre pérdida de detalle visual y compresión de audio.
 
 Esta herramienta requiere que los ejecutables `ffmpeg` y `ffprobe` estén instalados y disponibles en la variable de entorno `PATH`.
 
@@ -110,6 +122,7 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Limpieza de tareas completadas.
 - Extracción automática de ZIP, 7z, RAR, TAR, GZ, BZ2 y XZ.
 - Contraseña previa por enlace y reintento cuando un comprimido la requiera.
+- Detección de enlaces copiados configurable y limitada a una bandeja previa: copiar una URL no inicia una descarga automáticamente.
 
 Las descargas utilizan `node-downloader-helper`. La extracción usa `7zip-min` con binarios multiplataforma. Las tareas y configuraciones se guardan en el directorio local de datos de Electron.
 
@@ -123,7 +136,7 @@ Para configurar Google Drive:
 4. Restringe la clave para que solo pueda utilizar Google Drive API.
 5. Pega la clave en Descargas > Configuración > Google Drive.
 
-Solo pueden enumerarse carpetas compartidas públicamente. No se solicitan permisos sobre la cuenta personal del usuario.
+Solo pueden enumerarse carpetas compartidas públicamente. No se solicitan permisos sobre la cuenta personal del usuario. La API key, las contraseñas de extracción, la cola y las preferencias se guardan localmente en el directorio de datos de Electron.
 
 ## Requisitos
 
@@ -131,6 +144,9 @@ Solo pueden enumerarse carpetas compartidas públicamente. No se solicitan permi
 - npm 11.19.1 o posterior.
 - Un entorno de escritorio compatible con Electron.
 - FFmpeg y FFprobe para utilizar el módulo Video a SD.
+- Conexión a Internet para Bypass de URLs, Descargas y las integraciones con hosts externos.
+
+HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente.
 
 ## Instalación
 
@@ -192,7 +208,7 @@ Comprobar el formato sin modificar archivos:
 npm run format:check
 ```
 
-Ejecutar lint, comprobación de formato y build en secuencia:
+Ejecutar pruebas, lint, comprobación de formato y build en secuencia:
 
 ```bash
 npm run check
@@ -203,8 +219,12 @@ npm run check
 ```text
 CHUCK's Tools Suite/
 ├── electron/
-│   ├── main.cjs          # Ventana, IPC y operaciones del sistema de archivos
-│   └── preload.cjs       # API segura expuesta al renderer
+│   ├── main.cjs             # Ventana, IPC y coordinación de procesos
+│   ├── preload.cjs          # API segura expuesta al renderer
+│   ├── audioNormalizer.cjs  # Normalización mediante FFmpeg
+│   ├── videoConversion.cjs  # Conversión FFmpeg/HandBrake
+│   ├── urlResolver.cjs      # Resolución y validación segura de URLs
+│   └── downloadManager.cjs  # Cola persistente y extracción
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
 │   ├── MoverTool.tsx     # Herramienta para mover por tipo
@@ -217,6 +237,7 @@ CHUCK's Tools Suite/
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
+├── test/                    # Pruebas de URLs, hosts y nombres
 ├── vite.config.ts
 └── package.json
 ```
@@ -231,8 +252,21 @@ La aplicación separa el renderer de las operaciones privilegiadas:
 - `preload.cjs` expone únicamente las operaciones requeridas mediante `contextBridge`.
 - Las solicitudes se procesan con handlers IPC en el proceso principal.
 - Las rutas de los archivos que se mueven se validan para asegurar que pertenezcan al origen.
-- El destino se valida para evitar que sea igual o interno a la carpeta de origen.
+- El destino no puede ser igual al origen. Si es una subcarpeta, se excluye del escaneo y de la limpieza.
 - Los nombres enviados al módulo de renombrado no pueden incluir rutas.
+- Cada salto de una URL se valida contra localhost, credenciales embebidas, redes privadas y direcciones reservadas.
+- La resolución DNS se vuelve a validar al establecer la conexión para reducir ataques de DNS rebinding.
+- Las respuestas inspeccionadas por el bypass se limitan a 1 MB y tienen timeout.
+- Las descargas no siguen redirecciones nuevas después de resolver y validar el destino.
+- El renderer no recibe acceso general al portapapeles ni al sistema operativo, solo operaciones específicas.
+
+### Datos locales sensibles
+
+El gestor persiste su estado en `downloads.json` dentro de `app.getPath('userData')`. Este archivo puede contener URLs, rutas locales, una API key de Google Drive y contraseñas de extracción. No se sincroniza ni se transmite deliberadamente, pero cualquier usuario o proceso con acceso al perfil local podría leerlo.
+
+### Dependencias conocidas
+
+`handbrake-js` mantiene avisos de auditoría heredados de su dependencia `decompress`. Esta dependencia se usa durante la instalación para obtener HandBrakeCLI y no se expone a archivos proporcionados por el usuario. No existe actualmente una versión moderna de `handbrake-js` que elimine esos avisos sin dejar de ser compatible con Node.js 26.
 
 ## Flujo para agregar herramientas
 
@@ -256,6 +290,18 @@ Comprueba los permisos del sistema operativo y que la carpeta continúe existien
 ### Un archivo no se puede mover o renombrar
 
 Verifica que no esté abierto en otra aplicación, que el usuario tenga permisos de escritura y que el destino no contenga un archivo bloqueado con el mismo nombre.
+
+### Google Drive no detecta un archivo o carpeta
+
+Comprueba que Google Drive API esté habilitada, que la API key esté configurada y restringida a esa API, y que el recurso esté compartido públicamente. Se reconocen enlaces `/file/d/{id}`, `open?id={id}` y `/folders/{id}`.
+
+### Una descarga no continúa
+
+Algunos servidores no admiten solicitudes por rangos. En esos casos, reanudar puede comenzar nuevamente desde cero. Revisa también que el enlace no haya expirado y vuelve a analizarlo desde la pestaña Identificador.
+
+### Un comprimido solicita contraseña
+
+Usa la acción de contraseña en la descarga pendiente. También puedes asignar una contraseña individual o común antes de añadir enlaces a la cola.
 
 ## Licencia
 

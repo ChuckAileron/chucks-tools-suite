@@ -110,7 +110,14 @@ declare global {
         destination: string;
         files: ScannedFile[];
         deleteChildFolders: boolean;
-      }): Promise<{ moved: number; deletedFolders: number; errors: string[]; moves: MoveRecord[] }>;
+        returnToSource: boolean;
+      }): Promise<{
+        moved: number;
+        returned: number;
+        deletedFolders: number;
+        errors: string[];
+        moves: MoveRecord[];
+      }>;
       undoMove(data: {
         source: string;
         destination: string;

@@ -126,7 +126,28 @@ async function move(data) {
         deletedFolders++;
       }
   }
-  return { moved, deletedFolders, errors, moves };
+  let returned = 0;
+  if (data.returnToSource) {
+    for (const record of moves) {
+      try {
+        const target = await targetPath(root, path.basename(record.movedPath));
+        try {
+          await fs.rename(record.movedPath, target);
+        } catch (error) {
+          if (error.code !== 'EXDEV') throw error;
+          await fs.copyFile(record.movedPath, target);
+          await fs.unlink(record.movedPath);
+        }
+        record.movedPath = target;
+        returned++;
+      } catch (error) {
+        errors.push(
+          `${path.basename(record.movedPath)}: no se pudo devolver al origen: ${error.message}`,
+        );
+      }
+    }
+  }
+  return { moved, returned, deletedFolders, errors, moves };
 }
 async function undoMove(data) {
   validate(data.source, data.destination);
@@ -149,6 +170,10 @@ async function undoMove(data) {
       continue;
     }
     try {
+      if (same(current, original)) {
+        moved++;
+        continue;
+      }
       await fs.mkdir(path.dirname(original), { recursive: true });
       const target = await targetPath(path.dirname(original), path.basename(original));
       try {

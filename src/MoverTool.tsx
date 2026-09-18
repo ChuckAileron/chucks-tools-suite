@@ -23,6 +23,7 @@ export default function MoverTool() {
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [remove, setRemove] = useState(false);
+  const [returnToSource, setReturnToSource] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [createName, setCreateName] = useState('archivos-organizados');
@@ -84,9 +85,10 @@ export default function MoverTool() {
         destination,
         files: files.filter((x) => selected.has(x.path)),
         deleteChildFolders: remove,
+        returnToSource,
       });
       setMessage(
-        `${result.moved} archivos movidos${result.errors.length ? `, ${result.errors.length} errores` : ''}.`,
+        `${result.moved} archivos movidos${result.returned ? ` · ${result.returned} devueltos al origen` : ''}${result.errors.length ? ` · ${result.errors.length} errores` : ''}.`,
       );
       setLastMove(result.moves.length ? { source, destination, moves: result.moves } : null);
       setFiles([]);
@@ -201,17 +203,30 @@ export default function MoverTool() {
         <FileResults files={files} selected={selected} setSelected={setSelected} />
       )}
       <div className="tool-action">
-        <label>
-          <input type="checkbox" checked={remove} onChange={(e) => setRemove(e.target.checked)} />
-          <span>
-            <strong>Eliminar carpetas hijas al finalizar</strong>
-            <small>También elimina su contenido restante, excepto el destino.</small>
-          </span>
-        </label>
+        <div className="mover-options">
+          <label>
+            <input type="checkbox" checked={remove} onChange={(e) => setRemove(e.target.checked)} />
+            <span>
+              <strong>Eliminar carpetas hijas</strong>
+              <small>Después de mover, excepto la carpeta de destino.</small>
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={returnToSource}
+              onChange={(e) => setReturnToSource(e.target.checked)}
+            />
+            <span>
+              <strong>Devolver al origen</strong>
+              <small>Al final, devuelve el lote a la raíz de la carpeta fuente.</small>
+            </span>
+          </label>
+        </div>
         <div className="mover-actions">
           {lastMove && (
             <button className="undo-button" disabled={busy} onClick={undo}>
-              ↶ Devolver al origen
+              ↶ Deshacer último proceso
             </button>
           )}
           <button
