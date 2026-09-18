@@ -44,13 +44,15 @@ Convierte videos a una resolución máxima de 480p mediante FFmpeg, conservando 
 Características:
 
 - Selección de varias carpetas en una misma ejecución.
-- Procesamiento de archivos MP4, MOV, AVI y MKV del nivel principal de cada carpeta.
+- Procesamiento de MP4, M4V, MOV, AVI, MKV, WEBM, WMV, FLV, MPG, MPEG, TS, MTS, M2TS, VOB, OGV, 3GP, 3G2 y ASF.
 - Códec H.264 para máxima compatibilidad o H.265 para mayor compresión.
 - Selección de pistas de audio y subtítulos en contenedores MKV.
 - Progreso global y por archivo en tiempo real.
 - Cancelación del proceso activo.
 - Salida en `sd-output-h264` o `sd-output-h265` dentro de cada carpeta seleccionada.
 - Sufijo `_SD` para evitar modificar o reemplazar los originales.
+- Conversión mediante FFmpeg para los formatos principales y `handbrake-js` para las entradas adicionales.
+- Las entradas adicionales se escriben como MP4 para asegurar un contenedor de salida compatible.
 
 Esta herramienta requiere que los ejecutables `ffmpeg` y `ffprobe` estén instalados y disponibles en la variable de entorno `PATH`.
 
@@ -70,8 +72,8 @@ La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya termin
 
 ## Requisitos
 
-- Node.js 20 o posterior.
-- npm 10 o posterior.
+- Node.js 26.9.0 o posterior.
+- npm 11.19.1 o posterior.
 - Un entorno de escritorio compatible con Electron.
 - FFmpeg y FFprobe para utilizar el módulo Video a SD.
 

@@ -69,6 +69,7 @@ declare global {
         trackSelections: Record<string, { audio: number[]; subtitles: number[] }>;
       }): Promise<void>;
       cancelVideoConversion(): Promise<boolean>;
+      skipVideoFolder(folder: string): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
       selectNormalizeFolders(): Promise<string[]>;
       scanNormalizeFiles(data: {

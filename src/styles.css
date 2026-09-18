@@ -660,6 +660,25 @@ nav button i {
   font-size: 10px;
   cursor: pointer;
 }
+.video-folders article > header .collapse-folder {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #d7ddd9;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--brand-ink);
+  font-size: 12px;
+}
+.video-folders article.collapsed > header {
+  background: #f6f8f6;
+}
+.video-folders article > header button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .video-folders details {
   padding: 8px 12px;
   border-top: 1px solid #e5e8e4;
@@ -780,6 +799,30 @@ nav button i {
 .tool-action .cancel-button {
   border: 1px solid #c77b6c;
   background: #a2483a;
+}
+.tool-action .cancel-button:hover:not(:disabled) {
+  border-color: #7f3025;
+  background: #87372b;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(135, 55, 43, 0.2);
+}
+.sd-disclaimer {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid #c9e9e5;
+  border-radius: 10px;
+  background: #f1faf9;
+  color: #315653;
+}
+.sd-disclaimer strong {
+  flex: none;
+  font-size: 10px;
+}
+.sd-disclaimer span {
+  font-size: 9px;
+  line-height: 1.5;
 }
 .normalize-controls {
   display: flex;

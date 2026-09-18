@@ -12,12 +12,17 @@ export default function VideoTool() {
   const [globalProgress, setGlobalProgress] = useState(0);
   const [fileProgress, setFileProgress] = useState(0);
   const [activeFile, setActiveFile] = useState('Ningún archivo en proceso');
+  const [activeFolder, setActiveFolder] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
 
   useEffect(
     () =>
       window.tools.onVideoProgress((data) => {
-        if (data.type === 'folder-start') addLog(`Procesando: ${data.folder}`);
+        if (data.type === 'folder-start') {
+          setActiveFolder(data.folder || '');
+          addLog(`Procesando: ${data.folder}`);
+        }
         if (data.type === 'info' && data.message) addLog(data.message);
         if (data.type === 'global' && data.total)
           setGlobalProgress(Math.floor(((data.current || 0) / data.total) * 100));
@@ -31,7 +36,10 @@ export default function VideoTool() {
           setFileProgress(100);
           addLog(`${data.file} completado`, 'success');
         }
-        if (data.type === 'folder-done') addLog(`Carpeta completada: ${data.folder}`, 'success');
+        if (data.type === 'folder-done') {
+          setActiveFolder('');
+          addLog(`Carpeta completada: ${data.folder}`, 'success');
+        }
         if (data.type === 'error') addLog(`Error: ${data.message}`, 'error');
         if (data.type === 'cancelled' || data.type === 'all-done') {
           addLog(
@@ -39,6 +47,7 @@ export default function VideoTool() {
             data.type === 'cancelled' ? 'error' : 'success',
           );
           setRunning(false);
+          setActiveFolder('');
         }
       }),
     [],
@@ -114,6 +123,19 @@ export default function VideoTool() {
     }
   };
 
+  const removeFolder = async (folder: string) => {
+    if (running) await window.tools.skipVideoFolder(folder);
+    setFolders((current) => current.filter((item) => item.folder !== folder));
+  };
+
+  const toggleFolder = (folder: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(folder)) next.delete(folder);
+      else next.add(folder);
+      return next;
+    });
+
   const videoCount = folders.reduce((count, folder) => count + folder.videos.length, 0);
   return (
     <section className="tool video-tool">
@@ -148,10 +170,11 @@ export default function VideoTool() {
                 key={folder.folder}
                 folder={folder}
                 selections={selections}
-                disabled={running}
-                onRemove={() =>
-                  setFolders((current) => current.filter((item) => item.folder !== folder.folder))
-                }
+                controlsDisabled={running}
+                removeDisabled={running && activeFolder === folder.folder}
+                collapsed={collapsed.has(folder.folder)}
+                onCollapse={() => toggleFolder(folder.folder)}
+                onRemove={() => removeFolder(folder.folder)}
                 onToggle={toggleTrack}
               />
             ))
@@ -185,6 +208,14 @@ export default function VideoTool() {
             <small>Mayor compresión</small>
           </button>
         </div>
+        <aside className="sd-disclaimer">
+          <strong>Qué implica convertir a SD</strong>
+          <span>
+            El video se reduce hasta 480p y se vuelve a comprimir, por lo que perderá detalle fino.
+            El audio se convierte a AAC de 128 kbps; esto reduce espacio, pero también puede
+            disminuir su fidelidad. Los archivos originales no se modifican.
+          </span>
+        </aside>
         <div className="video-progress">
           <Progress label="Progreso global" value={globalProgress} />
           <Progress label={activeFile} value={fileProgress} />
@@ -236,56 +267,78 @@ function Progress({ label, value }: { label: string; value: number }) {
 function FolderCard({
   folder,
   selections,
-  disabled,
+  controlsDisabled,
+  removeDisabled,
+  collapsed,
+  onCollapse,
   onRemove,
   onToggle,
 }: {
   folder: VideoFolder;
   selections: Selections;
-  disabled: boolean;
+  controlsDisabled: boolean;
+  removeDisabled: boolean;
+  collapsed: boolean;
+  onCollapse: () => void;
   onRemove: () => void;
   onToggle: (path: string, type: 'audio' | 'subtitles', index: number) => void;
 }) {
   return (
-    <article className={folder.processed ? 'processed' : ''}>
+    <article className={`${folder.processed ? 'processed' : ''} ${collapsed ? 'collapsed' : ''}`}>
       <header>
+        <button
+          className="collapse-folder"
+          onClick={onCollapse}
+          aria-label={collapsed ? 'Expandir carpeta' : 'Colapsar carpeta'}
+        >
+          {collapsed ? '▸' : '▾'}
+        </button>
         <span title={folder.folder}>{folder.folder}</span>
         <b>{folder.videos.length} videos</b>
         {folder.processed && <em>Completada</em>}
-        <button disabled={disabled} onClick={onRemove}>
+        <button
+          disabled={removeDisabled}
+          onClick={onRemove}
+          title={
+            removeDisabled
+              ? 'No se puede quitar la carpeta que se está procesando'
+              : 'Quitar carpeta'
+          }
+        >
           Quitar
         </button>
       </header>
-      {folder.videos.map(
-        (video) =>
-          (video.audio.length || video.subtitles.length || video.probeError) && (
-            <details key={video.path}>
-              <summary>
-                {video.file} · {video.audio.length} audio · {video.subtitles.length} subtítulos
-              </summary>
-              {video.probeError ? (
-                <p className="track-error">No se pudieron leer las pistas: {video.probeError}</p>
-              ) : (
-                <div className="tracks">
-                  <TrackGroup
-                    title="Audio"
-                    tracks={video.audio}
-                    selected={selections[video.path]?.audio || []}
-                    disabled={disabled}
-                    onToggle={(index) => onToggle(video.path, 'audio', index)}
-                  />
-                  <TrackGroup
-                    title="Subtítulos"
-                    tracks={video.subtitles}
-                    selected={selections[video.path]?.subtitles || []}
-                    disabled={disabled}
-                    onToggle={(index) => onToggle(video.path, 'subtitles', index)}
-                  />
-                </div>
-              )}
-            </details>
-          ),
-      )}
+      {!collapsed &&
+        folder.videos.map(
+          (video) =>
+            (video.audio.length || video.subtitles.length || video.probeError) && (
+              <details key={video.path}>
+                <summary>
+                  {video.file} · {video.audio.length} audio · {video.subtitles.length} subtítulos
+                </summary>
+                {video.probeError ? (
+                  <p className="track-error">No se pudieron leer las pistas: {video.probeError}</p>
+                ) : (
+                  <div className="tracks">
+                    <TrackGroup
+                      title="Audio"
+                      tracks={video.audio}
+                      selected={selections[video.path]?.audio || []}
+                      disabled={controlsDisabled}
+                      onToggle={(index) => onToggle(video.path, 'audio', index)}
+                    />
+                    <TrackGroup
+                      title="Subtítulos"
+                      tracks={video.subtitles}
+                      selected={selections[video.path]?.subtitles || []}
+                      disabled={controlsDisabled}
+                      onToggle={(index) => onToggle(video.path, 'subtitles', index)}
+                    />
+                  </div>
+                )}
+              </details>
+            ),
+        )}
     </article>
   );
 }

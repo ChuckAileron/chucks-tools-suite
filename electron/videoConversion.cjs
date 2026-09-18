@@ -1,16 +1,20 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
+const handbrake = require('handbrake-js');
 
-const VIDEO_PATTERN = /\.(mp4|mov|avi|mkv)$/i;
+const VIDEO_PATTERN =
+  /\.(mp4|m4v|mov|avi|mkv|webm|wmv|flv|mpg|mpeg|ts|mts|m2ts|vob|ogv|3gp|3g2|asf)$/i;
+const FFMPEG_PATTERN = /\.(mp4|mov|avi|mkv|webm)$/i;
 const videoFiles = (directory) =>
   fs
     .readdirSync(directory)
     .filter((file) => VIDEO_PATTERN.test(file))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 const outputPath = (directory, output, file) => {
-  const extension = path.extname(file);
-  return path.join(output, `${path.basename(file, extension)}_SD${extension}`);
+  const sourceExtension = path.extname(file);
+  const extension = FFMPEG_PATTERN.test(file) ? sourceExtension : '.mp4';
+  return path.join(output, `${path.basename(file, sourceExtension)}_SD${extension}`);
 };
 const run = (command, args) =>
   new Promise((resolve, reject) =>
@@ -80,6 +84,11 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
       total: files.length,
       folder: directory,
     });
+    if (!FFMPEG_PATTERN.test(file)) {
+      await convertWithHandbrake(input, temporary, finalPath, codec, file, onProgress, controls);
+      onProgress({ type: 'global', current: index + 1, total: files.length, folder: directory });
+      continue;
+    }
     let metadata = {};
     try {
       metadata = JSON.parse(
@@ -157,6 +166,50 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
     });
     onProgress({ type: 'global', current: index + 1, total: files.length, folder: directory });
   }
+}
+
+function convertWithHandbrake(input, temporary, finalPath, codec, file, onProgress, controls) {
+  fs.rmSync(temporary, { force: true });
+  return new Promise((resolve, reject) => {
+    const job = handbrake.spawn({
+      input,
+      output: temporary,
+      encoder: codec === 'h265' ? 'x265' : 'x264',
+      'encoder-preset': 'slow',
+      quality: 23,
+      maxHeight: 480,
+      'keep-display-aspect': true,
+      'all-audio': true,
+      aencoder: 'av_aac',
+      ab: '128',
+      optimize: true,
+    });
+    controls.setProcess(job);
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      controls.setProcess(null);
+      if (error || controls.isCancelled()) {
+        fs.rmSync(temporary, { force: true });
+        reject(error || cancelledError());
+        return;
+      }
+      fs.renameSync(temporary, finalPath);
+      onProgress({ type: 'file-done', file });
+      resolve();
+    };
+    job.on('progress', (progress) =>
+      onProgress({
+        type: 'file-progress',
+        file,
+        percent: Math.floor(progress.percentComplete || 0),
+      }),
+    );
+    job.once('error', finish);
+    job.once('complete', () => finish());
+    job.once('cancelled', () => finish(cancelledError()));
+  });
 }
 
 module.exports = { inspectFolder, convertFolder };

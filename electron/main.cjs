@@ -6,6 +6,7 @@ const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
 const { scanMedia, normalizeMedia } = require('./audioNormalizer.cjs');
 let videoCancelled = false;
 let activeVideoProcess = null;
+const skippedVideoFolders = new Set();
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
 const TYPES = {
@@ -166,9 +167,11 @@ app.whenReady().then(() => {
   );
   ipcMain.handle('video:start', async (event, { folders, codec, trackSelections }) => {
     videoCancelled = false;
+    skippedVideoFolders.clear();
     for (const folder of folders) {
       if (videoCancelled) break;
       const absolute = path.resolve(folder);
+      if (skippedVideoFolders.has(absolute)) continue;
       event.sender.send('video:progress', { type: 'folder-start', folder: absolute });
       try {
         await convertFolder(
@@ -199,10 +202,15 @@ app.whenReady().then(() => {
   ipcMain.handle('video:cancel', () => {
     videoCancelled = true;
     if (activeVideoProcess && !activeVideoProcess.killed) {
-      if (process.platform === 'win32')
+      if (typeof activeVideoProcess.cancel === 'function') activeVideoProcess.cancel();
+      else if (process.platform === 'win32')
         execFile('taskkill', ['/pid', String(activeVideoProcess.pid), '/T', '/F'], () => {});
       else activeVideoProcess.kill('SIGTERM');
     }
+    return true;
+  });
+  ipcMain.handle('video:skip-folder', (_event, folder) => {
+    skippedVideoFolders.add(path.resolve(folder));
     return true;
   });
   ipcMain.handle('normalizer:select-folders', async () => {

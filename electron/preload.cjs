@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('tools', {
   inspectVideoFolders: (data) => ipcRenderer.invoke('video:inspect', data),
   startVideoConversion: (data) => ipcRenderer.invoke('video:start', data),
   cancelVideoConversion: () => ipcRenderer.invoke('video:cancel'),
+  skipVideoFolder: (folder) => ipcRenderer.invoke('video:skip-folder', folder),
   onVideoProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('video:progress', listener);
