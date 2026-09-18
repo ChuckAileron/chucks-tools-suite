@@ -1,9 +1,13 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
 const { scanMedia, normalizeMedia } = require('./audioNormalizer.cjs');
+const { resolveUrl, validatePublicUrl } = require('./urlResolver.cjs');
+const { DownloadManager } = require('./downloadManager.cjs');
+let downloadManager;
+let lastClipboard = '';
 let videoCancelled = false;
 let activeVideoProcess = null;
 let videoQueue = [];
@@ -181,6 +185,22 @@ function createWindow() {
     : win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 app.whenReady().then(() => {
+  downloadManager = new DownloadManager(
+    path.join(app.getPath('userData'), 'downloads.json'),
+    (state) => {
+      for (const window of BrowserWindow.getAllWindows())
+        window.webContents.send('downloads:state', state);
+    },
+  );
+  setInterval(() => {
+    if (!downloadManager.settings.clipboard) return;
+    const text = clipboard.readText();
+    if (text !== lastClipboard && /https?:\/\//i.test(text)) {
+      lastClipboard = text;
+      for (const window of BrowserWindow.getAllWindows())
+        window.webContents.send('downloads:clipboard', text);
+    }
+  }, 1200).unref();
   ipcMain.handle('directory:select', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],
@@ -206,6 +226,36 @@ app.whenReady().then(() => {
     const destination = path.join(path.resolve(source), normalized);
     await fs.mkdir(destination, { recursive: true });
     return destination;
+  });
+  ipcMain.handle('url:resolve', (_event, url) => resolveUrl(url));
+  ipcMain.handle('url:open', async (_event, value) => {
+    const url = await validatePublicUrl(value);
+    await shell.openExternal(url.href);
+    return true;
+  });
+  ipcMain.handle('downloads:state', () => downloadManager.snapshot());
+  ipcMain.handle('downloads:analyze', (_event, text) => downloadManager.analyze(text));
+  ipcMain.handle('downloads:add', (_event, items) => downloadManager.add(items));
+  ipcMain.handle('downloads:update', (_event, { id, changes }) =>
+    downloadManager.update(id, changes),
+  );
+  ipcMain.handle('downloads:control', (_event, { id, action }) =>
+    downloadManager.control(id, action),
+  );
+  ipcMain.handle('downloads:clear-completed', () => downloadManager.clearCompleted());
+  ipcMain.handle('downloads:settings', (_event, settings) => downloadManager.setSettings(settings));
+  ipcMain.handle('downloads:retry-extraction', (_event, { id, password }) =>
+    downloadManager.retryExtraction(id, password),
+  );
+  ipcMain.handle('downloads:select-directory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('downloads:show-file', (_event, filePath) => {
+    if (filePath) shell.showItemInFolder(path.resolve(filePath));
+    return true;
   });
   ipcMain.handle('rename:list', async (_e, directory) => {
     if (!directory) return [];

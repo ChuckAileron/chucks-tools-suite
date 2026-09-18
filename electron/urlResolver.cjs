@@ -1,0 +1,201 @@
+const dnsModule = require('node:dns');
+const dns = dnsModule.promises;
+const http = require('node:http');
+const https = require('node:https');
+const net = require('node:net');
+const { load } = require('cheerio');
+const { getDomain } = require('tldts');
+
+const DESTINATION_PARAMS = [
+  'url',
+  'u',
+  'target',
+  'dest',
+  'destination',
+  'redirect',
+  'redirect_url',
+  'redirect_uri',
+  'link',
+  'to',
+  'out',
+];
+
+function isPrivateAddress(address) {
+  const normalized = address.toLowerCase().replace(/^::ffff:/, '');
+  if (net.isIPv4(normalized)) {
+    const [a, b] = normalized.split('.').map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    );
+  }
+  return (
+    normalized === '::' ||
+    normalized === '::1' ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('fe8') ||
+    normalized.startsWith('fe9') ||
+    normalized.startsWith('fea') ||
+    normalized.startsWith('feb')
+  );
+}
+
+async function validatePublicUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('Ingresa una URL válida y completa.');
+  }
+  if (!['http:', 'https:'].includes(url.protocol))
+    throw new Error('Solo se admiten URLs HTTP o HTTPS.');
+  if (url.username || url.password) throw new Error('No se admiten credenciales dentro de la URL.');
+  if (url.hostname === 'localhost' || url.hostname.endsWith('.local'))
+    throw new Error('No se admiten direcciones locales.');
+  const addresses = await dns.lookup(url.hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address)))
+    throw new Error('La URL apunta a una red privada o reservada.');
+  return url;
+}
+
+function requestPage(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.protocol === 'https:' ? https : http;
+    const request = client.get(
+      url,
+      {
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
+          accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+          'accept-language': 'es,en;q=0.8',
+        },
+        lookup: (hostname, options, callback) =>
+          dnsModule.lookup(hostname, { ...options, all: true }, (error, addresses) => {
+            if (error) return callback(error);
+            if (addresses.some(({ address }) => isPrivateAddress(address)))
+              return callback(new Error('La conexión intentó acceder a una red privada.'));
+            return options.all
+              ? callback(null, addresses)
+              : callback(null, addresses[0].address, addresses[0].family);
+          }),
+      },
+      (response) => {
+        const chunks = [];
+        let size = 0;
+        response.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > 1024 * 1024)
+            request.destroy(new Error('La respuesta supera el límite de 1 MB.'));
+          else chunks.push(chunk);
+        });
+        response.on('end', () =>
+          resolve({
+            status: response.statusCode || 0,
+            location: response.headers.location,
+            contentType: String(response.headers['content-type'] || ''),
+            body: Buffer.concat(chunks).toString('utf8'),
+          }),
+        );
+      },
+    );
+    request.setTimeout(12000, () =>
+      request.destroy(new Error('La solicitud agotó el tiempo de espera.')),
+    );
+    request.once('error', reject);
+  });
+}
+
+function urlCandidate(value, base) {
+  if (!value) return null;
+  let decoded = value.trim().replaceAll('&amp;', '&');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      break;
+    }
+  }
+  try {
+    const candidate = new URL(decoded, base);
+    return ['http:', 'https:'].includes(candidate.protocol) ? candidate.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractDestination(current, body) {
+  for (const parameter of DESTINATION_PARAMS) {
+    const candidate = urlCandidate(current.searchParams.get(parameter), current);
+    if (candidate && candidate !== current.href) return { url: candidate, method: 'query' };
+  }
+  if (!body) return null;
+  const $ = load(body);
+  const refresh = $('meta[http-equiv="refresh" i]')
+    .attr('content')
+    ?.match(/url\s*=\s*["']?([^"';]+)/i)?.[1];
+  const metaCandidate = urlCandidate(refresh, current);
+  if (metaCandidate) return { url: metaCandidate, method: 'meta-refresh' };
+  const selector =
+    'a#downloadButton, a#skip, a#skip_button, a.skip-ad, a.skip, a.get-link, a.btn-success, a[href][data-destination]';
+  const link = $(selector).first();
+  const linkCandidate = urlCandidate(link.attr('data-destination') || link.attr('href'), current);
+  if (linkCandidate) return { url: linkCandidate, method: 'page-link' };
+  const patterns = [
+    /(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i,
+    /(?:destination|redirectUrl|targetUrl|finalUrl)\s*[:=]\s*["']([^"']+)["']/i,
+  ];
+  for (const pattern of patterns) {
+    const candidate = urlCandidate(body.match(pattern)?.[1], current);
+    if (candidate) return { url: candidate, method: 'page-script' };
+  }
+  return null;
+}
+
+async function resolveUrl(input) {
+  const { default: normalizeUrl } = await import('normalize-url');
+  let current = await validatePublicUrl(normalizeUrl(input.trim(), { stripAuthentication: true }));
+  const visited = new Set();
+  const chain = [];
+  let usedPageExtraction = false;
+  for (let step = 0; step < 12; step += 1) {
+    if (visited.has(current.href)) throw new Error('Se detectó un ciclo de redirecciones.');
+    visited.add(current.href);
+    const response = await requestPage(current);
+    chain.push({
+      url: current.href,
+      status: response.status,
+      method: step ? 'redirect' : 'initial',
+    });
+    if (response.status >= 300 && response.status < 400 && response.location) {
+      current = await validatePublicUrl(new URL(response.location, current).href);
+      continue;
+    }
+    const extracted = extractDestination(
+      current,
+      response.contentType.includes('html') ? response.body : '',
+    );
+    if (extracted && !visited.has(extracted.url)) {
+      usedPageExtraction = true;
+      chain[chain.length - 1].method = extracted.method;
+      current = await validatePublicUrl(extracted.url);
+      continue;
+    }
+    return {
+      input,
+      finalUrl: current.href,
+      domain: getDomain(current.hostname) || current.hostname,
+      chain,
+      mode: usedPageExtraction ? 'advertising-page' : chain.length > 1 ? 'short-url' : 'direct',
+    };
+  }
+  throw new Error('La URL superó el máximo de 12 redirecciones.');
+}
+
+module.exports = { resolveUrl, validatePublicUrl, isPrivateAddress };

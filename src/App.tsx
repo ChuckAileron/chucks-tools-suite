@@ -3,9 +3,11 @@ import MoverTool from './MoverTool';
 import RenameTool from './RenameTool';
 import VideoTool from './VideoTool';
 import NormalizeTool from './NormalizeTool';
-type Tool = 'mover' | 'rename' | 'video' | 'normalize';
+import UrlBypassTool from './UrlBypassTool';
+import DownloadsTool from './DownloadsTool';
+type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads';
 export default function App() {
-  const [tool, setTool] = useState<Tool>('mover');
+  const [tool, setTool] = useState<Tool>('downloads');
   return (
     <div className="suite">
       <aside className="sidebar">
@@ -18,6 +20,16 @@ export default function App() {
         </div>
         <nav>
           <p>HERRAMIENTAS</p>
+          <button
+            className={tool === 'downloads' ? 'active' : ''}
+            onClick={() => setTool('downloads')}
+          >
+            <i>↓</i>
+            <span>
+              <strong>Descargas</strong>
+              <small>Gestor de enlaces</small>
+            </span>
+          </button>
           <button className={tool === 'mover' ? 'active' : ''} onClick={() => setTool('mover')}>
             <i>↗</i>
             <span>
@@ -49,6 +61,13 @@ export default function App() {
               <small>Audio y video</small>
             </span>
           </button>
+          <button className={tool === 'urls' ? 'active' : ''} onClick={() => setTool('urls')}>
+            <i>↗</i>
+            <span>
+              <strong>Bypass de URLs</strong>
+              <small>Enlaces cortos y ads</small>
+            </span>
+          </button>
         </nav>
         <div className="local">
           <b>● Todo permanece local</b>
@@ -66,8 +85,12 @@ export default function App() {
           <RenameTool />
         ) : tool === 'video' ? (
           <VideoTool />
-        ) : (
+        ) : tool === 'normalize' ? (
           <NormalizeTool />
+        ) : tool === 'urls' ? (
+          <UrlBypassTool />
+        ) : (
+          <DownloadsTool />
         )}
       </main>
     </div>

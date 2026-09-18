@@ -72,6 +72,59 @@ Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio c
 
 La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya terminados en `_normalized` se excluyen del siguiente escaneo para evitar procesarlos repetidamente.
 
+### Bypass de URLs
+
+Resuelve el destino de URLs cortas y páginas intermedias publicitarias sin abrirlas primero en el navegador.
+
+- Sigue hasta 12 redirecciones HTTP y HTTPS.
+- Detecta redirecciones `meta refresh`.
+- Extrae destinos de parámetros codificados y patrones HTML habituales.
+- Muestra el dominio final y la cadena completa de navegación.
+- Permite copiar o abrir el resultado validado.
+- Bloquea localhost, credenciales embebidas y direcciones privadas o reservadas.
+- Limita cada respuesta a 1 MB y aplica tiempos máximos de espera.
+
+La implementación utiliza `normalize-url`, `tldts` y `cheerio`. Los adaptadores HTML están aislados en `electron/urlResolver.cjs` para facilitar su mantenimiento cuando cambien los servicios. No se ejecuta JavaScript de terceros, no se resuelven CAPTCHA y no se evaden controles de autenticación o acceso.
+
+### Gestor de descargas
+
+Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pestañas: Descargas, Identificador y Configuración.
+
+- Captura opcional de uno o varios enlaces desde el portapapeles.
+- Resolución previa de URLs cortas y páginas como MediaFire.
+- Comprobación de disponibilidad antes de añadir a la cola.
+- Carpeta de destino individual, múltiple o predeterminada.
+- Prioridades urgente, alta, media y baja.
+- Renombrado antes de descargar y mientras la tarea no esté activa.
+- Cola persistente agrupada por carpeta de destino.
+- Segundo nivel de agrupación por colección de enlaces.
+- Nombre de colección editable y asignación común para múltiples enlaces.
+- Expansión recursiva de carpetas públicas de MediaFire, conservando sus subcolecciones.
+- Expansión recursiva de carpetas públicas de Google Drive mediante una API key.
+- Detección de archivos individuales de Drive en formatos `/file/d/{id}` y `open?id={id}`.
+- Exportación automática de Documentos, Hojas, Presentaciones y Dibujos de Google.
+- De una a ocho descargas simultáneas.
+- Pausa, reanudación y detención con conservación de archivos parciales.
+- Progreso, tamaño y velocidad actual.
+- Apertura del enlace original y localización del archivo descargado.
+- Limpieza de tareas completadas.
+- Extracción automática de ZIP, 7z, RAR, TAR, GZ, BZ2 y XZ.
+- Contraseña previa por enlace y reintento cuando un comprimido la requiera.
+
+Las descargas utilizan `node-downloader-helper`. La extracción usa `7zip-min` con binarios multiplataforma. Las tareas y configuraciones se guardan en el directorio local de datos de Electron.
+
+Google Drive requiere una API key con Google Drive API habilitada. La clave se configura localmente en la pestaña Configuración y conviene restringirla a esa API desde Google Cloud Console. MEGA se reconoce como colección, pero se mantiene como no descargable porque necesita un canal cifrado específico que no es compatible con el descargador HTTP reanudable. MediaFire dispone de expansión pública sin credenciales.
+
+Para configurar Google Drive:
+
+1. Crea o selecciona un proyecto en Google Cloud Console.
+2. Habilita **Google Drive API** desde la biblioteca de APIs.
+3. Crea una credencial de tipo **API key**.
+4. Restringe la clave para que solo pueda utilizar Google Drive API.
+5. Pega la clave en Descargas > Configuración > Google Drive.
+
+Solo pueden enumerarse carpetas compartidas públicamente. No se solicitan permisos sobre la cuenta personal del usuario.
+
 ## Requisitos
 
 - Node.js 26.9.0 o posterior.
@@ -158,6 +211,8 @@ CHUCK's Tools Suite/
 │   ├── RenameTool.tsx    # Herramienta para renombrar
 │   ├── VideoTool.tsx     # Conversión de videos a SD
 │   ├── NormalizeTool.tsx # Normalización de volumen
+│   ├── UrlBypassTool.tsx # Resolución de URLs cortas e intermedias
+│   ├── DownloadsTool.tsx # Gestor persistente de descargas
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
