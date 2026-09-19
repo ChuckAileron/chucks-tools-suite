@@ -1,6 +1,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
+const candidates = [
+  path.join(
+    process.resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    'handbrake-js',
+    'bin',
+    'HandbrakeCLI.exe',
+  ),
+  path.join(__dirname, '..', 'node_modules', 'handbrake-js', 'bin', 'HandbrakeCLI.exe'),
+];
+for (const candidate of candidates) {
+  if (fs.existsSync(candidate)) {
+    process.env.HANDBRAKECLI_PATH = candidate;
+    break;
+  }
+}
 const handbrake = require('handbrake-js');
 
 const VIDEO_PATTERN =

@@ -64,6 +64,12 @@ async function validatePublicUrl(value) {
   return url;
 }
 
+function isTextualContentType(contentType) {
+  return /text\/(?:html|css|plain)|application\/(?:xhtml\+xml|json|xml|javascript|x-javascript)/i.test(
+    contentType,
+  );
+}
+
 function requestPage(url, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const client = url.protocol === 'https:' ? https : http;
@@ -87,6 +93,18 @@ function requestPage(url, maxBytes = 1024 * 1024) {
           }),
       },
       (response) => {
+        const contentType = String(response.headers['content-type'] || '');
+        const isText = isTextualContentType(contentType);
+        if ((response.statusCode || 0) >= 200 && (response.statusCode || 0) < 300 && !isText) {
+          response.resume();
+          return resolve({
+            status: response.statusCode || 0,
+            location: null,
+            contentType,
+            body: '',
+            binary: true,
+          });
+        }
         const chunks = [];
         let size = 0;
         response.on('data', (chunk) => {
@@ -99,7 +117,7 @@ function requestPage(url, maxBytes = 1024 * 1024) {
           resolve({
             status: response.statusCode || 0,
             location: response.headers.location,
-            contentType: String(response.headers['content-type'] || ''),
+            contentType,
             body: Buffer.concat(chunks).toString('utf8'),
           }),
         );
@@ -158,6 +176,27 @@ function extractDestination(current, body) {
   return null;
 }
 
+const MEDIAFIRE_FILE = /^(?:www\.|m\.)?mediafire\.com$/i;
+const MEDIAFIRE_DIRECT = /^download\d*\.mediafire\.com$/i;
+
+function extractMediafireTitle(body) {
+  if (!body) return '';
+  const $ = load(body);
+  const title = $('meta[property="og:title"]').attr('content') || $('title').first().text();
+  return (title || '').replace(/\s+/g, ' ').trim();
+}
+
+function extractMediafireDirect(body, base) {
+  if (!body) return null;
+  const $ = load(body);
+  const fromButton = urlCandidate($('#downloadButton').attr('href'), base);
+  if (fromButton && MEDIAFIRE_DIRECT.test(new URL(fromButton).hostname)) return fromButton;
+  const pattern = /https:\\?\/\\?\/download\d+\\?\.mediafire\\?\.com\\?\/[^"'<>\s]+/i;
+  const candidate = urlCandidate(body.match(pattern)?.[0]?.replaceAll('\\/', '/'), base);
+  if (candidate && MEDIAFIRE_DIRECT.test(new URL(candidate).hostname)) return candidate;
+  return null;
+}
+
 async function resolveUrl(input) {
   const { default: normalizeUrl } = await import('normalize-url');
   let current = await validatePublicUrl(normalizeUrl(input.trim(), { stripAuthentication: true }));
@@ -177,13 +216,55 @@ async function resolveUrl(input) {
       current = await validatePublicUrl(new URL(response.location, current).href);
       continue;
     }
-    const extracted = extractDestination(
-      current,
-      response.contentType.includes('html') ? response.body : '',
-    );
+    if (response.binary) {
+      if (response.status >= 400) throw new Error('El enlace de descarga no está disponible.');
+      return {
+        input,
+        finalUrl: current.href,
+        domain: getDomain(current.hostname) || current.hostname,
+        chain,
+        mode: usedPageExtraction ? 'page-link' : chain.length > 1 ? 'short-url' : 'direct',
+      };
+    }
+    const html = response.contentType.includes('html') ? response.body : '';
+    if (MEDIAFIRE_FILE.test(current.hostname)) {
+      const direct = extractMediafireDirect(html, current);
+      const title = extractMediafireTitle(html);
+      if (direct) {
+        chain[chain.length - 1].method = 'mediafire-direct';
+        return {
+          input,
+          finalUrl: direct,
+          domain: getDomain(current.hostname) || current.hostname,
+          chain,
+          mode: 'mediafire-direct',
+          title,
+        };
+      }
+      return {
+        input,
+        finalUrl: current.href,
+        domain: getDomain(current.hostname) || current.hostname,
+        chain,
+        mode: 'mediafire-page',
+        title,
+      };
+    }
+    const extracted = MEDIAFIRE_FILE.test(current.hostname)
+      ? null
+      : extractDestination(current, html);
     if (extracted && !visited.has(extracted.url)) {
       usedPageExtraction = true;
       chain[chain.length - 1].method = extracted.method;
+      if (MEDIAFIRE_DIRECT.test(new URL(extracted.url).hostname)) {
+        return {
+          input,
+          finalUrl: extracted.url,
+          domain: getDomain(current.hostname) || current.hostname,
+          chain,
+          mode: 'mediafire-direct',
+        };
+      }
       current = await validatePublicUrl(extracted.url);
       continue;
     }
@@ -198,4 +279,12 @@ async function resolveUrl(input) {
   throw new Error('La URL superó el máximo de 12 redirecciones.');
 }
 
-module.exports = { resolveUrl, validatePublicUrl, isPrivateAddress, requestPage };
+module.exports = {
+  resolveUrl,
+  validatePublicUrl,
+  isPrivateAddress,
+  requestPage,
+  isTextualContentType,
+  extractMediafireDirect,
+  extractMediafireTitle,
+};

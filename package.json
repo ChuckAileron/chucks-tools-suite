@@ -34,6 +34,7 @@
     "@vitejs/plugin-react": "latest",
     "7zip-min": "latest",
     "cheerio": "latest",
+    "clipboard-event": "^1.6.0",
     "handbrake-js": "8.0.2",
     "node-downloader-helper": "2.1.11",
     "normalize-url": "latest",
@@ -68,11 +69,14 @@
     },
     "files": [
       "dist/**",
-      "electron/**"
+      "electron/**",
+      "vendor/**"
     ],
     "asarUnpack": [
       "**/node_modules/handbrake-js/**",
-      "**/node_modules/7zip-bin/**"
+      "**/node_modules/7zip-bin/**",
+      "**/node_modules/clipboard-event/**",
+      "vendor/**"
     ],
     "win": {
       "target": [

@@ -5,9 +5,54 @@ const { DownloaderHelper } = require('node-downloader-helper');
 const sevenZip = require('7zip-min');
 const { resolveUrl } = require('./urlResolver.cjs');
 
+function resolveSevenZa() {
+  const resourcesPath = process.resourcesPath || '';
+  const vendored = [
+    path.join(resourcesPath, 'app.asar.unpacked', 'vendor', '7zip', '7z.exe'),
+    path.join(__dirname, '..', 'vendor', '7zip', '7z.exe'),
+  ];
+  for (const candidate of vendored) if (fs.existsSync(candidate)) return candidate;
+  const candidate = require('7zip-bin').path7za;
+  const unpacked = candidate.replace('app.asar', 'app.asar.unpacked');
+  if (fs.existsSync(unpacked)) return unpacked;
+  if (fs.existsSync(candidate)) return candidate;
+  const fromResources = path.join(
+    resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    '7zip-bin',
+    'win',
+    process.arch,
+    '7za.exe',
+  );
+  if (fs.existsSync(fromResources)) return fromResources;
+  return candidate;
+}
+sevenZip.config({ binaryPath: resolveSevenZa() });
+
 const PRIORITY = { urgent: 0, high: 1, medium: 2, low: 3 };
 const ARCHIVE = /\.(zip|7z|rar|tar|gz|bz2|xz)$/i;
 const LINKS = /https?:\/\/[^\s<>"']+/gi;
+const NAKED_LINKS = [
+  /(?:www\.|m\.)?download\d*\.mediafire\.com\/[^\s<>"']*/gi,
+  /(?:www\.|m\.)?mediafire\.com\/(?:file|folder)\/[^\s<>"']*/gi,
+  /(?:www\.|docs\.)?drive\.google\.com\/[^\s<>"']*/gi,
+  /(?:www\.)?mega\.(?:nz|io)\/[^\s<>"']*/gi,
+];
+function extractLinks(text) {
+  const found = [];
+  const add = (raw) => {
+    let candidate = raw.replace(/[),.;]+$/, '');
+    if (!candidate) return;
+    if (candidate.startsWith('//')) candidate = 'https:' + candidate;
+    else if (!/^https?:\/\//i.test(candidate)) candidate = 'https://' + candidate;
+    if (!found.includes(candidate)) found.push(candidate);
+  };
+  for (const match of (text || '').matchAll(LINKS)) add(match[0]);
+  for (const pattern of NAKED_LINKS)
+    for (const match of (text || '').matchAll(pattern)) add(match[0]);
+  return found.slice(0, 50);
+}
 
 class DownloadManager {
   constructor(dataFile, send) {
@@ -51,7 +96,7 @@ class DownloadManager {
     );
   }
   async analyze(text) {
-    const links = [...new Set(text.match(LINKS) || [])].slice(0, 50);
+    const links = extractLinks(text);
     const batchCollection = links.length > 1 ? `Colección ${new Date().toLocaleString('es')}` : '';
     const groups = await Promise.all(
       links.map(async (raw) => {
@@ -94,12 +139,21 @@ class DownloadManager {
         try {
           const result = await resolveUrl(originalUrl);
           const parsed = new URL(result.finalUrl);
+          const basename = decodeURIComponent(path.basename(parsed.pathname));
+          const extension = path.extname(basename);
+          const name = this.sanitize(
+            result.title
+              ? result.title.endsWith(extension)
+                ? result.title
+                : `${result.title}${extension}`
+              : basename,
+          );
           return [
             {
               id: randomUUID(),
               originalUrl,
               url: result.finalUrl,
-              name: this.sanitize(decodeURIComponent(path.basename(parsed.pathname))),
+              name,
               host: result.domain,
               online: (result.chain.at(-1)?.status || 0) < 400,
               mode: result.mode,
@@ -507,4 +561,4 @@ class DownloadManager {
     return task.status === 'completed';
   }
 }
-module.exports = { DownloadManager };
+module.exports = { DownloadManager, extractLinks };

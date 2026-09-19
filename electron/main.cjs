@@ -12,6 +12,15 @@ const { listFiles, renameFile } = require('./renameManager.cjs');
 let downloadManager;
 let collectionManager;
 let lastClipboard = '';
+function looksLikeDownloadText(text) {
+  return (
+    !!text &&
+    (/https?:\/\//i.test(text) ||
+      /(?:mediafire\.com\/(?:file|folder)|download\d*\.mediafire\.com|drive\.google\.com|mega\.(?:nz|io))/i.test(
+        text,
+      ))
+  );
+}
 const createdDestinationFolders = new Set();
 let videoCancelled = false;
 let activeVideoProcess = null;
@@ -300,15 +309,18 @@ app.whenReady().then(() => {
         window.webContents.send('downloads:state', state);
     },
   );
-  setInterval(() => {
+  const { watcher, events } = require('./clipboardWatcher.cjs');
+  events.on('change', async () => {
     if (!downloadManager.settings.clipboard) return;
-    const text = clipboard.readText();
-    if (text !== lastClipboard && /https?:\/\//i.test(text)) {
+    const text = await clipboard.readText();
+    if (text !== lastClipboard && looksLikeDownloadText(text)) {
       lastClipboard = text;
       for (const window of BrowserWindow.getAllWindows())
         window.webContents.send('downloads:clipboard', text);
     }
-  }, 1200).unref();
+  });
+  watcher.start();
+  app.on('will-quit', () => watcher.stop());
   ipcMain.handle('directory:select', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],

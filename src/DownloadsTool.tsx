@@ -380,9 +380,12 @@ function CollectorTab({
               disabled={!item.online}
               onChange={(event) => update(item.id, { name: event.target.value })}
             />
-            <span title={item.originalUrl}>
-              {item.host} · {item.online ? 'En línea' : item.error || 'No disponible'}{' '}
-              {item.mode && `· ${item.mode}`}
+            <span title={item.error || item.originalUrl}>
+              {item.host} ·{' '}
+              <b className={`candidate-status ${item.online ? 'online' : 'offline'}`}>
+                {item.online ? 'En línea' : 'No encontrado'}
+              </b>
+              {item.mode && ` · ${item.mode}`}
             </span>
             <input
               className="candidate-collection"

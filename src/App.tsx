@@ -141,7 +141,7 @@ export default function App() {
           <small>Tus archivos nunca salen de este equipo.</small>
         </div>
         <footer>
-          CHUCK's Tools Suite <span>v1.5</span>
+          CHUCK's Tools Suite <span>v1.6</span>
         </footer>
       </aside>
       <main className="content">

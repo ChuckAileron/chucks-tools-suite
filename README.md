@@ -115,10 +115,11 @@ Resuelve el destino de URLs cortas y páginas intermedias publicitarias sin abri
 - Sigue hasta 12 redirecciones HTTP y HTTPS.
 - Detecta redirecciones `meta refresh`.
 - Extrae destinos de parámetros codificados y patrones HTML habituales.
+- Resuelve páginas de archivo de MediaFire a su enlace directo de descarga.
 - Muestra el dominio final y la cadena completa de navegación.
 - Permite copiar o abrir el resultado validado.
 - Bloquea localhost, credenciales embebidas y direcciones privadas o reservadas.
-- Limita cada respuesta a 1 MB y aplica tiempos máximos de espera.
+- Limita cada respuesta a 1 MB y aplica tiempos máximos de espera. Las respuestas binarias (archivos) se detectan por su tipo de contenido y se tratan como destino final sin leer el cuerpo, evitando superar ese límite.
 
 La implementación utiliza `normalize-url`, `tldts` y `cheerio`. Los adaptadores HTML están aislados en `electron/urlResolver.cjs` para facilitar su mantenimiento cuando cambien los servicios. No se ejecuta JavaScript de terceros, no se resuelven CAPTCHA y no se evaden controles de autenticación o acceso.
 
@@ -136,6 +137,8 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Segundo nivel de agrupación por colección de enlaces.
 - Nombre de colección editable y asignación común para múltiples enlaces.
 - Expansión recursiva de carpetas públicas de MediaFire, conservando sus subcolecciones.
+- Resolución de páginas de archivo de MediaFire (`/file/...`) al enlace directo de su CDN, sin sesión, extraído del botón de descarga de la página.
+- Los enlaces directos resultantes nunca se descargan durante la resolución: si una URL candidata es binaria, se adopta como destino final.
 - Expansión recursiva de carpetas públicas de Google Drive mediante una API key.
 - Detección de archivos individuales de Drive en formatos `/file/d/{id}` y `open?id={id}`.
 - Exportación automática de Documentos, Hojas, Presentaciones y Dibujos de Google.
@@ -146,9 +149,9 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Limpieza de tareas completadas.
 - Extracción automática de ZIP, 7z, RAR, TAR, GZ, BZ2 y XZ.
 - Contraseña previa por enlace y reintento cuando un comprimido la requiera.
-- Detección de enlaces copiados configurable y limitada a una bandeja previa: copiar una URL no inicia una descarga automáticamente.
+- Detección automática de enlaces copiados mediante `clipboard-event` (sin sondeo): al copiar cualquier texto que contenga la URL de un servidor compatible o de una descarga directa (con o sin el prefijo `http://`), el contenido se analiza y la lista completa se añade a la sección **Identificador**, con estado "En línea" o "No encontrado". Copiar una URL no inicia una descarga automáticamente.
 
-Las descargas utilizan `node-downloader-helper`. La extracción usa `7zip-min` con binarios multiplataforma. Las tareas y configuraciones se guardan en el directorio local de datos de Electron.
+Las descargas utilizan `node-downloader-helper`. La extracción usa la versión completa de 7-Zip (`vendor/7zip/`) con binarios desempaquetados. La detección de portapapeles usa el binario nativo de `clipboard-event`. Las tareas y configuraciones se guardan en el directorio local de datos de Electron.
 
 Google Drive requiere una API key con Google Drive API habilitada. La clave se configura localmente en la pestaña Configuración y conviene restringirla a esa API desde Google Cloud Console. MEGA se reconoce como colección, pero se mantiene como no descargable porque necesita un canal cifrado específico que no es compatible con el descargador HTTP reanudable. MediaFire dispone de expansión pública sin credenciales.
 
@@ -219,7 +222,7 @@ npm run dist:linux  # Linux (AppImage + deb)
 
 También está disponible `npm run pack`, que crea la aplicación desempaquetada en `release/<plataforma>-unpacked/` (útil para comprobaciones rápidas).
 
-Cada plataforma debe empaquetarse desde su propio sistema operativo (o mediante CI multi-plataforma): electron-builder incluye solo los binarios nativos de la plataforma de origen. Los binarios de HandBrake y 7-Zip se extraen fuera del `app.asar` para poder ejecutarse en tiempo de ejecución.
+Cada plataforma debe empaquetarse desde su propio sistema operativo (o mediante CI multi-plataforma): electron-builder incluye solo los binarios nativos de la plataforma de origen. Los binarios de HandBrake y de la versión completa de 7-Zip (en `vendor/7zip/`, con soporte de RAR, incluye de forma separada su licencia) se extraen fuera del `app.asar` para poder ejecutarse en tiempo de ejecución.
 
 ## Calidad de código
 

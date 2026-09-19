@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DownloadManager } = require('../electron/downloadManager.cjs');
+const { DownloadManager, extractLinks } = require('../electron/downloadManager.cjs');
 
 const manager = new DownloadManager('unused-download-test.json', () => {});
 
@@ -34,4 +34,45 @@ test('extrae IDs de archivos individuales de Google Drive', () => {
 
 test('sanea nombres de descarga sin permitir rutas', () => {
   assert.equal(manager.sanitize('../bad:name.zip'), 'bad_name.zip');
+});
+
+test('extrae URLs de hipervínculos con esquema', () => {
+  assert.deepEqual(
+    extractLinks('Descarga: https://www.mediafire.com/file/2y8ej9vblr9jj9p/a.rar/file'),
+    ['https://www.mediafire.com/file/2y8ej9vblr9jj9p/a.rar/file'],
+  );
+});
+
+test('extrae URLs de descarga sin esquema de servidores compatibles', () => {
+  assert.deepEqual(extractLinks('mediafire.com/file/2y8ej9vblr9jj9p/a.rar/file'), [
+    'https://mediafire.com/file/2y8ej9vblr9jj9p/a.rar/file',
+  ]);
+  assert.deepEqual(extractLinks('www.mediafire.com/folder/z9poqwy3abryr/Anime'), [
+    'https://www.mediafire.com/folder/z9poqwy3abryr/Anime',
+  ]);
+  assert.deepEqual(extractLinks('drive.google.com/drive/folders/abc-123'), [
+    'https://drive.google.com/drive/folders/abc-123',
+  ]);
+  assert.deepEqual(extractLinks('mega.nz/file/xyz'), ['https://mega.nz/file/xyz']);
+});
+
+test('extrae URLs directas de descarga sin esquema', () => {
+  assert.deepEqual(extractLinks('download3456.mediafire.com/xyz/a.bin'), [
+    'https://download3456.mediafire.com/xyz/a.bin',
+  ]);
+});
+
+test('extrae múltiples enlaces de texto mixto y limpia puntuación final', () => {
+  const links = extractLinks(
+    'Mira https://www.mediafire.com/file/a1b2c3/x.rar/file, y mega.nz/file/zzz. Termina.',
+  );
+  assert.deepEqual(links, [
+    'https://www.mediafire.com/file/a1b2c3/x.rar/file',
+    'https://mega.nz/file/zzz',
+  ]);
+});
+
+test('deduplica enlaces repetidos y no captura texto sin URLs', () => {
+  assert.deepEqual(extractLinks('hola mundo sin enlaces'), []);
+  assert.deepEqual(extractLinks('https://a.com/1 https://a.com/1'), ['https://a.com/1']);
 });

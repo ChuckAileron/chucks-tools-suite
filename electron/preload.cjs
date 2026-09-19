@@ -7,7 +7,9 @@ contextBridge.exposeInMainWorld('tools', {
   createDestination: (data) => ipcRenderer.invoke('directory:create-child', data),
   resolveUrl: (url) => ipcRenderer.invoke('url:resolve', url),
   openUrl: (url) => ipcRenderer.invoke('url:open', url),
-  copyText: (text) => clipboard.writeText(text),
+  copyText: async (text) => {
+    await clipboard.writeText(text);
+  },
   getDownloads: () => ipcRenderer.invoke('downloads:state'),
   analyzeDownloads: (text) => ipcRenderer.invoke('downloads:analyze', text),
   addDownloads: (items) => ipcRenderer.invoke('downloads:add', items),

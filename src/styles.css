@@ -1432,7 +1432,7 @@ nav button i {
   border: 1px solid transparent;
   background: transparent;
   color: #25302b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 .download-file input:not(:disabled):focus {
@@ -1445,7 +1445,7 @@ nav button i {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #8a918d;
-  font-size: 9px;
+  font-size: 10px;
 }
 .download-meter > span {
   display: block;
@@ -1464,7 +1464,7 @@ nav button i {
   display: block;
   margin-top: 4px;
   color: #747c77;
-  font-size: 9px;
+  font-size: 10px;
 }
 .download-actions {
   display: flex;
@@ -1489,7 +1489,7 @@ nav button i {
   grid-column: 1/-1;
   margin: 0;
   color: #a2483a;
-  font-size: 9px;
+  font-size: 10px;
 }
 .downloads-empty {
   min-height: 330px;
@@ -1595,6 +1595,15 @@ nav button i {
   white-space: nowrap;
   color: #89918c;
   font-size: 9px;
+}
+.candidate-main .candidate-status {
+  font-weight: 800;
+}
+.candidate-main .candidate-status.online {
+  color: #2f8f5b;
+}
+.candidate-main .candidate-status.offline {
+  color: #b34535;
 }
 .candidate select,
 .candidate-password {
