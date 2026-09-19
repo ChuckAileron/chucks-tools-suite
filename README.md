@@ -134,7 +134,9 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Prioridades urgente, alta, media y baja.
 - Renombrado antes de descargar y mientras la tarea no esté activa.
 - Cola persistente agrupada por carpeta de destino.
-- Segundo nivel de agrupación por colección de enlaces.
+- Grupos colapsables con barra de progreso general en el encabezado.
+- Indicador de éxito cuando todas las descargas de un grupo se completan.
+- Segundo nivel de agrupación por colección de enlaces, también colapsable.
 - Nombre de colección editable y asignación común para múltiples enlaces.
 - Expansión recursiva de carpetas públicas de MediaFire, conservando sus subcolecciones.
 - Resolución de páginas de archivo de MediaFire (`/file/...`) al enlace directo de su CDN, sin sesión, extraído del botón de descarga de la página.
