@@ -78,6 +78,45 @@ test('no sobrescribe una colección y borra ítems en cascada', () => {
   }
 });
 
+test('reordena las pestañas de colecciones y las persiste', () => {
+  const fixture = managerForTest();
+  try {
+    const first = fixture.manager.createCollection({ name: 'Primera' });
+    const second = fixture.manager.createCollection({ name: 'Segunda' });
+    const third = fixture.manager.createCollection({ name: 'Tercera' });
+    const names = () => fixture.manager.listCollections().map((collection) => collection.name);
+    assert.deepEqual(names(), ['Primera', 'Segunda', 'Tercera']);
+    const reordered = fixture.manager.reorderCollections([third.id, first.id, second.id]);
+    assert.deepEqual(
+      reordered.map((collection) => collection.name),
+      ['Tercera', 'Primera', 'Segunda'],
+    );
+    assert.deepEqual(names(), ['Tercera', 'Primera', 'Segunda']);
+    assert.equal(fixture.manager.listCollections()[0].position, 0);
+    assert.throws(() => fixture.manager.reorderCollections([first.id, first.id]), /duplicadas/);
+    assert.throws(() => fixture.manager.reorderCollections([first.id, 999999]), /no existen/);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('las colecciones nuevas se agregan al final del orden', () => {
+  const fixture = managerForTest();
+  try {
+    fixture.manager.createCollection({ name: 'A' });
+    fixture.manager.createCollection({ name: 'B' });
+    const late = fixture.manager.createCollection({ name: 'C' });
+    const collections = fixture.manager.listCollections();
+    assert.deepEqual(
+      collections.map((entry) => entry.name),
+      ['A', 'B', 'C'],
+    );
+    assert.equal(collections[2].position, collections[0].position + 2);
+  } finally {
+    fixture.close();
+  }
+});
+
 test('wishlist persiste artículos y múltiples páginas de precio', () => {
   const fixture = managerForTest();
   try {

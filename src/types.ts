@@ -119,6 +119,7 @@ export type Collection = {
   description: string;
   type: string;
   columns: CollectionColumn[];
+  position: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -207,6 +208,7 @@ declare global {
       }): Promise<Collection>;
       updateCollection(id: number, patch: Partial<Collection>): Promise<Collection>;
       deleteCollection(id: number): Promise<boolean>;
+      reorderCollections(ids: number[]): Promise<Collection[]>;
       getCollectionColumnTypes(): Promise<CollectionColumnType[]>;
       getCollectionItems(collectionId: number, q?: string): Promise<CollectionItem[]>;
       createCollectionItem(data: {

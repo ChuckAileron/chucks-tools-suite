@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('tools', {
   createCollection: (data) => ipcRenderer.invoke('collections:create', data),
   updateCollection: (id, patch) => ipcRenderer.invoke('collections:update', { id, patch }),
   deleteCollection: (id) => ipcRenderer.invoke('collections:delete', id),
+  reorderCollections: (ids) => ipcRenderer.invoke('collections:reorder', ids),
   getCollectionColumnTypes: () => ipcRenderer.invoke('collections:column-types'),
   getCollectionItems: (collectionId, q = '') =>
     ipcRenderer.invoke('collection-items:list', { collectionId, q }),

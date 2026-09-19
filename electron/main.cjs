@@ -390,6 +390,7 @@ app.whenReady().then(() => {
     collectionManager.updateCollection(id, patch),
   );
   ipcMain.handle('collections:delete', (_event, id) => collectionManager.deleteCollection(id));
+  ipcMain.handle('collections:reorder', (_event, ids) => collectionManager.reorderCollections(ids));
   ipcMain.handle('collections:column-types', () => COLUMN_TYPES);
   ipcMain.handle('collection-items:list', (_event, { collectionId, q }) =>
     collectionManager.listItems(collectionId, q),

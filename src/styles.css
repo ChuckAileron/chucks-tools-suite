@@ -2064,6 +2064,53 @@ nav button i {
   color: #8b938f;
   font-size: 11px;
 }
+.collection-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.collection-reorder > div {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid #d7dcd7;
+  border-radius: 8px;
+  background: #fff;
+}
+.collection-reorder > div.active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.collection-reorder > div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #41504a;
+  font-size: 10px;
+  font-weight: 800;
+}
+.collection-reorder > div button {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #d7dcd7;
+  border-radius: 6px;
+  background: #fff;
+  color: #41504a;
+  font-size: 9px;
+  line-height: 1;
+}
+.collection-reorder > div button:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.collection-reorder .collection-columns-empty {
+  margin: 0;
+  color: #8b938f;
+  font-size: 11px;
+}
 .collection-settings-actions {
   justify-content: flex-end;
 }

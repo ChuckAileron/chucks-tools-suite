@@ -97,6 +97,7 @@ class CollectionManager {
         description TEXT NOT NULL DEFAULT '',
         type TEXT NOT NULL DEFAULT 'generic',
         schema_json TEXT NOT NULL DEFAULT '[]',
+        position INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -133,6 +134,9 @@ class CollectionManager {
       );
       CREATE INDEX IF NOT EXISTS idx_wishlist_prices_item ON wishlist_prices(wishlist_id);
     `);
+    const columns = this.db.prepare('PRAGMA table_info(collections)').all();
+    if (!columns.some((column) => column.name === 'position'))
+      this.db.exec('ALTER TABLE collections ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
   }
 
   close() {
@@ -147,6 +151,7 @@ class CollectionManager {
           description: row.description,
           type: row.type,
           columns: normalizeColumns(parse(row.schema_json, [])),
+          position: integer(row.position),
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }
@@ -170,7 +175,7 @@ class CollectionManager {
 
   listCollections() {
     return this.db
-      .prepare('SELECT * FROM collections ORDER BY name COLLATE NOCASE')
+      .prepare('SELECT * FROM collections ORDER BY position, name COLLATE NOCASE')
       .all()
       .map((row) => this.mapCollection(row));
   }
@@ -183,12 +188,17 @@ class CollectionManager {
     const normalizedName = String(name || '').trim();
     if (!normalizedName) throw new Error('El nombre de la colección es obligatorio.');
     const schema = normalizeColumns(columns);
+    const position =
+      integer(
+        this.db.prepare('SELECT COALESCE(MAX(position), -1) AS position FROM collections').get()
+          .position,
+      ) + 1;
     try {
       const result = this.db
         .prepare(
-          'INSERT INTO collections (name, description, type, schema_json) VALUES (?, ?, ?, ?)',
+          'INSERT INTO collections (name, description, type, schema_json, position) VALUES (?, ?, ?, ?, ?)',
         )
-        .run(normalizedName, String(description), String(type), JSON.stringify(schema));
+        .run(normalizedName, String(description), String(type), JSON.stringify(schema), position);
       return this.getCollection(integer(result.lastInsertRowid));
     } catch (error) {
       if (error.code === 'ERR_SQLITE_ERROR' && /UNIQUE/i.test(error.message))
@@ -218,6 +228,31 @@ class CollectionManager {
 
   deleteCollection(id) {
     return integer(this.db.prepare('DELETE FROM collections WHERE id = ?').run(id).changes) > 0;
+  }
+
+  reorderCollections(ids) {
+    const list = Array.isArray(ids) ? ids.map(integer) : [];
+    if (!list.length) throw new Error('Se necesita al menos una colección.');
+    if (new Set(list).size !== list.length)
+      throw new Error('El orden contiene colecciones duplicadas.');
+    const existing = new Set(
+      this.db
+        .prepare('SELECT id FROM collections')
+        .all()
+        .map((row) => integer(row.id)),
+    );
+    if (!list.every((id) => existing.has(id)))
+      throw new Error('El orden incluye colecciones que no existen.');
+    this.db.exec('BEGIN');
+    try {
+      const reorder = this.db.prepare('UPDATE collections SET position = ? WHERE id = ?');
+      list.forEach((id, position) => reorder.run(position, id));
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+    return this.listCollections();
   }
 
   listItems(collectionId, q = '') {

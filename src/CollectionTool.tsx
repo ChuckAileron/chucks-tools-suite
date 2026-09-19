@@ -139,6 +139,18 @@ export default function CollectionTool() {
       setMessage('Colección eliminada.');
     });
   };
+  const moveCollection = (id: number, direction: -1 | 1) =>
+    run(async () => {
+      const ordered = [...collections];
+      const index = ordered.findIndex((collection) => collection.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= ordered.length) return;
+      const [moved] = ordered.splice(index, 1);
+      ordered.splice(target, 0, moved);
+      await window.tools.reorderCollections(ordered.map((collection) => collection.id));
+      await loadCollections();
+      setMessage('Orden de pestañas actualizado.');
+    });
   const saveItem = () => {
     if (!active || !itemDraft) return;
     run(async () => {
@@ -396,6 +408,9 @@ export default function CollectionTool() {
             busy={busy}
             save={saveCollection}
             remove={removeCollection}
+            collections={collections}
+            activeId={activeId}
+            onMove={moveCollection}
           />
         )}
       </div>
@@ -411,6 +426,9 @@ function CollectionEditor({
   busy,
   save,
   remove,
+  collections,
+  activeId,
+  onMove,
 }: {
   draft: typeof EMPTY_COLLECTION;
   setDraft: (draft: typeof EMPTY_COLLECTION) => void;
@@ -419,6 +437,9 @@ function CollectionEditor({
   busy: boolean;
   save: () => void;
   remove: () => void;
+  collections: Collection[];
+  activeId: number | null;
+  onMove: (id: number, direction: -1 | 1) => void;
 }) {
   const addColumn = () =>
     setDraft({
@@ -522,6 +543,42 @@ function CollectionEditor({
             </div>
           ))}
           {!draft.columns.length && <p>No hay columnas personalizadas.</p>}
+        </div>
+      </section>
+      <section>
+        <header>
+          <div>
+            <h2>Orden de las pestañas</h2>
+            <p>Usa las flechas para cambiar el orden en que se muestran las colecciones.</p>
+          </div>
+        </header>
+        <div className="collection-reorder">
+          {collections.map((collection, index) => (
+            <div key={collection.id} className={collection.id === activeId ? 'active' : ''}>
+              <span>{collection.name}</span>
+              <button
+                type="button"
+                disabled={index === 0 || busy}
+                onClick={() => onMove(collection.id, -1)}
+                title="Subir"
+                aria-label={`Subir ${collection.name}`}
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                disabled={index === collections.length - 1 || busy}
+                onClick={() => onMove(collection.id, 1)}
+                title="Bajar"
+                aria-label={`Bajar ${collection.name}`}
+              >
+                ▼
+              </button>
+            </div>
+          ))}
+          {!collections.length && (
+            <p className="collection-columns-empty">No hay colecciones todavía.</p>
+          )}
         </div>
       </section>
       <div className="collection-settings-actions">
