@@ -73,8 +73,9 @@ Características:
 - Recálculo del progreso global cuando cambia la cola.
 - Carpetas colapsables con selección persistente de pistas.
 - Salida en `sd-output-h264` o `sd-output-h265` dentro de cada carpeta seleccionada.
+- Normalización opcional del audio durante la conversión con `loudnorm` y objetivo de LUFS configurable (-14 a -23, recomendado -16).
 - Sufijo `_SD` para evitar modificar o reemplazar los originales.
-- Conversión mediante FFmpeg para los formatos principales y `handbrake-js` para las entradas adicionales.
+- Conversión mediante FFmpeg para los formatos principales y `handbrake-js` para las entradas adicionales (al activar la normalización de audio, todos los archivos se procesan con FFmpeg).
 - Todas las entradas se escriben como MP4 para obtener una salida uniforme.
 - Aviso integrado sobre pérdida de detalle visual y compresión de audio.
 
@@ -87,9 +88,11 @@ Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio c
 - Procesamiento de varias carpetas.
 - Objetivo configurable entre -50 y -5 LUFS.
 - Valor recomendado de -16 LUFS para contenido general.
+- Proceso independiente de la navegación: continúa aunque cambies de sección dentro de la suite.
+- Barra de progreso en el sidebar con el porcentaje global de la cola.
 - Progreso por archivo y cancelación del proceso activo.
 - Video copiado sin recodificar para evitar pérdida visual y reducir el tiempo de proceso.
-- Resultado guardado junto al original con el sufijo `_normalized`.
+- Resultado guardado en `normalized_output-audio` (archivos de audio) o `normalized_output-video` (videos) dentro de cada carpeta, con el sufijo `_normalized`.
 - Los archivos originales nunca se reemplazan.
 
 La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya terminados en `_normalized` se excluyen del siguiente escaneo para evitar procesarlos repetidamente.

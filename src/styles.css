@@ -898,6 +898,36 @@ nav button i {
   color: #8b918d;
   font-size: 10px;
 }
+.video-normalize-row {
+  margin-top: 15px;
+  padding: 12px 13px;
+  border: 1px solid #dfe3de;
+  border-radius: 11px;
+  background: #fafbf8;
+}
+.video-normalize-row label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.video-normalize-row label input {
+  accent-color: var(--brand);
+  width: 15px;
+  height: 15px;
+}
+.video-normalize-row label span {
+  font-size: 12px;
+  font-weight: 700;
+}
+.video-normalize-row label small {
+  margin-left: auto;
+  color: #8b918d;
+  font-size: 10px;
+}
+.video-normalize-row .lufs-presets {
+  margin-top: 12px;
+}
 .video-progress {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -38,9 +38,18 @@ let videoState = {
   activeFile: 'Ningún archivo en proceso',
   activeFolder: '',
   logs: [],
+  normalizeAudio: false,
+  normalizeTarget: -16,
 };
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
+let normalizeState = {
+  running: false,
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Ningún archivo en proceso',
+  message: '',
+};
 function emitVideoProgress(data) {
   const addLog = (text, tone) => {
     videoState.logs = [...videoState.logs.slice(-99), { text, tone }];
@@ -80,6 +89,52 @@ function emitVideoProgress(data) {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('video:progress', data);
     window.webContents.send('video:state-changed', videoState);
+  }
+}
+function emitNormalizeProgress(data) {
+  if (data.type === 'file-start') {
+    normalizeState = {
+      ...normalizeState,
+      running: true,
+      fileProgress: 0,
+      activeFile: data.file || 'Archivo',
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      message: `Procesando ${data.file}`,
+    };
+  } else if (data.type === 'file-progress') {
+    normalizeState = { ...normalizeState, fileProgress: data.percent || 0 };
+  } else if (data.type === 'file-done') {
+    normalizeState = {
+      ...normalizeState,
+      fileProgress: 100,
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      message: `${data.file} completado`,
+    };
+  } else if (data.type === 'error') {
+    normalizeState = {
+      ...normalizeState,
+      message: `Error en ${data.file}: ${data.message}`,
+    };
+  } else if (data.type === 'done') {
+    normalizeState = {
+      ...normalizeState,
+      running: false,
+      fileProgress: 100,
+      globalProgress: 100,
+      message: `${data.completed} archivos normalizados`,
+    };
+  } else if (data.type === 'cancelled') {
+    normalizeState = {
+      ...normalizeState,
+      running: false,
+      fileProgress: 0,
+      globalProgress: 0,
+      message: 'Proceso cancelado',
+    };
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('normalizer:progress', data);
+    window.webContents.send('normalizer:state-changed', normalizeState);
   }
 }
 const TYPES = {
@@ -479,7 +534,7 @@ app.whenReady().then(() => {
     Promise.all(folders.map((folder) => inspectFolder(path.resolve(folder), codec))),
   );
   ipcMain.handle('video:state', () => videoState);
-  ipcMain.handle('video:start', async (_event, { folders, codec, trackSelections }) => {
+  ipcMain.handle('video:start', async (_event, { folders, codec, trackSelections, normalizeAudio = false, normalizeTarget = -16 }) => {
     if (videoState.running) throw new Error('Ya hay una conversión de video en curso.');
     videoCancelled = false;
     videoCompletedFiles = 0;
@@ -505,6 +560,8 @@ app.whenReady().then(() => {
       activeFile: 'Ningún archivo en proceso',
       activeFolder: '',
       logs: [],
+      normalizeAudio: !!normalizeAudio,
+      normalizeTarget,
     };
     emitVideoProgress({
       type: 'queue-progress',
@@ -541,6 +598,9 @@ app.whenReady().then(() => {
               activeVideoProcess = process;
             },
           },
+          videoState.normalizeAudio
+            ? { normalize: true, targetDb: videoState.normalizeTarget }
+            : null,
         );
         emitVideoProgress({ type: 'folder-done', folder: absolute });
       } catch (error) {
@@ -617,12 +677,23 @@ app.whenReady().then(() => {
     return result.canceled ? [] : result.filePaths;
   });
   ipcMain.handle('normalizer:scan', (_event, data) => scanMedia(data.folders, data.type));
-  ipcMain.handle('normalizer:start', async (event, { files, type, targetDb }) => {
+  ipcMain.handle('normalizer:state', () => normalizeState);
+  ipcMain.handle('normalizer:start', async (_event, { files, type, targetDb }) => {
     normalizeCancelled = false;
     let completed = 0;
+    normalizeState = {
+      ...normalizeState,
+      running: true,
+      globalProgress: 0,
+      fileProgress: 0,
+      activeFile: 'Iniciando normalización',
+      message: 'Iniciando normalización',
+    };
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('normalizer:state-changed', normalizeState);
     for (const file of files) {
       if (normalizeCancelled) break;
-      event.sender.send('normalizer:progress', {
+      emitNormalizeProgress({
         type: 'file-start',
         file: file.name,
         current: completed,
@@ -638,14 +709,14 @@ app.whenReady().then(() => {
             activeNormalizeProcess = process;
           },
           onProgress: (percent) =>
-            event.sender.send('normalizer:progress', {
+            emitNormalizeProgress({
               type: 'file-progress',
               file: file.name,
               percent,
             }),
         });
         completed += 1;
-        event.sender.send('normalizer:progress', {
+        emitNormalizeProgress({
           type: 'file-done',
           file: file.name,
           current: completed,
@@ -653,7 +724,7 @@ app.whenReady().then(() => {
         });
       } catch (error) {
         if (error.code !== 'CANCELLED')
-          event.sender.send('normalizer:progress', {
+          emitNormalizeProgress({
             type: 'error',
             file: file.name,
             message: error.message,
@@ -661,7 +732,7 @@ app.whenReady().then(() => {
       }
     }
     activeNormalizeProcess = null;
-    event.sender.send('normalizer:progress', {
+    emitNormalizeProgress({
       type: normalizeCancelled ? 'cancelled' : 'done',
       completed,
       total: files.length,

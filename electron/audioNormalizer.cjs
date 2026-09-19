@@ -78,10 +78,12 @@ async function normalizeMedia({ input, type, targetDb, onProgress, onProcess, is
   if (!Number.isFinite(targetDb) || targetDb < -50 || targetDb > -5)
     throw new Error('El objetivo debe estar entre -50 y -5 LUFS.');
   const extension = path.extname(input),
-    output = path.join(
-      path.dirname(input),
-      `${path.basename(input, extension)}_normalized${extension}`,
-    ),
+    outputDirectory = path.join(path.dirname(input), `normalized_output-${type}`);
+  fs.mkdirSync(outputDirectory, { recursive: true });
+  const output = path.join(
+    outputDirectory,
+    `${path.basename(input, extension)}_normalized${extension}`,
+  ),
     temporary = `${output.slice(0, -extension.length)}.part${extension}`;
   if (fs.existsSync(output)) throw new Error(`El resultado ya existe: ${output}`);
   fs.rmSync(temporary, { force: true });

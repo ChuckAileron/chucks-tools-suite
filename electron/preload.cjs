@@ -77,9 +77,15 @@ contextBridge.exposeInMainWorld('tools', {
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
   startNormalization: (data) => ipcRenderer.invoke('normalizer:start', data),
   cancelNormalization: () => ipcRenderer.invoke('normalizer:cancel'),
+  getNormalizeState: () => ipcRenderer.invoke('normalizer:state'),
   onNormalizeProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('normalizer:progress', listener);
     return () => ipcRenderer.removeListener('normalizer:progress', listener);
+  },
+  onNormalizeState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('normalizer:state-changed', listener);
+    return () => ipcRenderer.removeListener('normalizer:state-changed', listener);
   },
 });

@@ -81,9 +81,12 @@ async function inspectFolder(directory, codec = 'h264') {
 const cancelledError = () =>
   Object.assign(new Error('Conversión cancelada'), { code: 'CANCELLED' });
 
-async function convertFolder(directory, codec, selections, onProgress, controls) {
+async function convertFolder(directory, codec, selections, onProgress, controls, audio = null) {
   const output = path.join(directory, `sd-output-${codec}`);
   fs.mkdirSync(output, { recursive: true });
+  const normalizeAudio = audio?.normalize
+    ? `loudnorm=I=${audio.targetDb ?? -16}:TP=-1.5:LRA=11`
+    : null;
   const files = videoFiles(directory);
   if (!files.length) return onProgress({ type: 'info', message: 'No hay videos en la carpeta.' });
   onProgress({ type: 'global', current: 0, total: files.length, folder: directory });
@@ -101,7 +104,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
       total: files.length,
       folder: directory,
     });
-    if (!FFMPEG_PATTERN.test(file)) {
+    if (!FFMPEG_PATTERN.test(file) && !normalizeAudio) {
       await convertWithHandbrake(input, temporary, finalPath, codec, file, onProgress, controls);
       onProgress({ type: 'global', current: index + 1, total: files.length, folder: directory });
       continue;
@@ -154,6 +157,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls)
       '-b:a',
       '128k',
     );
+    if (normalizeAudio) args.push('-af', normalizeAudio);
     if (subtitleCount) args.push('-c:s', 'mov_text');
     args.push(temporary);
     const duration = Number.parseFloat(metadata.format?.duration) || 0;

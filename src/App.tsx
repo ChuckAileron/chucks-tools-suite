@@ -10,6 +10,7 @@ import type {
   DownloadCandidate,
   DownloadPriority,
   DownloadsState,
+  NormalizeState,
   VideoState,
 } from './types';
 type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads' | 'collection';
@@ -33,11 +34,21 @@ const EMPTY_VIDEO: VideoState = {
   activeFile: 'Ningún archivo en proceso',
   activeFolder: '',
   logs: [],
+  normalizeAudio: false,
+  normalizeTarget: -16,
+};
+const EMPTY_NORMALIZE: NormalizeState = {
+  running: false,
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Ningún archivo en proceso',
+  message: '',
 };
 export default function App() {
   const [tool, setTool] = useState<Tool>('collection');
   const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
   const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
+  const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [downloadNotice, setDownloadNotice] = useState(0);
   const mergeCandidates = (found: DownloadCandidate[]) =>
@@ -67,12 +78,15 @@ export default function App() {
   useEffect(() => {
     window.tools.getDownloads().then(setDownloads);
     window.tools.getVideoState().then(setVideo);
+    window.tools.getNormalizeState().then(setNormalize);
     const stopDownloads = window.tools.onDownloadsState(setDownloads);
     const stopVideo = window.tools.onVideoState(setVideo);
+    const stopNormalize = window.tools.onNormalizeState(setNormalize);
     const stopClipboard = window.tools.onClipboardLinks(captureClipboard);
     return () => {
       stopDownloads();
       stopVideo();
+      stopNormalize();
       stopClipboard();
     };
   }, []);
@@ -166,6 +180,11 @@ export default function App() {
             <span>
               <strong>Normalizar volumen</strong>
               <small>Audio y video</small>
+              <SidebarProgress
+                value={normalize.globalProgress}
+                label={normalize.running ? `${normalize.globalProgress}% global` : 'Sin tareas'}
+                active={normalize.running}
+              />
             </span>
           </button>
           <button className={tool === 'urls' ? 'active' : ''} onClick={() => setTool('urls')}>

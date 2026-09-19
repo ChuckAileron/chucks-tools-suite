@@ -4,6 +4,12 @@ import type { VideoFolder, VideoState, VideoTrack } from './types';
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
 const MP4_SUBTITLE_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
+const LUFS_PRESETS = [
+  { value: -14, label: '-14 Streaming' },
+  { value: -16, label: '-16 General' },
+  { value: -18, label: '-18 Conservador' },
+  { value: -23, label: '-23 Broadcast' },
+];
 
 export default function VideoTool() {
   const [folders, setFolders] = useState<VideoFolder[]>([]);
@@ -16,6 +22,8 @@ export default function VideoTool() {
   const [activeFolder, setActiveFolder] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
+  const [normalizeAudio, setNormalizeAudio] = useState(false);
+  const [normalizeTarget, setNormalizeTarget] = useState(-16);
 
   useEffect(() => {
     const hydrate = (state: VideoState) => {
@@ -28,6 +36,8 @@ export default function VideoTool() {
       setActiveFile(state.activeFile);
       setActiveFolder(state.activeFolder);
       setLogs(state.logs);
+      setNormalizeAudio(state.normalizeAudio);
+      setNormalizeTarget(state.normalizeTarget);
     };
     window.tools.getVideoState().then(hydrate);
     return window.tools.onVideoState(hydrate);
@@ -109,6 +119,8 @@ export default function VideoTool() {
         folders: folders.map((folder) => folder.folder),
         codec,
         trackSelections: selections,
+        normalizeAudio,
+        normalizeTarget,
       });
     } catch (error) {
       addLog(`No se pudo iniciar: ${String(error)}`, 'error');
@@ -198,6 +210,33 @@ export default function VideoTool() {
             <strong>H.265</strong>
             <small>Mayor compresión</small>
           </button>
+        </div>
+        <div className="video-normalize-row">
+          <label>
+            <input
+              type="checkbox"
+              disabled={running}
+              checked={normalizeAudio}
+              onChange={(event) => setNormalizeAudio(event.target.checked)}
+            />
+            <span>Normalizar audio</span>
+            <small>Loudnorm en la misma conversión</small>
+          </label>
+          {normalizeAudio && (
+            <div className="lufs-presets">
+              {LUFS_PRESETS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={running}
+                  className={normalizeTarget === value ? 'active' : ''}
+                  onClick={() => setNormalizeTarget(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <aside className="sd-disclaimer">
           <strong>Qué implica convertir a SD</strong>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { NormalizeFile } from './types';
+import type { NormalizeFile, NormalizeState } from './types';
 type MediaType = 'audio' | 'video';
 const formatSize = (bytes: number) =>
   bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
@@ -9,39 +9,26 @@ const LUFS_PRESETS = [
   { value: -18, label: '-18 Conservador' },
   { value: -23, label: '-23 Broadcast' },
 ];
+const EMPTY_NORMALIZE: NormalizeState = {
+  running: false,
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Ningún archivo en proceso',
+  message: '',
+};
 export default function NormalizeTool() {
   const [folders, setFolders] = useState<string[]>([]);
   const [type, setType] = useState<MediaType>('audio');
   const [target, setTarget] = useState(-16);
   const [files, setFiles] = useState<NormalizeFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [label, setLabel] = useState('Sin procesos activos');
+  const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
   const [message, setMessage] = useState('');
-  useEffect(
-    () =>
-      window.tools.onNormalizeProgress((data) => {
-        if (data.type === 'file-start') {
-          setProgress(0);
-          setLabel(`Procesando ${data.file}`);
-        }
-        if (data.type === 'file-progress') setProgress(data.percent || 0);
-        if (data.type === 'file-done' && data.total) {
-          setProgress(Math.floor(((data.current || 0) / data.total) * 100));
-          setLabel(`${data.file} completado`);
-        }
-        if (data.type === 'error') setMessage(`Error en ${data.file}: ${data.message}`);
-        if (data.type === 'done' || data.type === 'cancelled') {
-          setRunning(false);
-          setProgress(data.type === 'done' ? 100 : 0);
-          setLabel(
-            data.type === 'done' ? `${data.completed} archivos normalizados` : 'Proceso cancelado',
-          );
-        }
-      }),
-    [],
-  );
+  useEffect(() => {
+    window.tools.getNormalizeState().then(setNormalize);
+    const stop = window.tools.onNormalizeState(setNormalize);
+    return stop;
+  }, []);
   const addFolders = async () => {
     const paths = await window.tools.selectNormalizeFolders();
     setFolders((current) => [...new Set([...current, ...paths])]);
@@ -66,9 +53,7 @@ export default function NormalizeTool() {
   const start = async () => {
     if (target < -50 || target > -5)
       return setMessage('El objetivo debe estar entre -50 y -5 LUFS.');
-    setRunning(true);
     setMessage('');
-    setProgress(0);
     await window.tools.startNormalization({
       files: files.filter((file) => selected.has(file.path)),
       type,
@@ -95,11 +80,11 @@ export default function NormalizeTool() {
           </div>
         </div>
         <div className="normalize-controls">
-          <button disabled={running} onClick={addFolders}>
+          <button disabled={normalize.running} onClick={addFolders}>
             + Añadir carpetas
           </button>
           <button
-            disabled={running || !folders.length}
+            disabled={normalize.running || !folders.length}
             onClick={() => {
               setFolders([]);
               setFiles([]);
@@ -109,7 +94,7 @@ export default function NormalizeTool() {
             Limpiar
           </button>
           <select
-            disabled={running}
+            disabled={normalize.running}
             value={type}
             onChange={(event) => {
               setType(event.target.value as MediaType);
@@ -127,7 +112,7 @@ export default function NormalizeTool() {
               <div key={folder}>
                 <span title={folder}>{folder}</span>
                 <button
-                  disabled={running}
+                  disabled={normalize.running}
                   onClick={() => setFolders((current) => current.filter((item) => item !== folder))}
                 >
                   Quitar
@@ -153,7 +138,7 @@ export default function NormalizeTool() {
             min="-50"
             max="-5"
             value={target}
-            disabled={running}
+            disabled={normalize.running}
             onChange={(event) => setTarget(Number(event.target.value))}
           />
           <span>LUFS</span>
@@ -163,7 +148,7 @@ export default function NormalizeTool() {
             <button
               key={value}
               type="button"
-              disabled={running}
+              disabled={normalize.running}
               className={target === value ? 'active' : ''}
               onClick={() => setTarget(value)}
             >
@@ -172,8 +157,8 @@ export default function NormalizeTool() {
           ))}
         </div>
         <div className="scan-row">
-          <span>{message || 'Selecciona carpetas para comenzar.'}</span>
-          <button disabled={!folders.length || running} onClick={scan}>
+          <span>{message || normalize.message || 'Selecciona carpetas para comenzar.'}</span>
+          <button disabled={!folders.length || normalize.running} onClick={scan}>
             Explorar archivos
           </button>
         </div>
@@ -217,16 +202,20 @@ export default function NormalizeTool() {
         )}
         <div className="normalize-progress">
           <span>
-            <strong>{label}</strong>
-            <b>{progress}%</b>
+            <strong>{normalize.message || 'Sin procesos activos'}</strong>
+            <b>{normalize.fileProgress}%</b>
           </span>
           <i>
-            <b style={{ width: `${progress}%` }} />
+            <b style={{ width: `${normalize.fileProgress}%` }} />
           </i>
         </div>
         <div className="tool-action simple">
-          <span>Los originales se conservan con el resultado junto a ellos.</span>
-          {running ? (
+          <span>
+            Los originales se conservan. El resultado se guarda en{' '}
+            <strong>normalized_output-audio</strong> o <strong>normalized_output-video</strong>{' '}
+            dentro de cada carpeta.
+          </span>
+          {normalize.running ? (
             <button className="cancel-button" onClick={() => window.tools.cancelNormalization()}>
               Cancelar proceso
             </button>
