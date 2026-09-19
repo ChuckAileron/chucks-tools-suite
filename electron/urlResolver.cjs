@@ -64,7 +64,7 @@ async function validatePublicUrl(value) {
   return url;
 }
 
-function requestPage(url) {
+function requestPage(url, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const client = url.protocol === 'https:' ? https : http;
     const request = client.get(
@@ -91,8 +91,8 @@ function requestPage(url) {
         let size = 0;
         response.on('data', (chunk) => {
           size += chunk.length;
-          if (size > 1024 * 1024)
-            request.destroy(new Error('La respuesta supera el límite de 1 MB.'));
+          if (size > maxBytes)
+            request.destroy(new Error('La respuesta supera el límite de tamaño permitido.'));
           else chunks.push(chunk);
         });
         response.on('end', () =>
@@ -198,4 +198,4 @@ async function resolveUrl(input) {
   throw new Error('La URL superó el máximo de 12 redirecciones.');
 }
 
-module.exports = { resolveUrl, validatePublicUrl, isPrivateAddress };
+module.exports = { resolveUrl, validatePublicUrl, isPrivateAddress, requestPage };

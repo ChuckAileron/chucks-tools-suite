@@ -5,8 +5,9 @@ import VideoTool from './VideoTool';
 import NormalizeTool from './NormalizeTool';
 import UrlBypassTool from './UrlBypassTool';
 import DownloadsTool from './DownloadsTool';
+import CollectionTool from './CollectionTool';
 import type { DownloadsState, VideoState } from './types';
-type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads';
+type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads' | 'collection';
 const EMPTY_DOWNLOADS: DownloadsState = {
   settings: {
     defaultDirectory: '',
@@ -29,7 +30,7 @@ const EMPTY_VIDEO: VideoState = {
   logs: [],
 };
 export default function App() {
-  const [tool, setTool] = useState<Tool>('downloads');
+  const [tool, setTool] = useState<Tool>('collection');
   const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
   const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
   useEffect(() => {
@@ -62,6 +63,16 @@ export default function App() {
         </div>
         <nav>
           <p>HERRAMIENTAS</p>
+          <button
+            className={tool === 'collection' ? 'active' : ''}
+            onClick={() => setTool('collection')}
+          >
+            <i>CL</i>
+            <span>
+              <strong>Colección</strong>
+              <small>Catálogo local</small>
+            </span>
+          </button>
           <button
             className={tool === 'downloads' ? 'active' : ''}
             onClick={() => setTool('downloads')}
@@ -143,6 +154,8 @@ export default function App() {
           <VideoTool />
         ) : tool === 'normalize' ? (
           <NormalizeTool />
+        ) : tool === 'collection' ? (
+          <CollectionTool />
         ) : tool === 'urls' ? (
           <UrlBypassTool />
         ) : (
@@ -164,9 +177,12 @@ function SidebarProgress({
 }) {
   return (
     <span className={`sidebar-progress ${active ? 'running' : ''}`}>
-      <i>
-        <b style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
-      </i>
+      <span className="sidebar-progress-track">
+        <span
+          className="sidebar-progress-fill"
+          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+        />
+      </span>
       <small>{label}</small>
     </span>
   );

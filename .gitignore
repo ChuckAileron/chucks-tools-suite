@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 *.log
 run-chucks-tools.cmd
 wip_backend/

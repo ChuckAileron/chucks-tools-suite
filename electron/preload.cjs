@@ -19,6 +19,27 @@ contextBridge.exposeInMainWorld('tools', {
     ipcRenderer.invoke('downloads:retry-extraction', { id, password }),
   selectDownloadDirectory: () => ipcRenderer.invoke('downloads:select-directory'),
   showDownloadedFile: (filePath) => ipcRenderer.invoke('downloads:show-file', filePath),
+  getCollections: () => ipcRenderer.invoke('collections:list'),
+  createCollection: (data) => ipcRenderer.invoke('collections:create', data),
+  updateCollection: (id, patch) => ipcRenderer.invoke('collections:update', { id, patch }),
+  deleteCollection: (id) => ipcRenderer.invoke('collections:delete', id),
+  getCollectionColumnTypes: () => ipcRenderer.invoke('collections:column-types'),
+  getCollectionItems: (collectionId, q = '') =>
+    ipcRenderer.invoke('collection-items:list', { collectionId, q }),
+  createCollectionItem: (data) => ipcRenderer.invoke('collection-items:create', data),
+  updateCollectionItem: (id, patch) => ipcRenderer.invoke('collection-items:update', { id, patch }),
+  deleteCollectionItem: (id) => ipcRenderer.invoke('collection-items:delete', id),
+  exportCollection: (id) => ipcRenderer.invoke('collections:export', id),
+  importCollection: () => ipcRenderer.invoke('collections:import'),
+  getWishlist: (q = '') => ipcRenderer.invoke('wishlist:list', q),
+  createWishlistItem: (data) => ipcRenderer.invoke('wishlist:create', data),
+  updateWishlistItem: (id, patch) => ipcRenderer.invoke('wishlist:update', { id, patch }),
+  deleteWishlistItem: (id) => ipcRenderer.invoke('wishlist:delete', id),
+  addWishlistPrice: (wishlistId, data) =>
+    ipcRenderer.invoke('wishlist-prices:create', { wishlistId, data }),
+  deleteWishlistPrice: (id) => ipcRenderer.invoke('wishlist-prices:delete', id),
+  refreshWishlistPrice: (id) => ipcRenderer.invoke('wishlist-prices:refresh', id),
+  refreshWishlist: () => ipcRenderer.invoke('wishlist:refresh'),
   onDownloadsState: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('downloads:state', listener);
@@ -29,8 +50,9 @@ contextBridge.exposeInMainWorld('tools', {
     ipcRenderer.on('downloads:clipboard', listener);
     return () => ipcRenderer.removeListener('downloads:clipboard', listener);
   },
-  list: (directory) => ipcRenderer.invoke('rename:list', directory),
+  list: (folders) => ipcRenderer.invoke('rename:list', folders),
   rename: (data) => ipcRenderer.invoke('rename:execute', data),
+  selectRenameFolders: () => ipcRenderer.invoke('rename:select-folders'),
   selectVideoFolders: () => ipcRenderer.invoke('video:select-folders'),
   inspectVideoFolders: (data) => ipcRenderer.invoke('video:inspect', data),
   getVideoState: () => ipcRenderer.invoke('video:state'),

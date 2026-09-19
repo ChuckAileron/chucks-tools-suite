@@ -1,9 +1,13 @@
 {
   "name": "chucks-tools-suite",
-  "version": "1.5.3",
+  "version": "1.6.1",
   "private": true,
   "type": "module",
   "description": "Suite de herramientas locales para archivos",
+  "author": {
+    "name": "CHUCK",
+    "email": "chuck@tools.local"
+  },
   "packageManager": "npm@11.19.1",
   "engines": {
     "node": ">=26.9.0",
@@ -19,18 +23,23 @@
     "lint:fix": "eslint src vite.config.ts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm test && npm run lint && npm run format:check && npm run build"
+    "check": "npm test && npm run lint && npm run format:check && npm run build",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "pack": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "handbrake-js": "8.0.2",
+    "7zip-min": "latest",
     "cheerio": "latest",
-    "normalize-url": "latest",
+    "handbrake-js": "8.0.2",
     "node-downloader-helper": "2.1.11",
+    "normalize-url": "latest",
     "react": "latest",
     "react-dom": "latest",
     "tldts": "latest",
-    "7zip-min": "latest",
     "vite": "latest"
   },
   "devDependencies": {
@@ -39,6 +48,7 @@
     "@types/react-dom": "latest",
     "concurrently": "latest",
     "electron": "latest",
+    "electron-builder": "^26.15.3",
     "eslint": "latest",
     "eslint-plugin-react-hooks": "latest",
     "globals": "latest",
@@ -49,5 +59,44 @@
   },
   "allowScripts": {
     "handbrake-js@8.0.2": true
+  },
+  "build": {
+    "appId": "com.chuck.toolssuite",
+    "productName": "CHUCK's Tools Suite",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "asarUnpack": [
+      "**/node_modules/handbrake-js/**",
+      "**/node_modules/7zip-bin/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    }
   }
 }

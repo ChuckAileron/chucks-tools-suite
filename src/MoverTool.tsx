@@ -35,6 +35,8 @@ export default function MoverTool() {
     destination: string;
     moves: MoveRecord[];
   } | null>(null);
+  const canDeleteCreatedDestination =
+    returnToSource && !!createdDestination && same(createdDestination, destination);
   const choose = async (kind: 'source' | 'destination') => {
     const path = await window.tools.selectDirectory();
     if (!path) return;
@@ -92,8 +94,7 @@ export default function MoverTool() {
         files: files.filter((x) => selected.has(x.path)),
         deleteChildFolders: remove,
         returnToSource,
-        deleteCreatedDestination:
-          returnToSource && deleteCreatedDestination && createdDestination === destination,
+        deleteCreatedDestination: canDeleteCreatedDestination && deleteCreatedDestination,
       });
       setMessage(
         `${result.moved} archivos movidos${result.returned ? ` · ${result.returned} devueltos al origen` : ''}${result.deletedDestination ? ' · carpeta temporal eliminada' : ''}${result.errors.length ? ` · ${result.errors.length} errores` : ''}.`,
@@ -267,19 +268,18 @@ export default function MoverTool() {
               <small>Al final, devuelve el lote a la raíz de la carpeta fuente.</small>
             </span>
           </label>
-          {returnToSource && createdDestination === destination && (
-            <label>
-              <input
-                type="checkbox"
-                checked={deleteCreatedDestination}
-                onChange={(e) => setDeleteCreatedDestination(e.target.checked)}
-              />
-              <span>
-                <strong>Eliminar destino temporal creado</strong>
-                <small>Se elimina después de devolver el lote, solo si quedó vacío.</small>
-              </span>
-            </label>
-          )}
+          <label className={canDeleteCreatedDestination ? '' : 'disabled'}>
+            <input
+              type="checkbox"
+              checked={deleteCreatedDestination}
+              disabled={!canDeleteCreatedDestination}
+              onChange={(e) => setDeleteCreatedDestination(e.target.checked)}
+            />
+            <span>
+              <strong>Eliminar destino temporal creado</strong>
+              <small>Disponible al crear el destino dentro del origen y devolver el lote.</small>
+            </span>
+          </label>
         </div>
         <div className="mover-actions">
           {lastMove && (

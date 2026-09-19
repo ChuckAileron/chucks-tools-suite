@@ -19,6 +19,8 @@ const INITIAL: Ops = {
   prefix: '',
   suffix: '',
 };
+type Entry = { folder: string; name: string };
+const key = (entry: Entry) => `${entry.folder}\u0000${entry.name}`;
 function transform(file: string, o: Ops) {
   const i = file.lastIndexOf('.'),
     base = i > 0 ? file.slice(0, i) : file,
@@ -35,53 +37,69 @@ function transform(file: string, o: Ops) {
   return o.prefix + name + o.suffix + ext;
 }
 export default function RenameTool() {
-  const [directory, setDirectory] = useState('');
-  const [files, setFiles] = useState<string[]>([]);
+  const [directories, setDirectories] = useState<string[]>([]);
+  const [files, setFiles] = useState<Entry[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [ops, setOps] = useState<Ops>(INITIAL);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const renames = useMemo(
-    () => files.map((oldName) => ({ oldName, newName: transform(oldName, ops) })),
+    () => files.map((entry) => ({ ...entry, newName: transform(entry.name, ops) })),
     [files, ops],
   );
-  const changed = renames.filter((x) => selected.has(x.oldName) && x.oldName !== x.newName).length;
-  const choose = async () => {
-    const path = await window.tools.selectDirectory();
-    if (path) {
-      setDirectory(path);
+  const changed = renames.filter((x) => selected.has(key(x)) && x.name !== x.newName).length;
+  const multi = directories.length > 1;
+  const addFolders = async () => {
+    const paths = await window.tools.selectRenameFolders();
+    if (paths.length) {
+      setDirectories((current) => [...new Set([...current, ...paths])]);
       setFiles([]);
+      setSelected(new Set());
     }
+  };
+  const clear = () => {
+    setDirectories([]);
+    setFiles([]);
+    setSelected(new Set());
+  };
+  const removeFolder = (folder: string) => {
+    setDirectories((current) => current.filter((item) => item !== folder));
+    setFiles([]);
+    setSelected(new Set());
   };
   const load = async () => {
     setBusy(true);
-    const list = await window.tools.list(directory);
+    const list = await window.tools.list(directories);
     setFiles(list);
-    setSelected(new Set(list));
+    setSelected(new Set(list.map(key)));
     setBusy(false);
   };
   const execute = async () => {
     setBusy(true);
     let count = 0;
     for (const item of renames)
-      if (selected.has(item.oldName) && item.oldName !== item.newName) {
+      if (selected.has(key(item)) && item.name !== item.newName) {
         try {
-          await window.tools.rename({ directory, ...item });
+          await window.tools.rename({
+            folder: item.folder,
+            oldName: item.name,
+            newName: item.newName,
+          });
           count++;
         } catch (error) {
           console.error(error);
         }
       }
     setMessage(`${count} archivos renombrados.`);
-    const list = await window.tools.list(directory);
+    const list = await window.tools.list(directories);
     setFiles(list);
-    setSelected(new Set(list));
+    setSelected(new Set(list.map(key)));
     setBusy(false);
   };
   const update = (key: keyof Ops) => (value: string) =>
     setOps((current) => ({ ...current, [key]: value }));
   return (
-    <section className="tool">
+    <section className="tool rename-tool">
       <header>
         <span>RF</span>
         <div>
@@ -94,20 +112,34 @@ export default function RenameTool() {
         <div className="step">
           <span>01</span>
           <div>
-            <h2>Selecciona una carpeta</h2>
-            <p>Se mostrarán los archivos del nivel actual.</p>
+            <h2>Selecciona las carpetas</h2>
+            <p>Puedes renombrar archivos de varias carpetas en una ejecución.</p>
           </div>
         </div>
-        <div className="path single">
-          <i>⌑</i>
-          <span>
-            <strong>Carpeta de trabajo</strong>
-            <small>{directory || 'Ninguna carpeta seleccionada'}</small>
-          </span>
-          <button onClick={choose}>Elegir</button>
-          <button disabled={!directory || busy} onClick={load}>
+        <div className="rename-toolbar">
+          <button disabled={busy} onClick={addFolders}>
+            + Añadir carpetas
+          </button>
+          <button disabled={!directories.length || busy} onClick={clear}>
+            Limpiar
+          </button>
+          <button className="primary" disabled={!directories.length || busy} onClick={load}>
             Listar archivos
           </button>
+        </div>
+        <div className="rename-folders">
+          {directories.length ? (
+            directories.map((folder) => (
+              <div key={folder}>
+                <span title={folder}>{folder}</span>
+                <button disabled={busy} onClick={() => removeFolder(folder)}>
+                  Quitar
+                </button>
+              </div>
+            ))
+          ) : (
+            <p>No hay carpetas seleccionadas.</p>
+          )}
         </div>
         <div className="divider" />
         <div className="step">
@@ -155,7 +187,7 @@ export default function RenameTool() {
                 type="checkbox"
                 checked={files.length > 0 && selected.size === files.length}
                 onChange={() =>
-                  setSelected(selected.size === files.length ? new Set() : new Set(files))
+                  setSelected(selected.size === files.length ? new Set() : new Set(files.map(key)))
                 }
               />{' '}
               {files.length} archivos
@@ -164,20 +196,21 @@ export default function RenameTool() {
           </div>
           <section>
             {renames.map((x) => (
-              <label key={x.oldName}>
+              <label key={key(x)}>
                 <input
                   type="checkbox"
-                  checked={selected.has(x.oldName)}
+                  checked={selected.has(key(x))}
                   onChange={() => {
                     const next = new Set(selected);
-                    if (next.has(x.oldName)) next.delete(x.oldName);
-                    else next.add(x.oldName);
+                    if (next.has(key(x))) next.delete(key(x));
+                    else next.add(key(x));
                     setSelected(next);
                   }}
                 />
                 <span>
-                  <strong>{x.oldName}</strong>
-                  <small>{x.oldName === x.newName ? 'Sin cambios' : `→ ${x.newName}`}</small>
+                  <strong>{x.name}</strong>
+                  <small>{x.name === x.newName ? 'Sin cambios' : `→ ${x.newName}`}</small>
+                  {multi && <small className="g">{x.folder}</small>}
                 </span>
               </label>
             ))}

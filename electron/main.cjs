@@ -6,7 +6,11 @@ const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
 const { scanMedia, normalizeMedia } = require('./audioNormalizer.cjs');
 const { resolveUrl, validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
+const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
+const { scrapePrice } = require('./priceScraper.cjs');
+const { listFiles, renameFile } = require('./renameManager.cjs');
 let downloadManager;
+let collectionManager;
 let lastClipboard = '';
 const createdDestinationFolders = new Set();
 let videoCancelled = false;
@@ -286,6 +290,9 @@ function createWindow() {
     : win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 app.whenReady().then(() => {
+  collectionManager = new CollectionManager(
+    path.join(app.getPath('userData'), 'collections.sqlite'),
+  );
   downloadManager = new DownloadManager(
     path.join(app.getPath('userData'), 'downloads.json'),
     (state) => {
@@ -365,18 +372,90 @@ app.whenReady().then(() => {
     if (filePath) shell.showItemInFolder(path.resolve(filePath));
     return true;
   });
-  ipcMain.handle('rename:list', async (_e, directory) => {
-    if (!directory) return [];
-    return (await fs.readdir(directory, { withFileTypes: true }))
-      .filter((x) => x.isFile())
-      .map((x) => x.name);
-  });
-  ipcMain.handle('rename:execute', async (_e, { directory, oldName, newName }) => {
-    if (!directory || !oldName || !newName || path.basename(newName) !== newName)
-      throw new Error('Nombre de archivo inválido.');
-    await fs.rename(path.join(directory, oldName), path.join(directory, newName));
+  ipcMain.handle('collections:list', () => collectionManager.listCollections());
+  ipcMain.handle('collections:create', (_event, data) => collectionManager.createCollection(data));
+  ipcMain.handle('collections:update', (_event, { id, patch }) =>
+    collectionManager.updateCollection(id, patch),
+  );
+  ipcMain.handle('collections:delete', (_event, id) => collectionManager.deleteCollection(id));
+  ipcMain.handle('collections:column-types', () => COLUMN_TYPES);
+  ipcMain.handle('collection-items:list', (_event, { collectionId, q }) =>
+    collectionManager.listItems(collectionId, q),
+  );
+  ipcMain.handle('collection-items:create', (_event, data) => collectionManager.addItem(data));
+  ipcMain.handle('collection-items:update', (_event, { id, patch }) =>
+    collectionManager.updateItem(id, patch),
+  );
+  ipcMain.handle('collection-items:delete', (_event, id) => collectionManager.deleteItem(id));
+  ipcMain.handle('collections:export', async (_event, id) => {
+    const data = collectionManager.exportCollection(id);
+    const result = await dialog.showSaveDialog({
+      defaultPath: `${data.collection.name.replace(/[<>:"/\\|?*]/g, '_')}.json`,
+      filters: [{ name: 'Colección CHUCK', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    await fs.writeFile(result.filePath, JSON.stringify(data, null, 2), 'utf8');
     return true;
   });
+  ipcMain.handle('collections:import', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Colección CHUCK', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const payload = JSON.parse(await fs.readFile(result.filePaths[0], 'utf8'));
+    return collectionManager.importCollection(payload, 'rename');
+  });
+  ipcMain.handle('wishlist:list', (_event, q) => collectionManager.listWishlist(q));
+  ipcMain.handle('wishlist:create', (_event, data) => collectionManager.createWishlistItem(data));
+  ipcMain.handle('wishlist:update', (_event, { id, patch }) =>
+    collectionManager.updateWishlistItem(id, patch),
+  );
+  ipcMain.handle('wishlist:delete', (_event, id) => collectionManager.deleteWishlistItem(id));
+  ipcMain.handle('wishlist-prices:create', async (_event, { wishlistId, data }) => {
+    const source = collectionManager.addWishlistPrice(wishlistId, data);
+    try {
+      return collectionManager.updateWishlistPriceResult(source.id, await scrapePrice(source.url));
+    } catch (error) {
+      return collectionManager.updateWishlistPriceResult(source.id, { error: error.message });
+    }
+  });
+  ipcMain.handle('wishlist-prices:delete', (_event, id) =>
+    collectionManager.deleteWishlistPrice(id),
+  );
+  ipcMain.handle('wishlist-prices:refresh', async (_event, id) => {
+    const source = collectionManager.getWishlistPrice(id);
+    if (!source) throw new Error('La página de tienda no existe.');
+    try {
+      return collectionManager.updateWishlistPriceResult(id, await scrapePrice(source.url));
+    } catch (error) {
+      collectionManager.updateWishlistPriceResult(id, { error: error.message });
+      throw error;
+    }
+  });
+  ipcMain.handle('wishlist:refresh', async () => {
+    const items = collectionManager.listWishlist();
+    let updated = 0;
+    let failed = 0;
+    for (const source of items.flatMap((item) => item.prices)) {
+      try {
+        collectionManager.updateWishlistPriceResult(source.id, await scrapePrice(source.url));
+        updated += 1;
+      } catch (error) {
+        collectionManager.updateWishlistPriceResult(source.id, { error: error.message });
+        failed += 1;
+      }
+    }
+    return { updated, failed, items: collectionManager.listWishlist() };
+  });
+  ipcMain.handle('rename:select-folders', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+  ipcMain.handle('rename:list', (_e, folders) => listFiles(folders || []));
+  ipcMain.handle('rename:execute', (_e, data) => renameFile(data));
   ipcMain.handle('video:select-folders', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'multiSelections'],
@@ -488,12 +567,13 @@ app.whenReady().then(() => {
     if (index >= 0) {
       const [removed] = videoQueue.splice(index, 1);
       videoTotalFiles -= removed.total;
-      emitVideoProgress({
-        type: 'queue-progress',
-        current: videoCompletedFiles,
-        total: videoTotalFiles,
-      });
     }
+    videoState.folders = videoState.folders.filter((item) => item.folder !== absolute);
+    emitVideoProgress({
+      type: 'queue-progress',
+      current: videoCompletedFiles,
+      total: videoTotalFiles,
+    });
     return true;
   });
   ipcMain.handle('video:append-folders', async (_event, { folders, codec }) => {
@@ -587,3 +667,9 @@ app.whenReady().then(() => {
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });
 app.on('window-all-closed', () => process.platform !== 'darwin' && app.quit());
+app.on('before-quit', () => {
+  if (collectionManager) {
+    collectionManager.close();
+    collectionManager = null;
+  }
+});

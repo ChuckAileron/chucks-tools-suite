@@ -91,6 +91,20 @@ Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio c
 
 La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya terminados en `_normalized` se excluyen del siguiente escaneo para evitar procesarlos repetidamente.
 
+### Colección
+
+Permite crear catálogos locales con fichas personalizadas y persistencia SQLite.
+
+- Múltiples colecciones con nombre, descripción y tipo.
+- Columnas configurables de texto, número, booleano, fecha, URL o etiquetas.
+- Campos obligatorios y validación de datos antes de guardar.
+- Vista en tarjetas con imágenes remotas por URL HTTP o HTTPS.
+- Búsqueda, edición y eliminación de ítems.
+- Importación y exportación de cada colección en formato JSON.
+- Base de datos guardada en el directorio local de datos de Electron.
+- Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
+- Consulta de precios mediante scraping local de JSON-LD, metadatos de producto y HTML.
+
 ### Bypass de URLs
 
 Resuelve el destino de URLs cortas y páginas intermedias publicitarias sin abrirlas primero en el navegador.
@@ -189,6 +203,21 @@ Después de compilar, inicia Electron usando los archivos de `dist/`:
 npm start
 ```
 
+### Empaquetado
+
+Genera los ejecutables e instaladores con `electron-builder` dentro de `release/`:
+
+```bash
+npm run dist        # del sistema operativo actual
+npm run dist:win    # Windows (instalador NSIS + portable)
+npm run dist:mac    # macOS (DMG + ZIP)
+npm run dist:linux  # Linux (AppImage + deb)
+```
+
+También está disponible `npm run pack`, que crea la aplicación desempaquetada en `release/<plataforma>-unpacked/` (útil para comprobaciones rápidas).
+
+Cada plataforma debe empaquetarse desde su propio sistema operativo (o mediante CI multi-plataforma): electron-builder incluye solo los binarios nativos de la plataforma de origen. Los binarios de HandBrake y 7-Zip se extraen fuera del `app.asar` para poder ejecutarse en tiempo de ejecución.
+
 ## Calidad de código
 
 Ejecutar ESLint:
@@ -229,6 +258,7 @@ CHUCK's Tools Suite/
 │   ├── main.cjs             # Ventana, IPC y coordinación de procesos
 │   ├── preload.cjs          # API segura expuesta al renderer
 │   ├── audioNormalizer.cjs  # Normalización mediante FFmpeg
+│   ├── collectionManager.cjs # Colecciones y persistencia SQLite
 │   ├── videoConversion.cjs  # Conversión FFmpeg/HandBrake
 │   ├── urlResolver.cjs      # Resolución y validación segura de URLs
 │   └── downloadManager.cjs  # Cola persistente y extracción
@@ -238,6 +268,7 @@ CHUCK's Tools Suite/
 │   ├── RenameTool.tsx    # Herramienta para renombrar
 │   ├── VideoTool.tsx     # Conversión de videos a SD
 │   ├── NormalizeTool.tsx # Normalización de volumen
+│   ├── CollectionTool.tsx # Catálogos y fichas personalizadas
 │   ├── UrlBypassTool.tsx # Resolución de URLs cortas e intermedias
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
 │   ├── main.tsx          # Entrada de React

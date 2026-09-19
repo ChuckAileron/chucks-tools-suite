@@ -3,6 +3,12 @@ import type { NormalizeFile } from './types';
 type MediaType = 'audio' | 'video';
 const formatSize = (bytes: number) =>
   bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+const LUFS_PRESETS = [
+  { value: -14, label: '-14 Streaming' },
+  { value: -16, label: '-16 General' },
+  { value: -18, label: '-18 Conservador' },
+  { value: -23, label: '-23 Broadcast' },
+];
 export default function NormalizeTool() {
   const [folders, setFolders] = useState<string[]>([]);
   const [type, setType] = useState<MediaType>('audio');
@@ -152,6 +158,19 @@ export default function NormalizeTool() {
           />
           <span>LUFS</span>
         </label>
+        <div className="lufs-presets">
+          {LUFS_PRESETS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              disabled={running}
+              className={target === value ? 'active' : ''}
+              onClick={() => setTarget(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="scan-row">
           <span>{message || 'Selecciona carpetas para comenzar.'}</span>
           <button disabled={!folders.length || running} onClick={scan}>

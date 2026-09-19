@@ -106,6 +106,51 @@ export type NormalizeProgress = {
   completed?: number;
   percent?: number;
 };
+export type CollectionColumnType = 'string' | 'number' | 'boolean' | 'date' | 'url' | 'tags';
+export type CollectionColumn = {
+  name: string;
+  label: string;
+  type: CollectionColumnType;
+  required: boolean;
+};
+export type Collection = {
+  id: number;
+  name: string;
+  description: string;
+  type: string;
+  columns: CollectionColumn[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type CollectionItem = {
+  id: number;
+  collectionId: number;
+  name: string;
+  values: Record<string, unknown>;
+  imageUrl: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type WishlistPrice = {
+  id: number;
+  wishlistId: number;
+  store: string;
+  url: string;
+  price: number | null;
+  currency: string | null;
+  checkedAt: string | null;
+  error: string | null;
+};
+export type WishlistItem = {
+  id: number;
+  name: string;
+  manufacturer: string;
+  year: number | null;
+  prices: WishlistPrice[];
+  createdAt: string;
+  updatedAt: string;
+};
 declare global {
   interface Window {
     tools: {
@@ -153,10 +198,52 @@ declare global {
       retryExtraction(id: string, password: string): Promise<boolean>;
       selectDownloadDirectory(): Promise<string | null>;
       showDownloadedFile(filePath: string): Promise<boolean>;
+      getCollections(): Promise<Collection[]>;
+      createCollection(data: {
+        name: string;
+        description: string;
+        type: string;
+        columns: CollectionColumn[];
+      }): Promise<Collection>;
+      updateCollection(id: number, patch: Partial<Collection>): Promise<Collection>;
+      deleteCollection(id: number): Promise<boolean>;
+      getCollectionColumnTypes(): Promise<CollectionColumnType[]>;
+      getCollectionItems(collectionId: number, q?: string): Promise<CollectionItem[]>;
+      createCollectionItem(data: {
+        collectionId: number;
+        name: string;
+        values: Record<string, unknown>;
+        imageUrl: string | null;
+        tags: string[];
+      }): Promise<CollectionItem>;
+      updateCollectionItem(id: number, patch: Partial<CollectionItem>): Promise<CollectionItem>;
+      deleteCollectionItem(id: number): Promise<boolean>;
+      exportCollection(id: number): Promise<boolean>;
+      importCollection(): Promise<Collection | null>;
+      getWishlist(q?: string): Promise<WishlistItem[]>;
+      createWishlistItem(data: {
+        name: string;
+        manufacturer: string;
+        year: number | null;
+      }): Promise<WishlistItem>;
+      updateWishlistItem(id: number, patch: Partial<WishlistItem>): Promise<WishlistItem>;
+      deleteWishlistItem(id: number): Promise<boolean>;
+      addWishlistPrice(
+        wishlistId: number,
+        data: { store: string; url: string },
+      ): Promise<WishlistPrice>;
+      deleteWishlistPrice(id: number): Promise<boolean>;
+      refreshWishlistPrice(id: number): Promise<WishlistPrice>;
+      refreshWishlist(): Promise<{
+        updated: number;
+        failed: number;
+        items: WishlistItem[];
+      }>;
       onDownloadsState(callback: (state: DownloadsState) => void): () => void;
       onClipboardLinks(callback: (text: string) => void): () => void;
-      list(directory: string): Promise<string[]>;
-      rename(data: { directory: string; oldName: string; newName: string }): Promise<boolean>;
+      list(directories: string[]): Promise<{ folder: string; name: string }[]>;
+      rename(data: { folder: string; oldName: string; newName: string }): Promise<boolean>;
+      selectRenameFolders(): Promise<string[]>;
       selectVideoFolders(): Promise<string[]>;
       inspectVideoFolders(data: {
         folders: string[];
