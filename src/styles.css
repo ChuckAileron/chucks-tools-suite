@@ -1365,36 +1365,107 @@ nav button i {
   border-radius: 11px;
 }
 .download-group > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   padding: 9px 12px;
   background: #f6f8f6;
 }
-.download-group > header div {
+.download-group-info {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
-.download-group > header strong {
+.download-group-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #d7ddd9;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--brand-ink);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.download-group.collapsed .download-collection {
+  display: none;
+}
+.download-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.download-group-title em {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #2f8f5b;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+.download-group-info strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #44534c;
   font-size: 11px;
 }
-.download-group > header small {
+.download-group-info small {
   flex: none;
   color: #8b928e;
   font-size: 10px;
+}
+.download-group.complete {
+  border-color: #a9d4bf;
+}
+.download-group.complete > header {
+  background: #eef8f3;
+}
+.download-group.complete .download-group-title strong {
+  color: #1f5b39;
+}
+.download-group-meter {
+  grid-column: 1 / -1;
+}
+.download-group-meter > span {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e7eae6;
+}
+.download-group-meter > span i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-dark), var(--brand));
 }
 .download-collection + .download-collection {
   border-top: 1px solid #dfe3de;
 }
 .collection-title {
   display: flex;
+  width: 100%;
   justify-content: space-between;
   gap: 10px;
   padding: 7px 12px;
+  border: 0;
   background: var(--brand-soft);
   color: var(--brand-ink);
+  text-align: left;
+  cursor: pointer;
 }
 .collection-title strong {
   overflow: hidden;
@@ -1406,6 +1477,9 @@ nav button i {
   flex: none;
   font-size: 9px;
   color: #56736e;
+}
+.download-collection.collapsed .download-row {
+  display: none;
 }
 .download-collection .download-row:first-of-type {
   border-top: 1px solid #dce9e6;

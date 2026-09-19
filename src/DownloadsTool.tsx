@@ -43,11 +43,26 @@ const formatSize = (bytes: number) =>
       : bytes < 1073741824
         ? `${(bytes / 1048576).toFixed(1)} MB`
         : `${(bytes / 1073741824).toFixed(2)} GB`;
+const progressOf = (tasks: DownloadTask[]) =>
+  tasks.length
+    ? Math.round(
+        tasks.reduce(
+          (total, task) => total + (task.status === 'completed' ? 100 : task.progress),
+          0,
+        ) / tasks.length,
+      )
+    : 0;
 
 export default function DownloadsTool() {
   const [tab, setTab] = useState<Tab>('downloads');
   const [state, setState] = useState<DownloadsState>(EMPTY);
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((current) =>
+      current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
+    );
+  const isCollapsed = (key: string) => collapsed.includes(key);
   const [text, setText] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [message, setMessage] = useState('');
@@ -150,7 +165,11 @@ export default function DownloadsTool() {
       </div>
       <div className="workspace download-workspace">
         {tab === 'downloads' ? (
-          <DownloadsTab tasks={state.tasks} />
+          <DownloadsTab
+            tasks={state.tasks}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+          />
         ) : tab === 'collector' ? (
           <CollectorTab
             candidates={candidates}
@@ -175,7 +194,15 @@ export default function DownloadsTool() {
   );
 }
 
-function DownloadsTab({ tasks }: { tasks: DownloadTask[] }) {
+function DownloadsTab({
+  tasks,
+  isCollapsed,
+  toggleCollapsed,
+}: {
+  tasks: DownloadTask[];
+  isCollapsed: (key: string) => boolean;
+  toggleCollapsed: (key: string) => void;
+}) {
   const groups = Map.groupBy(tasks, (task) => task.destination);
   return (
     <>
@@ -192,29 +219,73 @@ function DownloadsTab({ tasks }: { tasks: DownloadTask[] }) {
         </button>
       </div>
       {tasks.length ? (
-        [...groups].map(([directory, items]) => (
-          <section className="download-group" key={directory}>
-            <header>
-              <div>
-                <strong>{directory}</strong>
-                <small>{items.length} archivos</small>
-              </div>
-            </header>
-            {[...Map.groupBy(items, (task) => task.collection || 'Sin colección')].map(
-              ([collection, collectionTasks]) => (
-                <div className="download-collection" key={collection}>
-                  <div className="collection-title">
-                    <strong>{collection}</strong>
-                    <small>{collectionTasks.length} enlaces</small>
-                  </div>
-                  {collectionTasks.map((task) => (
-                    <DownloadRow task={task} key={task.id} />
-                  ))}
+        [...groups].map(([directory, items]) => {
+          const groupKey = `dir:${directory}`;
+          const groupProgress = progressOf(items);
+          const groupComplete =
+            items.length > 0 && items.every((task) => task.status === 'completed');
+          return (
+            <section
+              className={`download-group ${isCollapsed(groupKey) ? 'collapsed' : ''}${groupComplete ? ' complete' : ''}`}
+              key={directory}
+            >
+              <header>
+                <button
+                  className="download-group-toggle"
+                  type="button"
+                  onClick={() => toggleCollapsed(groupKey)}
+                  title={`${isCollapsed(groupKey) ? 'Expandir grupo' : 'Colapsar grupo'} · ${groupProgress}%`}
+                  aria-label={`${isCollapsed(groupKey) ? 'Expandir' : 'Colapsar'} ${directory}`}
+                >
+                  {isCollapsed(groupKey) ? '▸' : '▾'}
+                </button>
+                <div className="download-group-info">
+                  <span className="download-group-title">
+                    <strong>{directory}</strong>
+                    {groupComplete && <em title="Grupo completado">✓</em>}
+                  </span>
+                  <small>
+                    {items.length} archivos · {groupProgress}%
+                  </small>
                 </div>
-              ),
-            )}
-          </section>
-        ))
+                <div className="download-group-meter">
+                  <span>
+                    <i style={{ width: `${groupProgress}%` }} />
+                  </span>
+                </div>
+              </header>
+              {!isCollapsed(groupKey) &&
+                [...Map.groupBy(items, (task) => task.collection || 'Sin colección')].map(
+                  ([collection, collectionTasks]) => {
+                    const collectionKey = `col:${directory}::${collection}`;
+                    const collectionProgress = progressOf(collectionTasks);
+                    return (
+                      <div
+                        className={`download-collection ${isCollapsed(collectionKey) ? 'collapsed' : ''}`}
+                        key={collection}
+                      >
+                        <button
+                          className="collection-title"
+                          type="button"
+                          onClick={() => toggleCollapsed(collectionKey)}
+                          title={`${isCollapsed(collectionKey) ? 'Expandir colección' : 'Colapsar colección'} · ${collectionProgress}%`}
+                          aria-label={`${isCollapsed(collectionKey) ? 'Expandir' : 'Colapsar'} ${collection}`}
+                        >
+                          <strong>{collection}</strong>
+                          <small>
+                            {isCollapsed(collectionKey) ? '▸' : '▾'} {collectionTasks.length}{' '}
+                            enlaces · {collectionProgress}%
+                          </small>
+                        </button>
+                        {!isCollapsed(collectionKey) &&
+                          collectionTasks.map((task) => <DownloadRow task={task} key={task.id} />)}
+                      </div>
+                    );
+                  },
+                )}
+            </section>
+          );
+        })
       ) : (
         <div className="downloads-empty">
           <b>↓</b>
