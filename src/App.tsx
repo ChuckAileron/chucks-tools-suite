@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import MoverTool from './MoverTool';
 import RenameTool from './RenameTool';
 import VideoTool from './VideoTool';
@@ -6,7 +6,12 @@ import NormalizeTool from './NormalizeTool';
 import UrlBypassTool from './UrlBypassTool';
 import DownloadsTool from './DownloadsTool';
 import CollectionTool from './CollectionTool';
-import type { DownloadsState, VideoState } from './types';
+import type {
+  DownloadCandidate,
+  DownloadPriority,
+  DownloadsState,
+  VideoState,
+} from './types';
 type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads' | 'collection';
 const EMPTY_DOWNLOADS: DownloadsState = {
   settings: {
@@ -33,14 +38,42 @@ export default function App() {
   const [tool, setTool] = useState<Tool>('collection');
   const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
   const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
+  const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
+  const [downloadNotice, setDownloadNotice] = useState(0);
+  const mergeCandidates = (found: DownloadCandidate[]) =>
+    setCandidates((current) => {
+      const existing = new Set(current.map((item) => item.originalUrl));
+      return [
+        ...current,
+        ...found
+          .filter((item) => !existing.has(item.originalUrl))
+          .map((item) => ({
+            ...item,
+            destination: downloads.settings.defaultDirectory,
+            priority: 'medium' as DownloadPriority,
+            extract: true,
+          })),
+      ];
+    });
+  const captureClipboard = useEffectEvent(async (value: string) => {
+    try {
+      const found = await window.tools.analyzeDownloads(value);
+      mergeCandidates(found);
+      if (found.length && tool !== 'downloads') setDownloadNotice((n) => n + found.length);
+    } catch {
+      // sin enlaces detectables
+    }
+  });
   useEffect(() => {
     window.tools.getDownloads().then(setDownloads);
     window.tools.getVideoState().then(setVideo);
     const stopDownloads = window.tools.onDownloadsState(setDownloads);
     const stopVideo = window.tools.onVideoState(setVideo);
+    const stopClipboard = window.tools.onClipboardLinks(captureClipboard);
     return () => {
       stopDownloads();
       stopVideo();
+      stopClipboard();
     };
   }, []);
   const downloadProgress = downloads.tasks.length
@@ -75,7 +108,10 @@ export default function App() {
           </button>
           <button
             className={tool === 'downloads' ? 'active' : ''}
-            onClick={() => setTool('downloads')}
+            onClick={() => {
+              setTool('downloads');
+              setDownloadNotice(0);
+            }}
           >
             <i>↓</i>
             <span>
@@ -89,6 +125,11 @@ export default function App() {
                 )}
               />
             </span>
+            {downloadNotice > 0 && (
+              <em className="nav-notice" title="Nuevos enlaces capturados">
+                {downloadNotice}
+              </em>
+            )}
             <em className="wip-badge">WIP</em>
           </button>
           <button className={tool === 'mover' ? 'active' : ''} onClick={() => setTool('mover')}>
@@ -159,7 +200,7 @@ export default function App() {
         ) : tool === 'urls' ? (
           <UrlBypassTool />
         ) : (
-          <DownloadsTool />
+          <DownloadsTool candidates={candidates} setCandidates={setCandidates} />
         )}
       </main>
     </div>

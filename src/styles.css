@@ -126,6 +126,25 @@ nav button .wip-badge {
   font-weight: 800;
   letter-spacing: 0.08em;
 }
+nav button .nav-notice {
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #e8754a;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  animation: nav-notice-pulse 1.6s ease-in-out infinite;
+}
+@keyframes nav-notice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 117, 74, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(232, 117, 74, 0);
+  }
+}
 nav button .sidebar-progress {
   width: 100%;
   margin-top: 4px;

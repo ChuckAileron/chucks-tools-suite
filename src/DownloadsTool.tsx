@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import type {
   DownloadCandidate,
   DownloadPriority,
@@ -53,10 +54,15 @@ const progressOf = (tasks: DownloadTask[]) =>
       )
     : 0;
 
-export default function DownloadsTool() {
-  const [tab, setTab] = useState<Tab>('downloads');
+export default function DownloadsTool({
+  candidates,
+  setCandidates,
+}: {
+  candidates: DownloadCandidate[];
+  setCandidates: Dispatch<SetStateAction<DownloadCandidate[]>>;
+}) {
+  const [tab, setTab] = useState<Tab>(candidates.length ? 'collector' : 'downloads');
   const [state, setState] = useState<DownloadsState>(EMPTY);
-  const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const toggleCollapsed = (key: string) =>
     setCollapsed((current) =>
@@ -82,19 +88,15 @@ export default function DownloadsTool() {
           })),
       ];
     });
-  const captureClipboard = useEffectEvent(async (value: string) => {
-    const found = await window.tools.analyzeDownloads(value);
-    mergeCandidates(found);
-    if (found.length) setTab('collector');
-  });
+  const previousCandidateCount = useRef(candidates.length);
+  useEffect(() => {
+    if (candidates.length > previousCandidateCount.current) setTab('collector');
+    previousCandidateCount.current = candidates.length;
+  }, [candidates.length]);
   useEffect(() => {
     window.tools.getDownloads().then(setState);
     const stopState = window.tools.onDownloadsState(setState);
-    const stopClipboard = window.tools.onClipboardLinks(captureClipboard);
-    return () => {
-      stopState();
-      stopClipboard();
-    };
+    return () => stopState();
   }, []);
 
   const analyze = async () => {

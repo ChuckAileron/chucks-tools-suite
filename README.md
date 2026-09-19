@@ -152,6 +152,7 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Extracción automática de ZIP, 7z, RAR, TAR, GZ, BZ2 y XZ.
 - Contraseña previa por enlace y reintento cuando un comprimido la requiera.
 - Detección automática de enlaces copiados mediante `clipboard-event` (sin sondeo): al copiar cualquier texto que contenga la URL de un servidor compatible o de una descarga directa (con o sin el prefijo `http://`), el contenido se analiza y la lista completa se añade a la sección **Identificador**, con estado "En línea" o "No encontrado". Copiar una URL no inicia una descarga automáticamente.
+- Captura global desde cualquier sección de la suite: al detectar enlaces estando fuera de Descargas, el botón **Descargas** del menú lateral muestra un indicador con la cantidad de nuevos enlaces capturados; al abrir la sección se accede directamente al **Identificador** y el indicador se reinicia.
 
 Las descargas utilizan `node-downloader-helper`. La extracción usa la versión completa de 7-Zip (`vendor/7zip/`) con binarios desempaquetados. La detección de portapapeles usa el binario nativo de `clipboard-event`. Las tareas y configuraciones se guardan en el directorio local de datos de Electron.
 
