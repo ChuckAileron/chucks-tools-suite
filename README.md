@@ -38,17 +38,20 @@ La opción para eliminar el destino temporal solo aparece cuando la aplicación 
 
 ### Renombrar archivos
 
-Permite modificar los nombres de los archivos del nivel principal de una carpeta.
+Permite modificar los nombres de los archivos de una o varias carpetas en una misma ejecución.
 
 Características:
 
+- Selección de varias carpetas (o una sola) con "Añadir carpetas", limpieza y eliminación individual.
+- Vista previa del resultado antes de aplicar cambios, mostrando la carpeta de origen cuando hay varias.
 - Búsqueda y reemplazo de texto.
 - Reemplazo desde el inicio hasta incluir un texto determinado.
 - Reemplazo desde un texto determinado, incluyéndolo, hasta el final.
 - Adición de prefijos y sufijos.
-- Vista previa del resultado antes de aplicar cambios.
 - Selección individual o global de archivos.
 - Conservación de la extensión original.
+
+Cada archivo se renombra dentro de su propia carpeta. La lógica está aislada en `electron/renameManager.cjs`, que valida que los nombres no contengan rutas para impedir salidas fuera de la carpeta de origen.
 
 ### Video a SD
 
@@ -259,6 +262,8 @@ CHUCK's Tools Suite/
 │   ├── preload.cjs          # API segura expuesta al renderer
 │   ├── audioNormalizer.cjs  # Normalización mediante FFmpeg
 │   ├── collectionManager.cjs # Colecciones y persistencia SQLite
+│   ├── priceScraper.cjs     # Scraping de precios para la wishlist
+│   ├── renameManager.cjs    # Listado y renombrado de archivos
 │   ├── videoConversion.cjs  # Conversión FFmpeg/HandBrake
 │   ├── urlResolver.cjs      # Resolución y validación segura de URLs
 │   └── downloadManager.cjs  # Cola persistente y extracción
@@ -269,13 +274,14 @@ CHUCK's Tools Suite/
 │   ├── VideoTool.tsx     # Conversión de videos a SD
 │   ├── NormalizeTool.tsx # Normalización de volumen
 │   ├── CollectionTool.tsx # Catálogos y fichas personalizadas
+│   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── UrlBypassTool.tsx # Resolución de URLs cortas e intermedias
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, hosts y nombres
+├── test/                    # Pruebas de URLs, colecciones, scraping y renombrado
 ├── vite.config.ts
 └── package.json
 ```
