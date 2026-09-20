@@ -43,6 +43,12 @@ export default function VideoTool() {
     return window.tools.onVideoState(hydrate);
   }, []);
 
+  function setNormalizeOptions(data: { normalizeAudio?: boolean; normalizeTarget?: number }) {
+    if (typeof data.normalizeAudio === 'boolean') setNormalizeAudio(data.normalizeAudio);
+    if (typeof data.normalizeTarget === 'number') setNormalizeTarget(data.normalizeTarget);
+    window.tools.setVideoNormalize(data);
+  }
+
   function addLog(text: string, tone?: string) {
     setLogs((current) => [...current.slice(-99), { text, tone }]);
   }
@@ -234,7 +240,7 @@ export default function VideoTool() {
               type="checkbox"
               disabled={running}
               checked={normalizeAudio}
-              onChange={(event) => setNormalizeAudio(event.target.checked)}
+              onChange={(event) => setNormalizeOptions({ normalizeAudio: event.target.checked })}
             />
             <span>Normalizar audio</span>
             <small>Loudnorm en la misma conversión</small>
@@ -247,7 +253,7 @@ export default function VideoTool() {
                   type="button"
                   disabled={running}
                   className={normalizeTarget === value ? 'active' : ''}
-                  onClick={() => setNormalizeTarget(value)}
+                  onClick={() => setNormalizeOptions({ normalizeTarget: value })}
                 >
                   {label}
                 </button>

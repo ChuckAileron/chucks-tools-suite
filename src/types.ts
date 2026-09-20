@@ -118,6 +118,7 @@ export type NormalizeState = {
   fileProgress: number;
   activeFile: string;
   message: string;
+  targetDb?: number;
 };
 export type CollectionColumnType = 'string' | 'number' | 'boolean' | 'date' | 'url' | 'tags';
 export type CollectionColumn = {
@@ -274,6 +275,9 @@ declare global {
       skipVideoFolder(folder: string): Promise<boolean>;
       appendVideoFolders(data: { folders: string[]; codec: 'h264' | 'h265' }): Promise<boolean>;
       clearVideoState(): Promise<boolean>;
+      setVideoNormalize(
+        data: Partial<{ normalizeAudio: boolean; normalizeTarget: number }>,
+      ): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
       onVideoState(callback: (state: VideoState) => void): () => void;
       selectNormalizeFolders(): Promise<string[]>;
@@ -286,6 +290,7 @@ declare global {
         type: 'audio' | 'video';
         targetDb: number;
       }): Promise<void>;
+      setNormalizeTarget(targetDb: number): Promise<boolean>;
       cancelNormalization(): Promise<boolean>;
       getNormalizeState(): Promise<NormalizeState>;
       onNormalizeProgress(callback: (data: NormalizeProgress) => void): () => void;

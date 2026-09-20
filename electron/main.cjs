@@ -41,6 +41,12 @@ let videoState = {
   normalizeAudio: false,
   normalizeTarget: -16,
 };
+const parseVideoTarget = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= -50 && parsed <= -5
+    ? parsed
+    : videoState.normalizeTarget ?? -16;
+};
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
 let normalizeState = {
@@ -49,6 +55,13 @@ let normalizeState = {
   fileProgress: 0,
   activeFile: 'Ningún archivo en proceso',
   message: '',
+  targetDb: -16,
+};
+const parseTargetDb = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= -50 && parsed <= -5
+    ? parsed
+    : normalizeState.targetDb ?? -16;
 };
 function emitVideoProgress(data) {
   const addLog = (text, tone) => {
@@ -685,6 +698,12 @@ app.whenReady().then(async () => {
       window.webContents.send('video:state-changed', videoState);
     return true;
   });
+  ipcMain.handle('video:set-normalize', (_event, { normalizeAudio, normalizeTarget }) => {
+    if (typeof normalizeAudio === 'boolean') videoState.normalizeAudio = normalizeAudio;
+    if (typeof normalizeTarget === 'number')
+      videoState.normalizeTarget = parseVideoTarget(normalizeTarget);
+    return true;
+  });
   ipcMain.handle('video:append-folders', async (_event, { folders, codec }) => {
     if (!videoState.running) return false;
     const known = new Set([activeVideoFolder, ...videoQueue.map((item) => item.folder)]);
@@ -714,11 +733,16 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('normalizer:scan', (_event, data) => scanMedia(data.folders, data.type));
   ipcMain.handle('normalizer:state', () => normalizeState);
+  ipcMain.handle('normalizer:set-target', (_event, targetDb) => {
+    normalizeState = { ...normalizeState, targetDb: parseTargetDb(targetDb) };
+    return normalizeState.targetDb;
+  });
   ipcMain.handle('normalizer:start', async (_event, { files, type, targetDb }) => {
     normalizeCancelled = false;
     let completed = 0;
     normalizeState = {
       ...normalizeState,
+      targetDb: parseTargetDb(targetDb),
       running: true,
       globalProgress: 0,
       fileProgress: 0,

@@ -26,7 +26,10 @@ export default function NormalizeTool() {
   const [message, setMessage] = useState('');
   const [processed, setProcessed] = useState<Set<string>>(new Set());
   useEffect(() => {
-    window.tools.getNormalizeState().then(setNormalize);
+    window.tools.getNormalizeState().then((state) => {
+      setNormalize(state);
+      if (typeof state.targetDb === 'number') setTarget(state.targetDb);
+    });
     const stop = window.tools.onNormalizeState(setNormalize);
     return stop;
   }, []);
@@ -155,7 +158,11 @@ export default function NormalizeTool() {
             max="-5"
             value={target}
             disabled={normalize.running}
-            onChange={(event) => setTarget(Number(event.target.value))}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setTarget(next);
+              window.tools.setNormalizeTarget(next);
+            }}
           />
           <span>LUFS</span>
         </label>
@@ -166,7 +173,10 @@ export default function NormalizeTool() {
               type="button"
               disabled={normalize.running}
               className={target === value ? 'active' : ''}
-              onClick={() => setTarget(value)}
+              onClick={() => {
+                setTarget(value);
+                window.tools.setNormalizeTarget(value);
+              }}
             >
               {label}
             </button>

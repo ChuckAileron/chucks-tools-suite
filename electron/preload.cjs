@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('tools', {
   skipVideoFolder: (folder) => ipcRenderer.invoke('video:skip-folder', folder),
   appendVideoFolders: (data) => ipcRenderer.invoke('video:append-folders', data),
   clearVideoState: () => ipcRenderer.invoke('video:clear'),
+  setVideoNormalize: (data) => ipcRenderer.invoke('video:set-normalize', data),
   onVideoProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('video:progress', listener);
@@ -73,6 +74,7 @@ contextBridge.exposeInMainWorld('tools', {
   selectNormalizeFolders: () => ipcRenderer.invoke('normalizer:select-folders'),
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
   startNormalization: (data) => ipcRenderer.invoke('normalizer:start', data),
+  setNormalizeTarget: (targetDb) => ipcRenderer.invoke('normalizer:set-target', targetDb),
   cancelNormalization: () => ipcRenderer.invoke('normalizer:cancel'),
   getNormalizeState: () => ipcRenderer.invoke('normalizer:state'),
   onNormalizeProgress: (callback) => {
