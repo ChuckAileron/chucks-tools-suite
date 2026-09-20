@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { Collection, CollectionColumn, CollectionColumnType, CollectionItem } from './types';
+import type {
+  Collection,
+  CollectionColumn,
+  CollectionColumnType,
+  CollectionItem,
+  ImageSearchEngine,
+  ImageSearchResult,
+} from './types';
 import WishlistView from './WishlistView';
 
 type View = 'catalog' | 'wishlist' | 'settings';
@@ -608,6 +615,7 @@ function ItemEditor({
 }) {
   const setValue = (name: string, value: unknown) =>
     setDraft({ ...draft, values: { ...draft.values, [name]: value } });
+  const [searchOpen, setSearchOpen] = useState(false);
   return (
     <div className="collection-item-editor">
       <header>
@@ -627,11 +635,24 @@ function ItemEditor({
         </label>
         <label>
           <span>URL de imagen</span>
-          <input
-            type="url"
-            value={draft.imageUrl}
-            onChange={(e) => setDraft({ ...draft, imageUrl: e.target.value })}
-          />
+          <div className="collection-image-row">
+            <input
+              type="url"
+              value={draft.imageUrl}
+              placeholder="https://..."
+              onChange={(e) => setDraft({ ...draft, imageUrl: e.target.value })}
+            />
+            <button type="button" onClick={() => setSearchOpen(true)}>
+              Buscar en internet
+            </button>
+          </div>
+          {draft.imageUrl ? (
+            <img
+              className="collection-image-preview"
+              src={draft.imageUrl}
+              alt="Vista previa de la imagen del ítem"
+            />
+          ) : null}
         </label>
         <label className="wide">
           <span>Etiquetas, separadas por comas</span>
@@ -652,12 +673,185 @@ function ItemEditor({
       <button className="collection-save-item" disabled={busy || !draft.name.trim()} onClick={save}>
         Guardar ítem
       </button>
+      {searchOpen && (
+        <ImageSearchModal
+          initialQuery={draft.name}
+          onClose={() => setSearchOpen(false)}
+          onConfirm={(url) => {
+            setDraft({ ...draft, imageUrl: url });
+            setSearchOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ColumnInput({
-  column,
+const IMAGE_ENGINES: { value: ImageSearchEngine; label: string }[] = [
+  { value: 'bing', label: 'Bing' },
+  { value: 'google', label: 'Google' },
+  { value: 'duckduckgo', label: 'DuckDuckGo' },
+  { value: 'wikimedia', label: 'Wikimedia' },
+];
+
+function ImageSearchModal({
+  initialQuery,
+  onClose,
+  onConfirm,
+}: {
+  initialQuery: string;
+  onClose: () => void;
+  onConfirm: (url: string) => void;
+}) {
+  const [query, setQuery] = useState(initialQuery);
+  const [engine, setEngine] = useState<ImageSearchEngine>('bing');
+  const [results, setResults] = useState<ImageSearchResult[]>([]);
+  const [selected, setSelected] = useState<ImageSearchResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(0);
+  const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const runSearch = async (nextPage: number, append: boolean) => {
+    const term = query.trim();
+    if (!term || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const found = await window.tools.searchImages({ query: term, engine, page: nextPage });
+      setPage(nextPage);
+      setSearched(true);
+      setResults(append ? [...results, ...found] : found);
+      if (!append) setSelected(null);
+    } catch (failure) {
+      setError(String(failure));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="image-search-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Buscar imagen en internet"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="image-search-modal">
+        <header>
+          <div>
+            <h2>Buscar imagen en internet</h2>
+            <p>Elige una imagen para usarla como URL del ítem.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar búsqueda">
+            ✕
+          </button>
+        </header>
+        <div className="image-search-engines" role="tablist" aria-label="Motor de búsqueda">
+          {IMAGE_ENGINES.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={engine === item.value}
+              className={engine === item.value ? 'active' : ''}
+              disabled={loading}
+              onClick={() => setEngine(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <form
+          className="image-search-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runSearch(1, false);
+          }}
+        >
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Ej. portada del libro, póster de la película..."
+            aria-label="Término de búsqueda de imágenes"
+          />
+          <button type="submit" disabled={loading || !query.trim()}>
+            {loading ? 'Buscando...' : 'Buscar'}
+          </button>
+        </form>
+        {error && <p className="image-search-error">{error}</p>}
+        {results.length ? (
+          <div className="image-search-grid">
+            {results.map((result) => (
+              <button
+                key={result.imageUrl}
+                type="button"
+                title={result.title || result.imageUrl}
+                aria-pressed={selected?.imageUrl === result.imageUrl}
+                className={selected?.imageUrl === result.imageUrl ? 'selected' : ''}
+                onClick={() =>
+                  setSelected(
+                    selected?.imageUrl === result.imageUrl ? null : result,
+                  )
+                }
+              >
+                <img src={result.thumbnailUrl} alt={result.title || 'Resultado de imagen'} loading="lazy" />
+                <small>{result.source}</small>
+              </button>
+            ))}
+          </div>
+        ) : (
+          !loading && (
+            <p className="image-search-empty">
+              {searched ? 'Sin resultados, prueba con otro término.' : 'Busca y haz clic en una imagen.'}
+            </p>
+          )
+        )}
+        {loading && <p className="image-search-empty">Buscando imágenes...</p>}
+        <footer>
+          <span>
+            {selected ? `1 imagen seleccionada (${selected.source})` : 'Sin selección'}
+          </span>
+          <div>
+            {results.length > 0 && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void runSearch(page + 1, true)}
+              >
+                Cargar más
+              </button>
+            )}
+            <button type="button" onClick={onClose}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="image-search-confirm"
+              disabled={!selected}
+              onClick={() => selected && onConfirm(selected.imageUrl)}
+            >
+              Usar esta imagen
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function ColumnInput({  column,
   value,
   setValue,
 }: {

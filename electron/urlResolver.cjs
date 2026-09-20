@@ -70,7 +70,7 @@ function isTextualContentType(contentType) {
   );
 }
 
-function requestPage(url, maxBytes = 1024 * 1024) {
+function requestPage(url, maxBytes = 1024 * 1024, options = {}) {
   return new Promise((resolve, reject) => {
     const client = url.protocol === 'https:' ? https : http;
     const request = client.get(
@@ -81,6 +81,7 @@ function requestPage(url, maxBytes = 1024 * 1024) {
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
           accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
           'accept-language': 'es,en;q=0.8',
+          ...(options.headers || {}),
         },
         lookup: (hostname, options, callback) =>
           dnsModule.lookup(hostname, { ...options, all: true }, (error, addresses) => {
@@ -103,6 +104,7 @@ function requestPage(url, maxBytes = 1024 * 1024) {
             contentType,
             body: '',
             binary: true,
+            headers: response.headers,
           });
         }
         const chunks = [];
@@ -119,6 +121,7 @@ function requestPage(url, maxBytes = 1024 * 1024) {
             location: response.headers.location,
             contentType,
             body: Buffer.concat(chunks).toString('utf8'),
+            headers: response.headers,
           }),
         );
       },

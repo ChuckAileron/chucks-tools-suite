@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('tools', {
   deleteCollectionItem: (id) => ipcRenderer.invoke('collection-items:delete', id),
   exportCollection: (id) => ipcRenderer.invoke('collections:export', id),
   importCollection: () => ipcRenderer.invoke('collections:import'),
+  searchImages: (data) => ipcRenderer.invoke('images:search', data),
   getWishlist: (q = '') => ipcRenderer.invoke('wishlist:list', q),
   createWishlistItem: (data) => ipcRenderer.invoke('wishlist:create', data),
   updateWishlistItem: (id, patch) => ipcRenderer.invoke('wishlist:update', { id, patch }),

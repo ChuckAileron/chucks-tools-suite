@@ -147,6 +147,16 @@ export type CollectionItem = {
   createdAt: string;
   updatedAt: string;
 };
+export type ImageSearchEngine = 'google' | 'bing' | 'duckduckgo' | 'wikimedia';
+export type ImageSearchResult = {
+  imageUrl: string;
+  thumbnailUrl: string;
+  title: string;
+  source: string;
+  pageUrl: string;
+  width?: number;
+  height?: number;
+};
 export type WishlistPrice = {
   id: number;
   wishlistId: number;
@@ -234,6 +244,11 @@ declare global {
       deleteCollectionItem(id: number): Promise<boolean>;
       exportCollection(id: number): Promise<boolean>;
       importCollection(): Promise<Collection | null>;
+      searchImages(data: {
+        query: string;
+        engine: ImageSearchEngine;
+        page?: number;
+      }): Promise<ImageSearchResult[]>;
       getWishlist(q?: string): Promise<WishlistItem[]>;
       createWishlistItem(data: {
         name: string;

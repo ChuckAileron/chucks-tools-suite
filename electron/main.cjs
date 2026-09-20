@@ -8,6 +8,7 @@ const { validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
 const { scrapePrice } = require('./priceScraper.cjs');
+const { searchImages } = require('./imageSearch.cjs');
 const { listFiles, renameFile } = require('./renameManager.cjs');
 let downloadManager;
 let collectionManager;
@@ -503,6 +504,7 @@ app.whenReady().then(async () => {
     const payload = JSON.parse(await fs.readFile(result.filePaths[0], 'utf8'));
     return collectionManager.importCollection(payload, 'rename');
   });
+  ipcMain.handle('images:search', (_event, data) => searchImages(data || {}));
   ipcMain.handle('wishlist:list', (_event, q) => collectionManager.listWishlist(q));
   ipcMain.handle('wishlist:create', (_event, data) => collectionManager.createWishlistItem(data));
   ipcMain.handle('wishlist:update', (_event, { id, patch }) =>
