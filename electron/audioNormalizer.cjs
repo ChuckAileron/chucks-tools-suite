@@ -15,8 +15,21 @@ async function scanMedia(folders, type) {
         !/_normalized\.[^.]+$/i.test(entry.name)
       ) {
         const absolute = path.join(folder, entry.name),
-          stat = await fs.promises.stat(absolute);
-        files.push({ path: absolute, name: entry.name, folder, size: stat.size });
+          stat = await fs.promises.stat(absolute),
+          extension = path.extname(entry.name),
+          outputDirectory = path.join(folder, `normalized_output-${type}`);
+        files.push({
+          path: absolute,
+          name: entry.name,
+          folder,
+          size: stat.size,
+          processed: fs.existsSync(
+            path.join(
+              outputDirectory,
+              `${path.basename(entry.name, extension)}_normalized${extension}`,
+            ),
+          ),
+        });
       }
   return files;
 }

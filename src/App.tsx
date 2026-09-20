@@ -3,7 +3,6 @@ import MoverTool from './MoverTool';
 import RenameTool from './RenameTool';
 import VideoTool from './VideoTool';
 import NormalizeTool from './NormalizeTool';
-import UrlBypassTool from './UrlBypassTool';
 import DownloadsTool from './DownloadsTool';
 import CollectionTool from './CollectionTool';
 import type {
@@ -13,7 +12,7 @@ import type {
   NormalizeState,
   VideoState,
 } from './types';
-type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'urls' | 'downloads' | 'collection';
+type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'downloads' | 'collection';
 const EMPTY_DOWNLOADS: DownloadsState = {
   settings: {
     defaultDirectory: '',
@@ -53,11 +52,12 @@ export default function App() {
   const [downloadNotice, setDownloadNotice] = useState(0);
   const mergeCandidates = (found: DownloadCandidate[]) =>
     setCandidates((current) => {
-      const existing = new Set(current.map((item) => item.originalUrl));
+      const key = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
+      const existing = new Set(current.map(key));
       return [
         ...current,
         ...found
-          .filter((item) => !existing.has(item.originalUrl))
+          .filter((item) => !existing.has(key(item)))
           .map((item) => ({
             ...item,
             destination: downloads.settings.defaultDirectory,
@@ -144,7 +144,6 @@ export default function App() {
                 {downloadNotice}
               </em>
             )}
-            <em className="wip-badge">WIP</em>
           </button>
           <button className={tool === 'mover' ? 'active' : ''} onClick={() => setTool('mover')}>
             <i>↗</i>
@@ -187,14 +186,6 @@ export default function App() {
               />
             </span>
           </button>
-          <button className={tool === 'urls' ? 'active' : ''} onClick={() => setTool('urls')}>
-            <i>↗</i>
-            <span>
-              <strong>Bypass de URLs</strong>
-              <small>Enlaces cortos y ads</small>
-            </span>
-            <em className="wip-badge">WIP</em>
-          </button>
         </nav>
         <div className="local">
           <b>● Todo permanece local</b>
@@ -216,8 +207,6 @@ export default function App() {
           <NormalizeTool />
         ) : tool === 'collection' ? (
           <CollectionTool />
-        ) : tool === 'urls' ? (
-          <UrlBypassTool />
         ) : (
           <DownloadsTool candidates={candidates} setCandidates={setCandidates} />
         )}

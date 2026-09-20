@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { DownloaderHelper } = require('node-downloader-helper');
 const sevenZip = require('7zip-min');
 const { resolveUrl } = require('./urlResolver.cjs');
+const videoProvider = require('./videoProvider.cjs');
 
 function resolveSevenZa() {
   const resourcesPath = process.resourcesPath || '';
@@ -101,6 +102,31 @@ class DownloadManager {
     const groups = await Promise.all(
       links.map(async (raw) => {
         const originalUrl = raw.replace(/[),.;]+$/, '');
+        if (videoProvider.isVideoLink(originalUrl)) {
+          try {
+            const formats = await videoProvider.listVideoFormats(originalUrl);
+            if (!formats.length) throw new Error('Video sin formatos descargables.');
+            return formats.map((format) => ({
+              ...format,
+              collection: batchCollection || format.collection,
+            }));
+          } catch (error) {
+            return [
+              {
+                id: randomUUID(),
+                originalUrl,
+                url: originalUrl,
+                name: '',
+                host: new URL(originalUrl).hostname,
+                online: false,
+                mode: 'video',
+                error: error.message,
+                collection: batchCollection || 'Video',
+                selected: false,
+              },
+            ];
+          }
+        }
         const mediafireKey = this.mediafireFolderKey(originalUrl);
         if (mediafireKey) {
           try {
@@ -403,6 +429,8 @@ class DownloadManager {
         extract: item.extract !== false,
         host: item.host,
         collection: item.collection || item.host || 'Sin colección',
+        videoUrl: item.videoUrl || '',
+        videoFormat: item.videoFormat || '',
         status: 'pending',
         progress: 0,
         speed: 0,
@@ -428,12 +456,22 @@ class DownloadManager {
       downloader = this.active.get(id);
     if (!task) return false;
     if (action === 'pause') {
-      if (downloader) downloader.pause();
+      if (downloader) {
+        if (task.videoFormat) {
+          downloader.stop();
+          this.active.delete(id);
+        } else downloader.pause();
+      }
       task.status = 'paused';
     } else if (action === 'resume') {
       task.status = 'pending';
     } else if (action === 'stop') {
-      if (downloader) downloader.stop();
+      if (downloader) {
+        if (task.videoFormat) {
+          downloader.stop();
+          this.active.delete(id);
+        } else downloader.stop();
+      }
       task.status = 'stopped';
     } else if (action === 'remove' && !downloader) this.tasks.delete(id);
     else return false;
@@ -444,6 +482,26 @@ class DownloadManager {
   clearCompleted() {
     for (const [id, task] of this.tasks) if (task.status === 'completed') this.tasks.delete(id);
     this.emit();
+  }
+  async recover() {
+    for (const task of [...this.tasks.values()]) {
+      if (task.status !== 'extracting' || !task.filePath) continue;
+      if (!fs.existsSync(task.filePath)) {
+        task.status = 'error';
+        task.error = 'El archivo descargado ya no existe.';
+        this.emit();
+        continue;
+      }
+      try {
+        await this.extract(task);
+        task.status = 'completed';
+        task.error = '';
+      } catch (error) {
+        task.status = /password/i.test(error.message) ? 'password-required' : 'error';
+        task.error = error.message;
+      }
+      this.emit();
+    }
   }
   setSettings(settings) {
     this.settings = {
@@ -466,6 +524,10 @@ class DownloadManager {
     }
   }
   start(task) {
+    if (task.videoFormat) {
+      this.startVideo(task);
+      return;
+    }
     fs.mkdirSync(task.destination, { recursive: true });
     const downloader = new DownloaderHelper(task.url, task.destination, {
       fileName: task.name,
@@ -516,6 +578,41 @@ class DownloadManager {
       this.process();
     });
     downloader.start().catch((error) => this.fail(task, error));
+  }
+  startVideo(task) {
+    fs.mkdirSync(task.destination, { recursive: true });
+    task.status = 'downloading';
+    const controller = videoProvider.downloadVideo({
+      url: task.videoUrl || task.originalUrl,
+      destination: task.destination,
+      name: task.name,
+      format: task.videoFormat,
+      onProgress: (stats) => {
+        Object.assign(task, stats);
+        this.send(this.snapshot());
+      },
+    });
+    this.active.set(task.id, controller);
+    this.emit();
+    controller.result
+      .then(({ filePath }) => {
+        if (!this.active.has(task.id)) return;
+        this.active.delete(task.id);
+        task.progress = 100;
+        task.filePath = filePath || task.filePath || '';
+        task.status = 'completed';
+        task.error = '';
+        this.emit();
+        this.process();
+      })
+      .catch((error) => {
+        if (!this.active.has(task.id)) return;
+        this.active.delete(task.id);
+        task.status = 'error';
+        task.error = error.message;
+        this.emit();
+        this.process();
+      });
   }
   release(task, status) {
     if (!this.active.has(task.id)) return;

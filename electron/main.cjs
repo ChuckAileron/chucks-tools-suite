@@ -4,7 +4,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
 const { scanMedia, normalizeMedia } = require('./audioNormalizer.cjs');
-const { resolveUrl, validatePublicUrl } = require('./urlResolver.cjs');
+const { validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
 const { scrapePrice } = require('./priceScraper.cjs');
@@ -69,11 +69,27 @@ function emitVideoProgress(data) {
   } else if (data.type === 'file-progress') videoState.fileProgress = data.percent || 0;
   else if (data.type === 'file-done') {
     videoState.fileProgress = 100;
+    videoState.folders = videoState.folders.map((folder) =>
+      folder.folder === data.folder
+        ? {
+            ...folder,
+            videos: folder.videos.map((video) =>
+              video.file === data.file ? { ...video, processed: true } : video,
+            ),
+          }
+        : folder,
+    );
     addLog(`${data.file} completado`, 'success');
   } else if (data.type === 'folder-done') {
     videoState.activeFolder = '';
     videoState.folders = videoState.folders.map((folder) =>
-      folder.folder === data.folder ? { ...folder, processed: true } : folder,
+      folder.folder === data.folder
+        ? {
+            ...folder,
+            processed: true,
+            videos: folder.videos.map((video) => ({ ...video, processed: true })),
+          }
+        : folder,
     );
     addLog(`Carpeta completada: ${data.folder}`, 'success');
   } else if (data.type === 'error') addLog(`Error: ${data.message}`, 'error');
@@ -353,7 +369,7 @@ function createWindow() {
     ? win.loadURL('http://localhost:5173')
     : win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   collectionManager = new CollectionManager(
     path.join(app.getPath('userData'), 'collections.sqlite'),
   );
@@ -364,6 +380,7 @@ app.whenReady().then(() => {
         window.webContents.send('downloads:state', state);
     },
   );
+  await downloadManager.recover();
   const { watcher, events } = require('./clipboardWatcher.cjs');
   events.on('change', async () => {
     if (!downloadManager.settings.clipboard) return;
@@ -409,7 +426,6 @@ app.whenReady().then(() => {
     if (created) createdDestinationFolders.add(destination);
     return { path: destination, created };
   });
-  ipcMain.handle('url:resolve', (_event, url) => resolveUrl(url));
   ipcMain.handle('url:open', async (_event, value) => {
     const url = await validatePublicUrl(value);
     await shell.openExternal(url.href);
@@ -649,6 +665,26 @@ app.whenReady().then(() => {
     });
     return true;
   });
+  ipcMain.handle('video:clear', () => {
+    if (videoState.running) return false;
+    videoQueue = [];
+    activeVideoFolder = '';
+    videoCompletedFiles = 0;
+    videoTotalFiles = 0;
+    videoState = {
+      ...videoState,
+      folders: [],
+      trackSelections: {},
+      globalProgress: 0,
+      fileProgress: 0,
+      activeFile: 'Ningún archivo en proceso',
+      activeFolder: '',
+      logs: [],
+    };
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('video:state-changed', videoState);
+    return true;
+  });
   ipcMain.handle('video:append-folders', async (_event, { folders, codec }) => {
     if (!videoState.running) return false;
     const known = new Set([activeVideoFolder, ...videoQueue.map((item) => item.folder)]);
@@ -696,6 +732,7 @@ app.whenReady().then(() => {
       emitNormalizeProgress({
         type: 'file-start',
         file: file.name,
+        path: file.path,
         current: completed,
         total: files.length,
       });
@@ -712,6 +749,7 @@ app.whenReady().then(() => {
             emitNormalizeProgress({
               type: 'file-progress',
               file: file.name,
+              path: file.path,
               percent,
             }),
         });
@@ -719,6 +757,7 @@ app.whenReady().then(() => {
         emitNormalizeProgress({
           type: 'file-done',
           file: file.name,
+          path: file.path,
           current: completed,
           total: files.length,
         });

@@ -109,6 +109,12 @@ export default function VideoTool() {
       return { ...current, [videoPath]: { ...current[videoPath], [type]: [...selected] } };
     });
 
+  const selectTracks = (videoPath: string, type: 'audio' | 'subtitles', indices: number[]) =>
+    setSelections((current) => ({
+      ...current,
+      [videoPath]: { ...current[videoPath], [type]: indices },
+    }));
+
   const start = async () => {
     setRunning(true);
     setLogs([]);
@@ -126,6 +132,16 @@ export default function VideoTool() {
       addLog(`No se pudo iniciar: ${String(error)}`, 'error');
       setRunning(false);
     }
+  };
+
+  const clear = async () => {
+    setFolders([]);
+    setLogs([]);
+    setGlobalProgress(0);
+    setFileProgress(0);
+    setActiveFile('Ningún archivo en proceso');
+    setActiveFolder('');
+    await window.tools.clearVideoState();
   };
 
   const removeFolder = async (folder: string) => {
@@ -162,7 +178,7 @@ export default function VideoTool() {
         </div>
         <div className="video-folder-actions">
           <button onClick={addFolders}>+ Añadir carpetas</button>
-          <button disabled={running || !folders.length} onClick={() => setFolders([])}>
+          <button disabled={running || !folders.length} onClick={clear}>
             Limpiar
           </button>
         </div>
@@ -179,6 +195,7 @@ export default function VideoTool() {
                 onCollapse={() => toggleFolder(folder.folder)}
                 onRemove={() => removeFolder(folder.folder)}
                 onToggle={toggleTrack}
+                onSelect={selectTracks}
               />
             ))
           ) : (
@@ -303,6 +320,7 @@ function FolderCard({
   onCollapse,
   onRemove,
   onToggle,
+  onSelect,
 }: {
   folder: VideoFolder;
   selections: Selections;
@@ -312,6 +330,7 @@ function FolderCard({
   onCollapse: () => void;
   onRemove: () => void;
   onToggle: (path: string, type: 'audio' | 'subtitles', index: number) => void;
+  onSelect: (path: string, type: 'audio' | 'subtitles', indices: number[]) => void;
 }) {
   return (
     <article className={`${folder.processed ? 'processed' : ''} ${collapsed ? 'collapsed' : ''}`}>
@@ -344,7 +363,14 @@ function FolderCard({
             (video.audio.length || video.subtitles.length || video.probeError) && (
               <details key={video.path}>
                 <summary>
-                  {video.file} · {video.audio.length} audio · {video.subtitles.length} subtítulos
+                  {video.file}
+                  {video.processed && (
+                    <em className="file-check" title="Archivo procesado">
+                      ✓
+                    </em>
+                  )}
+                  {' · '}
+                  {video.audio.length} audio · {video.subtitles.length} subtítulos
                 </summary>
                 {video.probeError ? (
                   <p className="track-error">No se pudieron leer las pistas: {video.probeError}</p>
@@ -356,6 +382,7 @@ function FolderCard({
                       selected={selections[video.path]?.audio || []}
                       disabled={controlsDisabled}
                       onToggle={(index) => onToggle(video.path, 'audio', index)}
+                      onSelect={(indices) => onSelect(video.path, 'audio', indices)}
                     />
                     <TrackGroup
                       title="Subtítulos"
@@ -363,6 +390,7 @@ function FolderCard({
                       selected={selections[video.path]?.subtitles || []}
                       disabled={controlsDisabled}
                       onToggle={(index) => onToggle(video.path, 'subtitles', index)}
+                      onSelect={(indices) => onSelect(video.path, 'subtitles', indices)}
                     />
                   </div>
                 )}
@@ -379,17 +407,38 @@ function TrackGroup({
   selected,
   disabled,
   onToggle,
+  onSelect,
 }: {
   title: string;
   tracks: VideoTrack[];
   selected: number[];
   disabled: boolean;
   onToggle: (index: number) => void;
+  onSelect: (indices: number[]) => void;
 }) {
   if (!tracks.length) return null;
+  const selectable = tracks.filter(
+    (track) => !(title === 'Subtítulos' && !MP4_SUBTITLE_CODECS.has(track.codec)),
+  );
+  const allSelected =
+    selectable.length > 0 && selectable.every((track) => selected.includes(track.index));
+  const noneSelected = selectable.every((track) => !selected.includes(track.index));
+  const indices = selectable.map((track) => track.index);
   return (
     <section>
-      <strong>{title}</strong>
+      <div className="tracks-header">
+        <strong>{title}</strong>
+        {selectable.length > 0 && (
+          <span>
+            <button type="button" disabled={disabled || allSelected} onClick={() => onSelect(indices)}>
+              Todo
+            </button>
+            <button type="button" disabled={disabled || noneSelected} onClick={() => onSelect([])}>
+              Ninguno
+            </button>
+          </span>
+        )}
+      </div>
       {tracks.map((track) => {
         const incompatible = title === 'Subtítulos' && !MP4_SUBTITLE_CODECS.has(track.codec);
         return (

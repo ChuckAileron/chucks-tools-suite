@@ -105,7 +105,16 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
       folder: directory,
     });
     if (!FFMPEG_PATTERN.test(file) && !normalizeAudio) {
-      await convertWithHandbrake(input, temporary, finalPath, codec, file, onProgress, controls);
+      await convertWithHandbrake(
+        input,
+        temporary,
+        finalPath,
+        codec,
+        file,
+        directory,
+        onProgress,
+        controls,
+      );
       onProgress({ type: 'global', current: index + 1, total: files.length, folder: directory });
       continue;
     }
@@ -125,25 +134,41 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
     } catch {}
     const height = metadata.streams?.find((stream) => stream.codec_type === 'video')?.height || 0;
     const chosen = selections[input];
-    const args = ['-y', '-i', input, '-map', '0:v:0'];
-    let subtitleCount = 0;
+    let audioIndices;
+    let subtitleIndices;
     if (chosen) {
-      for (const track of chosen.audio || []) args.push('-map', `0:${track}`);
-      for (const track of chosen.subtitles || []) {
+      audioIndices = chosen.audio || [];
+      subtitleIndices = (chosen.subtitles || []).filter((track) => {
         const stream = metadata.streams?.find((item) => item.index === track);
-        if (stream && MP4_SUBTITLE_CODECS.has(stream.codec_name)) {
-          args.push('-map', `0:${track}`);
-          subtitleCount += 1;
-        }
-      }
+        return stream && MP4_SUBTITLE_CODECS.has(stream.codec_name);
+      });
     } else {
-      args.push('-map', '0:a?');
-      for (const stream of metadata.streams || [])
-        if (stream.codec_type === 'subtitle' && MP4_SUBTITLE_CODECS.has(stream.codec_name)) {
-          args.push('-map', `0:${stream.index}`);
-          subtitleCount += 1;
-        }
+      audioIndices = (metadata.streams || [])
+        .filter((stream) => stream.codec_type === 'audio')
+        .map((stream) => stream.index);
+      subtitleIndices = (metadata.streams || [])
+        .filter(
+          (stream) =>
+            stream.codec_type === 'subtitle' && MP4_SUBTITLE_CODECS.has(stream.codec_name),
+        )
+        .map((stream) => stream.index);
     }
+    const args = ['-y', '-i', input, '-map', '0:v:0'];
+    if (normalizeAudio && audioIndices.length) {
+      // Un filtro simple (-af) solo puede aplicarse a un único stream de audio de
+      // salida. Si se mapea más de una pista con -af, ffmpeg falla o deja las
+      // pistas adicionales sin filtrar/mudas. Usamos -filter_complex con una
+      // etiqueta por pista para normalizar cada una de forma independiente.
+      const filterComplex = audioIndices
+        .map((track, i) => `[0:${track}]${normalizeAudio}[a${i}]`)
+        .join(';');
+      args.push('-filter_complex', filterComplex);
+      audioIndices.forEach((_, i) => args.push('-map', `[a${i}]`));
+    } else {
+      for (const track of audioIndices) args.push('-map', `0:${track}`);
+    }
+    for (const track of subtitleIndices) args.push('-map', `0:${track}`);
+    const subtitleCount = subtitleIndices.length;
     if (height >= 480) args.push('-vf', 'scale=-2:480');
     args.push(
       '-c:v',
@@ -157,7 +182,6 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
       '-b:a',
       '128k',
     );
-    if (normalizeAudio) args.push('-af', normalizeAudio);
     if (subtitleCount) args.push('-c:s', 'mov_text');
     args.push(temporary);
     const duration = Number.parseFloat(metadata.format?.duration) || 0;
@@ -192,7 +216,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
           return reject(new Error(stderr || `ffmpeg terminó con código ${code}`));
         }
         fs.renameSync(temporary, finalPath);
-        onProgress({ type: 'file-done', file });
+        onProgress({ type: 'file-done', file, folder: directory });
         resolve();
       });
     });
@@ -200,7 +224,16 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
   }
 }
 
-function convertWithHandbrake(input, temporary, finalPath, codec, file, onProgress, controls) {
+function convertWithHandbrake(
+  input,
+  temporary,
+  finalPath,
+  codec,
+  file,
+  directory,
+  onProgress,
+  controls,
+) {
   fs.rmSync(temporary, { force: true });
   return new Promise((resolve, reject) => {
     const job = handbrake.spawn({
@@ -228,7 +261,7 @@ function convertWithHandbrake(input, temporary, finalPath, codec, file, onProgre
         return;
       }
       fs.renameSync(temporary, finalPath);
-      onProgress({ type: 'file-done', file });
+      onProgress({ type: 'file-done', file, folder: directory });
       resolve();
     };
     job.on('progress', (progress) =>

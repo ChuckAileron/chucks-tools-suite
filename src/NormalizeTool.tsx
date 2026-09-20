@@ -24,16 +24,29 @@ export default function NormalizeTool() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
   const [message, setMessage] = useState('');
+  const [processed, setProcessed] = useState<Set<string>>(new Set());
   useEffect(() => {
     window.tools.getNormalizeState().then(setNormalize);
     const stop = window.tools.onNormalizeState(setNormalize);
     return stop;
+  }, []);
+  useEffect(() => {
+    return window.tools.onNormalizeProgress((data) => {
+      if (data.type !== 'file-done' || !data.path) return;
+      const filePath = data.path;
+      setProcessed((current) => {
+        const next = new Set(current);
+        next.add(filePath);
+        return next;
+      });
+    });
   }, []);
   const addFolders = async () => {
     const paths = await window.tools.selectNormalizeFolders();
     setFolders((current) => [...new Set([...current, ...paths])]);
     setFiles([]);
     setSelected(new Set());
+    setProcessed(new Set());
   };
   const scan = async () => {
     setMessage('Explorando archivos...');
@@ -41,6 +54,7 @@ export default function NormalizeTool() {
       const result = await window.tools.scanNormalizeFiles({ folders, type });
       setFiles(result);
       setSelected(new Set(result.map((file) => file.path)));
+      setProcessed(new Set(result.filter((file) => file.processed).map((file) => file.path)));
       setMessage(
         result.length
           ? 'Revisa la selección antes de continuar.'
@@ -89,6 +103,7 @@ export default function NormalizeTool() {
               setFolders([]);
               setFiles([]);
               setSelected(new Set());
+              setProcessed(new Set());
             }}
           >
             Limpiar
@@ -100,6 +115,7 @@ export default function NormalizeTool() {
               setType(event.target.value as MediaType);
               setFiles([]);
               setSelected(new Set());
+              setProcessed(new Set());
             }}
           >
             <option value="audio">Archivos de audio</option>
@@ -191,7 +207,14 @@ export default function NormalizeTool() {
                     }}
                   />
                   <span>
-                    <strong>{file.name}</strong>
+                    <strong>
+                      {file.name}
+                      {processed.has(file.path) && (
+                        <em className="file-check" title="Archivo procesado">
+                          ✓
+                        </em>
+                      )}
+                    </strong>
                     <small>{file.folder}</small>
                   </span>
                   <i>{formatSize(file.size)}</i>

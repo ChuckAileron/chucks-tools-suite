@@ -4,3 +4,4 @@ release/
 *.log
 run-chucks-tools.cmd
 wip_backend/
+TODO.txt

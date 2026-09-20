@@ -2,9 +2,7 @@
 
 Aplicación de escritorio para Windows, macOS y Linux que reúne herramientas locales de gestión de archivos en una sola interfaz. Está construida con Electron, React, TypeScript y Vite.
 
-Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. Los módulos Bypass de URLs y Descargas realizan solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
-
-> **Estado del proyecto:** Bypass de URLs y Descargas aparecen como **WIP** en el menú porque la compatibilidad con servicios externos requiere mantenimiento continuo.
+Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. El módulo de Descargas realiza solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
 
 ## Herramientas incluidas
 
@@ -28,13 +26,9 @@ Características:
 - Reset de pantalla para limpiar selección de carpetas, resultados, filtros y opciones.
 - Eliminación opcional del destino temporal creado por la aplicación después de devolver el lote.
 
-> **Advertencia:** la opción para eliminar carpetas hijas borra recursivamente las subcarpetas y cualquier contenido que permanezca dentro de ellas. La carpeta de origen nunca se elimina. La interfaz solicita confirmación antes de ejecutar esta acción.
+> **Advertencia:** la opción para eliminar carpetas hijas borra recursivamente las subcarpetas y cualquier contenido que permanezca dentro de ellas; la interfaz solicita confirmación antes de ejecutarla. La carpeta de origen nunca se elimina.
 
-La carpeta de destino debe ser diferente de la carpeta de origen. Si está dentro del origen, se excluye automáticamente del escaneo y se conserva durante la limpieza de carpetas hijas.
-
-El flujo de staging puede configurarse como: origen > destino temporal > limpieza opcional de carpetas hijas > devolución a la raíz del origen. La devolución aplana el lote en la raíz para no recrear las carpetas eliminadas. La acción Deshacer es distinta: restaura cada archivo en su ruta original y resuelve colisiones sin sobrescribir archivos.
-
-La opción para eliminar el destino temporal solo aparece cuando la aplicación creó realmente una carpeta dentro del origen y está activada la devolución. La carpeta se elimina únicamente si quedó vacía; un destino preexistente nunca se elimina automáticamente.
+La carpeta de destino debe ser diferente de la de origen; si está dentro del origen, se excluye del escaneo y se conserva durante la limpieza de carpetas hijas.
 
 ### Renombrar archivos
 
@@ -51,8 +45,6 @@ Características:
 - Selección individual o global de archivos.
 - Conservación de la extensión original.
 
-Cada archivo se renombra dentro de su propia carpeta. La lógica está aislada en `electron/renameManager.cjs`, que valida que los nombres no contengan rutas para impedir salidas fuera de la carpeta de origen.
-
 ### Video a SD
 
 Convierte videos a una resolución máxima de 480p y los guarda siempre como MP4, conservando los archivos originales.
@@ -60,26 +52,18 @@ Convierte videos a una resolución máxima de 480p y los guarda siempre como MP4
 Características:
 
 - Selección de varias carpetas en una misma ejecución.
-- Procesamiento de MP4, M4V, MOV, AVI, MKV, WEBM, WMV, FLV, MPG, MPEG, TS, MTS, M2TS, VOB, OGV, 3GP, 3G2 y ASF.
+- Formatos MP4, M4V, MOV, AVI, MKV, WEBM, WMV, FLV, MPG, MPEG, TS, MTS, M2TS, VOB, OGV, 3GP, 3G2 y ASF.
 - Códec H.264 para máxima compatibilidad o H.265 para mayor compresión.
-- Selección de pistas de audio y subtítulos en contenedores MKV.
-- Conversión de pistas de audio seleccionadas a AAC de 128 kbps.
-- Conversión de subtítulos de texto compatibles a `mov_text` para MP4.
-- Exclusión visible de subtítulos basados en imagen, como PGS y VobSub.
-- Progreso global y por archivo en tiempo real.
-- Cancelación del proceso activo.
-- Cola dinámica: permite añadir carpetas mientras la conversión está en curso.
-- Eliminación de carpetas pendientes sin interrumpir la carpeta activa.
-- Recálculo del progreso global cuando cambia la cola.
-- Carpetas colapsables con selección persistente de pistas.
-- Salida en `sd-output-h264` o `sd-output-h265` dentro de cada carpeta seleccionada.
-- Normalización opcional del audio durante la conversión con `loudnorm` y objetivo de LUFS configurable (-14 a -23, recomendado -16).
-- Sufijo `_SD` para evitar modificar o reemplazar los originales.
-- Conversión mediante FFmpeg para los formatos principales y `handbrake-js` para las entradas adicionales (al activar la normalización de audio, todos los archivos se procesan con FFmpeg).
-- Todas las entradas se escriben como MP4 para obtener una salida uniforme.
-- Aviso integrado sobre pérdida de detalle visual y compresión de audio.
+- Selección de pistas de audio y subtítulos en contenedores MKV: el audio se convierte a AAC de 128 kbps y los subtítulos de texto a `mov_text`; los basados en imagen (PGS, VobSub) se omiten por incompatibilidad con MP4.
+- Progreso global y por archivo en tiempo real con cancelación del proceso activo.
+- Cola dinámica: se pueden añadir o quitar carpetas durante la conversión, con recálculo del progreso.
+- Carpetas colapsables con selección persistente de pistas y accesos rápidos para seleccionar o deseleccionar todas las pistas de audio y subtítulos de cada video.
+- Indicador de completado por archivo: cada video ya convertido se marca con ✓ y la carpeta se resalta cuando todos sus archivos están procesados.
+- Botón Limpiar que restablece la cola, las selecciones de pistas y el estado del proceso también en el menú lateral.
+- Normalización opcional del audio con `loudnorm` y objetivo de LUFS configurable (recomendado -16).
+- Salida MP4 en `sd-output-h264` o `sd-output-h265` con sufijo `_SD`; los originales nunca se modifican.
 
-Esta herramienta requiere que los ejecutables `ffmpeg` y `ffprobe` estén instalados y disponibles en la variable de entorno `PATH`.
+Como el resultado siempre es MP4, la herramienta avisa que se pierde detalle visual y el audio se comprime.
 
 ### Normalizar volumen
 
@@ -91,6 +75,7 @@ Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio c
 - Proceso independiente de la navegación: continúa aunque cambies de sección dentro de la suite.
 - Barra de progreso en el sidebar con el porcentaje global de la cola.
 - Progreso por archivo y cancelación del proceso activo.
+- Indicador de completado por archivo: cada audio o video ya normalizado (existente en `normalized_output-...`) se marca con ✓, tanto al explorar como al terminar durante la ejecución.
 - Video copiado sin recodificar para evitar pérdida visual y reducir el tiempo de proceso.
 - Resultado guardado en `normalized_output-audio` (archivos de audio) o `normalized_output-video` (videos) dentro de cada carpeta, con el sufijo `_normalized`.
 - Los archivos originales nunca se reemplazan.
@@ -111,21 +96,6 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 - Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
 - Consulta de precios mediante scraping local de JSON-LD, metadatos de producto y HTML.
 
-### Bypass de URLs
-
-Resuelve el destino de URLs cortas y páginas intermedias publicitarias sin abrirlas primero en el navegador.
-
-- Sigue hasta 12 redirecciones HTTP y HTTPS.
-- Detecta redirecciones `meta refresh`.
-- Extrae destinos de parámetros codificados y patrones HTML habituales.
-- Resuelve páginas de archivo de MediaFire a su enlace directo de descarga.
-- Muestra el dominio final y la cadena completa de navegación.
-- Permite copiar o abrir el resultado validado.
-- Bloquea localhost, credenciales embebidas y direcciones privadas o reservadas.
-- Limita cada respuesta a 1 MB y aplica tiempos máximos de espera. Las respuestas binarias (archivos) se detectan por su tipo de contenido y se tratan como destino final sin leer el cuerpo, evitando superar ese límite.
-
-La implementación utiliza `normalize-url`, `tldts` y `cheerio`. Los adaptadores HTML están aislados en `electron/urlResolver.cjs` para facilitar su mantenimiento cuando cambien los servicios. No se ejecuta JavaScript de terceros, no se resuelven CAPTCHA y no se evaden controles de autenticación o acceso.
-
 ### Gestor de descargas
 
 Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pestañas: Descargas, Identificador y Configuración.
@@ -139,27 +109,22 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Cola persistente agrupada por carpeta de destino.
 - Grupos colapsables con barra de progreso general en el encabezado.
 - Indicador de éxito cuando todas las descargas de un grupo se completan.
-- Segundo nivel de agrupación por colección de enlaces, también colapsable.
-- Nombre de colección editable y asignación común para múltiples enlaces.
-- Expansión recursiva de carpetas públicas de MediaFire, conservando sus subcolecciones.
-- Resolución de páginas de archivo de MediaFire (`/file/...`) al enlace directo de su CDN, sin sesión, extraído del botón de descarga de la página.
-- Los enlaces directos resultantes nunca se descargan durante la resolución: si una URL candidata es binaria, se adopta como destino final.
-- Expansión recursiva de carpetas públicas de Google Drive mediante una API key.
-- Detección de archivos individuales de Drive en formatos `/file/d/{id}` y `open?id={id}`.
-- Exportación automática de Documentos, Hojas, Presentaciones y Dibujos de Google.
-- De una a ocho descargas simultáneas.
-- Pausa, reanudación y detención con conservación de archivos parciales.
-- Progreso, tamaño y velocidad actual.
-- Apertura del enlace original y localización del archivo descargado.
+- Segundo nivel de agrupación por colección de enlaces, también colapsable, con nombre editable asignable a varios enlaces.
+- Expansión recursiva de carpetas públicas de MediaFire (conservando subcolecciones) y resolución de páginas de archivo al enlace directo de su CDN, sin sesión.
+- Expansión recursiva de carpetas públicas de Google Drive con API key, detección de enlaces individuales y exportación automática de documentos de Google.
+- Identificación y descarga de videos de YouTube (incluidos los atajos `youtu.be`), Vimeo, Dailymotion, TikTok, Twitch, X/Twitter, Facebook, Instagram, SoundCloud, VK, OK y Rutube mediante `yt-dlp`, sin necesidad de sesión.
+- Al analizar un enlace de video, el **Identificador** muestra el título y genera un candidato por resolución disponible (de 144p a 2160p) más una opción de solo audio, todos seleccionados para añadir a la cola.
+- La descarga de video selecciona el mejor formato con video y audio y lo fusiona en un único MP4; la opción de solo audio descarga el formato de mayor calidad de sonido.
+- Si `yt-dlp` no reconoce el contenido de un video (por cambios recientes de YouTube), la aplicación intenta actualizar el binario automáticamente y reintenta el análisis antes de marcar el enlace como "No encontrado".
+- De una a ocho descargas simultáneas con pausa, reanudación y detención, conservando archivos parciales.
+- Progreso, tamaño y velocidad, con apertura del enlace original y localización del archivo descargado.
 - Limpieza de tareas completadas.
-- Extracción automática de ZIP, 7z, RAR, TAR, GZ, BZ2 y XZ.
-- Contraseña previa por enlace y reintento cuando un comprimido la requiera.
-- Detección automática de enlaces copiados mediante `clipboard-event` (sin sondeo): al copiar cualquier texto que contenga la URL de un servidor compatible o de una descarga directa (con o sin el prefijo `http://`), el contenido se analiza y la lista completa se añade a la sección **Identificador**, con estado "En línea" o "No encontrado". Copiar una URL no inicia una descarga automáticamente.
-- Captura global desde cualquier sección de la suite: al detectar enlaces estando fuera de Descargas, el botón **Descargas** del menú lateral muestra un indicador con la cantidad de nuevos enlaces capturados; al abrir la sección se accede directamente al **Identificador** y el indicador se reinicia.
+- Al iniciar la aplicación, las tareas interrumpidas durante la extracción se reintentan automáticamente.
+- Extracción automática de ZIP, 7z, RAR, TAR, GZ, BZ2 y XZ y reintento cuando un comprimido requiere contraseña.
+- Detección automática de enlaces copiados (sin sondeo): los enlaces válidos se añaden a la sección **Identificador** con estado "En línea" o "No encontrado"; copiar una URL no inicia una descarga por sí mismo.
+- Captura global desde cualquier sección: el botón **Descargas** del menú muestra el número de enlaces capturados recientemente y el indicador se reinicia al entrar.
 
-Las descargas utilizan `node-downloader-helper`. La extracción usa la versión completa de 7-Zip (`vendor/7zip/`) con binarios desempaquetados. La detección de portapapeles usa el binario nativo de `clipboard-event`. Las tareas y configuraciones se guardan en el directorio local de datos de Electron.
-
-Google Drive requiere una API key con Google Drive API habilitada. La clave se configura localmente en la pestaña Configuración y conviene restringirla a esa API desde Google Cloud Console. MEGA se reconoce como colección, pero se mantiene como no descargable porque necesita un canal cifrado específico que no es compatible con el descargador HTTP reanudable. MediaFire dispone de expansión pública sin credenciales.
+Google Drive requiere una API key con Drive API habilitada; se configura en Descargas > Configuración. Solo pueden enumerarse carpetas compartidas públicamente: no se solicitan permisos sobre la cuenta personal del usuario.
 
 Para configurar Google Drive:
 
@@ -167,19 +132,16 @@ Para configurar Google Drive:
 2. Habilita **Google Drive API** desde la biblioteca de APIs.
 3. Crea una credencial de tipo **API key**.
 4. Restringe la clave para que solo pueda utilizar Google Drive API.
-5. Pega la clave en Descargas > Configuración > Google Drive.
-
-Solo pueden enumerarse carpetas compartidas públicamente. No se solicitan permisos sobre la cuenta personal del usuario. La API key, las contraseñas de extracción, la cola y las preferencias se guardan localmente en el directorio de datos de Electron.
+5. Pega la clave en la pestaña Configuración.
 
 ## Requisitos
 
 - Node.js 26.9.0 o posterior.
 - npm 11.19.1 o posterior.
-- Un entorno de escritorio compatible con Electron.
 - FFmpeg y FFprobe para utilizar el módulo Video a SD.
-- Conexión a Internet para Bypass de URLs, Descargas y las integraciones con hosts externos.
+- Conexión a Internet para Descargas y las integraciones con hosts externos.
 
-HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente.
+HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente. `yt-dlp` se distribuye dentro de la aplicación (en `vendor/` al compilar) y, ante fallos de reconocimiento de videos, intenta actualizarse automáticamente y reintenta el análisis.
 
 ## Instalación
 
@@ -228,7 +190,7 @@ npm run dist:linux  # Linux (AppImage + deb)
 
 También está disponible `npm run pack`, que crea la aplicación desempaquetada en `release/<plataforma>-unpacked/` (útil para comprobaciones rápidas).
 
-Cada plataforma debe empaquetarse desde su propio sistema operativo (o mediante CI multi-plataforma): electron-builder incluye solo los binarios nativos de la plataforma de origen. Los binarios de HandBrake y de la versión completa de 7-Zip (en `vendor/7zip/`, con soporte de RAR, incluye de forma separada su licencia) se extraen fuera del `app.asar` para poder ejecutarse en tiempo de ejecución.
+Cada plataforma debe empaquetarse desde su propio sistema operativo (o mediante CI multi-plataforma), ya que electron-builder incluye solo los binarios nativos de la plataforma de origen.
 
 ## Calidad de código
 
@@ -274,7 +236,9 @@ CHUCK's Tools Suite/
 │   ├── priceScraper.cjs     # Scraping de precios para la wishlist
 │   ├── renameManager.cjs    # Listado y renombrado de archivos
 │   ├── videoConversion.cjs  # Conversión FFmpeg/HandBrake
+│   ├── videoProvider.cjs    # Identificación y descarga de videos con yt-dlp
 │   ├── urlResolver.cjs      # Resolución y validación segura de URLs
+│   ├── clipboardWatcher.cjs # Detección de enlaces copiados
 │   └── downloadManager.cjs  # Cola persistente y extracción
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
@@ -284,7 +248,6 @@ CHUCK's Tools Suite/
 │   ├── NormalizeTool.tsx # Normalización de volumen
 │   ├── CollectionTool.tsx # Catálogos y fichas personalizadas
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
-│   ├── UrlBypassTool.tsx # Resolución de URLs cortas e intermedias
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual y diseño responsive
@@ -309,7 +272,7 @@ La aplicación separa el renderer de las operaciones privilegiadas:
 - Los nombres enviados al módulo de renombrado no pueden incluir rutas.
 - Cada salto de una URL se valida contra localhost, credenciales embebidas, redes privadas y direcciones reservadas.
 - La resolución DNS se vuelve a validar al establecer la conexión para reducir ataques de DNS rebinding.
-- Las respuestas inspeccionadas por el bypass se limitan a 1 MB y tienen timeout.
+- Las respuestas inspeccionadas por la resolución de URLs se limitan a 1 MB y tienen timeout.
 - Las descargas no siguen redirecciones nuevas después de resolver y validar el destino.
 - El renderer no recibe acceso general al portapapeles ni al sistema operativo, solo operaciones específicas.
 
@@ -320,15 +283,6 @@ El gestor persiste su estado en `downloads.json` dentro de `app.getPath('userDat
 ### Dependencias conocidas
 
 `handbrake-js` mantiene avisos de auditoría heredados de su dependencia `decompress`. Esta dependencia se usa durante la instalación para obtener HandBrakeCLI y no se expone a archivos proporcionados por el usuario. No existe actualmente una versión moderna de `handbrake-js` que elimine esos avisos sin dejar de ser compatible con Node.js 26.
-
-## Flujo para agregar herramientas
-
-1. Crear un componente dentro de `src/`.
-2. Añadir las operaciones privilegiadas necesarias en `electron/main.cjs`.
-3. Exponer una API mínima en `electron/preload.cjs`.
-4. Declarar su contrato en `src/types.ts`.
-5. Incorporar la opción al sidebar de `src/App.tsx`.
-6. Ejecutar `npm run check` antes de integrar el cambio.
 
 ## Solución de problemas
 
@@ -347,6 +301,10 @@ Verifica que no esté abierto en otra aplicación, que el usuario tenga permisos
 ### Google Drive no detecta un archivo o carpeta
 
 Comprueba que Google Drive API esté habilitada, que la API key esté configurada y restringida a esa API, y que el recurso esté compartido públicamente. Se reconocen enlaces `/file/d/{id}`, `open?id={id}` y `/folders/{id}`.
+
+### Un video de YouTube no se reconoce
+
+El reconocimiento depende de `yt-dlp`, que deja de funcionar cuando YouTube cambia su reproductor. La aplicación detecta estos fallos, intenta actualizar el binario automáticamente y vuelve a analizar el enlace. Si aun así aparece como "No encontrado", revisa la conexión a Internet y vuelve a analizarlo desde la pestaña Identificador.
 
 ### Una descarga no continúa
 

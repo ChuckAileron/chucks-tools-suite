@@ -75,11 +75,12 @@ export default function DownloadsTool({
 
   const mergeCandidates = (found: DownloadCandidate[]) =>
     setCandidates((current) => {
-      const existing = new Set(current.map((item) => item.originalUrl));
+      const key = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
+      const existing = new Set(current.map(key));
       return [
         ...current,
         ...found
-          .filter((item) => !existing.has(item.originalUrl))
+          .filter((item) => !existing.has(key(item)))
           .map((item) => ({
             ...item,
             destination: state.settings.defaultDirectory,
@@ -305,6 +306,9 @@ function DownloadRow({ task }: { task: DownloadTask }) {
     if (value !== null) await window.tools.retryExtraction(task.id, value);
   };
   const idle = !['downloading', 'extracting', 'completed'].includes(task.status);
+  const removable = ['paused', 'stopped', 'error', 'password-required', 'extracting'].includes(
+    task.status,
+  );
   return (
     <article className={`download-row status-${task.status}`}>
       <div className="download-file">
@@ -360,7 +364,7 @@ function DownloadRow({ task }: { task: DownloadTask }) {
         <button title="Abrir enlace" onClick={() => window.tools.openUrl(task.originalUrl)}>
           ↗
         </button>
-        {idle && (
+        {removable && (
           <button title="Quitar" onClick={() => window.tools.controlDownload(task.id, 'remove')}>
             ×
           </button>
@@ -407,6 +411,9 @@ function CollectorTab({
         (item) => item.selected && update(item.id, { collection: collection.trim() }),
       );
   };
+  const online = candidates.filter((item) => item.online);
+  const allSelected = online.length > 0 && online.every((item) => item.selected);
+  const noneSelected = online.every((item) => !item.selected);
   return (
     <>
       <div className="collector-input">
@@ -421,6 +428,24 @@ function CollectorTab({
       </div>
       <div className="collector-toolbar">
         <span>{message || 'Los enlaces copiados aparecerán automáticamente aquí.'}</span>
+        {online.length > 0 && (
+          <span className="collector-select-all">
+            <button
+              type="button"
+              disabled={allSelected}
+              onClick={() => online.forEach((item) => update(item.id, { selected: true }))}
+            >
+              Todo
+            </button>
+            <button
+              type="button"
+              disabled={noneSelected}
+              onClick={() => online.forEach((item) => update(item.id, { selected: false }))}
+            >
+              Ninguno
+            </button>
+          </span>
+        )}
         <div>
           <button disabled={!candidates.length} onClick={() => chooseFolder()}>
             Destino para seleccionados

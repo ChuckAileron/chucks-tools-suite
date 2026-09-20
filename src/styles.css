@@ -114,18 +114,6 @@ nav button small {
   color: #8fac9f;
   font-size: 11px;
 }
-nav button .wip-badge {
-  margin-left: auto;
-  padding: 2px 5px;
-  border: 1px solid rgba(93, 193, 185, 0.45);
-  border-radius: 5px;
-  background: rgba(93, 193, 185, 0.14);
-  color: #b9ece8;
-  font-size: 7px;
-  font-style: normal;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
 nav button .nav-notice {
   padding: 2px 7px;
   border-radius: 99px;
@@ -838,16 +826,57 @@ nav button i {
   color: #626c66;
   font-weight: 600;
 }
+.file-check {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #2f8f5b;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  vertical-align: middle;
+}
 .tracks {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 15px;
   padding: 9px 0 2px;
 }
-.tracks section > strong {
-  display: block;
+.tracks section .tracks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 5px;
+}
+.tracks section .tracks-header > strong {
   color: var(--brand-ink);
+}
+.tracks section .tracks-header span {
+  display: flex;
+  gap: 4px;
+}
+.tracks section .tracks-header button {
+  padding: 2px 7px;
+  border: 1px solid #d7ddd9;
+  border-radius: 99px;
+  background: #fff;
+  color: #5a675f;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tracks section .tracks-header button:hover:not(:disabled) {
+  border-color: #b8c7bd;
+  color: var(--brand-ink);
+}
+.tracks section .tracks-header button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .tracks label {
   display: block;
@@ -1402,6 +1431,28 @@ nav button i {
   color: #38443e;
   font-size: 10px;
   font-weight: 700;
+}
+.collector-select-all {
+  display: flex;
+  gap: 4px;
+}
+.collector-select-all button {
+  padding: 2px 7px;
+  border: 1px solid #d7ddd9;
+  border-radius: 99px;
+  background: #fff;
+  color: #5a675f;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.collector-select-all button:hover:not(:disabled) {
+  border-color: #b8c7bd;
+  color: var(--brand-ink);
+}
+.collector-select-all button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .collector-toolbar > div {
   display: flex;
@@ -2380,7 +2431,6 @@ nav button i {
   .suite-brand div,
   nav p,
   nav button span,
-  nav button .wip-badge,
   .local,
   .sidebar footer {
     display: none;

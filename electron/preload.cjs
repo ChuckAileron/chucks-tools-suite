@@ -1,15 +1,11 @@
-const { clipboard, contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('tools', {
   selectDirectory: () => ipcRenderer.invoke('directory:select'),
   scan: (data) => ipcRenderer.invoke('mover:scan', data),
   move: (data) => ipcRenderer.invoke('mover:move', data),
   undoMove: (data) => ipcRenderer.invoke('mover:undo', data),
   createDestination: (data) => ipcRenderer.invoke('directory:create-child', data),
-  resolveUrl: (url) => ipcRenderer.invoke('url:resolve', url),
   openUrl: (url) => ipcRenderer.invoke('url:open', url),
-  copyText: async (text) => {
-    await clipboard.writeText(text);
-  },
   getDownloads: () => ipcRenderer.invoke('downloads:state'),
   analyzeDownloads: (text) => ipcRenderer.invoke('downloads:analyze', text),
   addDownloads: (items) => ipcRenderer.invoke('downloads:add', items),
@@ -63,6 +59,7 @@ contextBridge.exposeInMainWorld('tools', {
   cancelVideoConversion: () => ipcRenderer.invoke('video:cancel'),
   skipVideoFolder: (folder) => ipcRenderer.invoke('video:skip-folder', folder),
   appendVideoFolders: (data) => ipcRenderer.invoke('video:append-folders', data),
+  clearVideoState: () => ipcRenderer.invoke('video:clear'),
   onVideoProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('video:progress', listener);

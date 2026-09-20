@@ -7,13 +7,6 @@ export type ScannedFile = {
   size: number;
 };
 export type MoveRecord = { originalPath: string; movedPath: string };
-export type UrlResult = {
-  input: string;
-  finalUrl: string;
-  domain: string;
-  mode: 'direct' | 'short-url' | 'advertising-page';
-  chain: { url: string; status: number; method: string }[];
-};
 export type DownloadPriority = 'urgent' | 'high' | 'medium' | 'low';
 export type DownloadCandidate = {
   id: string;
@@ -31,6 +24,8 @@ export type DownloadCandidate = {
   extract?: boolean;
   collection?: string;
   folderLink?: boolean;
+  videoUrl?: string;
+  videoFormat?: string;
 };
 export type DownloadTask = {
   id: string;
@@ -51,6 +46,8 @@ export type DownloadTask = {
   filePath?: string;
   extractedTo?: string;
   error?: string;
+  videoUrl?: string;
+  videoFormat?: string;
 };
 export type DownloadSettings = {
   defaultDirectory: string;
@@ -98,10 +95,17 @@ export type VideoState = {
   normalizeAudio: boolean;
   normalizeTarget: number;
 };
-export type NormalizeFile = { path: string; name: string; folder: string; size: number };
+export type NormalizeFile = {
+  path: string;
+  name: string;
+  folder: string;
+  size: number;
+  processed: boolean;
+};
 export type NormalizeProgress = {
   type: string;
   file?: string;
+  path?: string;
   message?: string;
   current?: number;
   total?: number;
@@ -195,9 +199,7 @@ declare global {
         path: string;
         created: boolean;
       }>;
-      resolveUrl(url: string): Promise<UrlResult>;
       openUrl(url: string): Promise<boolean>;
-      copyText(text: string): void;
       getDownloads(): Promise<DownloadsState>;
       analyzeDownloads(text: string): Promise<DownloadCandidate[]>;
       addDownloads(items: DownloadCandidate[]): Promise<void>;
@@ -271,6 +273,7 @@ declare global {
       cancelVideoConversion(): Promise<boolean>;
       skipVideoFolder(folder: string): Promise<boolean>;
       appendVideoFolders(data: { folders: string[]; codec: 'h264' | 'h265' }): Promise<boolean>;
+      clearVideoState(): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
       onVideoState(callback: (state: VideoState) => void): () => void;
       selectNormalizeFolders(): Promise<string[]>;
