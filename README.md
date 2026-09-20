@@ -91,6 +91,7 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 - Campos obligatorios y validación de datos antes de guardar.
 - Vista en tarjetas con imágenes remotas por URL HTTP o HTTPS.
 - Búsqueda, edición y eliminación de ítems.
+- Buscador de imágenes en internet al crear o editar un ítem: modal con motores Bing, Google, DuckDuckGo y Wikimedia Commons que muestra solo imágenes; al hacer clic en una y confirmar con "Usar esta imagen", su URL queda asignada al ítem.
 - Importación y exportación de cada colección en formato JSON.
 - Base de datos guardada en el directorio local de datos de Electron.
 - Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
@@ -139,7 +140,7 @@ Para configurar Google Drive:
 - Node.js 26.9.0 o posterior.
 - npm 11.19.1 o posterior.
 - FFmpeg y FFprobe para utilizar el módulo Video a SD.
-- Conexión a Internet para Descargas y las integraciones con hosts externos.
+- Conexión a Internet para Descargas, el buscador de imágenes de Colección y las integraciones con hosts externos.
 
 HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente. `yt-dlp` se distribuye dentro de la aplicación (en `vendor/` al compilar) y, ante fallos de reconocimiento de videos, intenta actualizarse automáticamente y reintenta el análisis.
 
@@ -233,6 +234,7 @@ CHUCK's Tools Suite/
 │   ├── preload.cjs          # API segura expuesta al renderer
 │   ├── audioNormalizer.cjs  # Normalización mediante FFmpeg
 │   ├── collectionManager.cjs # Colecciones y persistencia SQLite
+│   ├── imageSearch.cjs      # Búsqueda de imágenes (Bing, Google, DuckDuckGo, Wikimedia)
 │   ├── priceScraper.cjs     # Scraping de precios para la wishlist
 │   ├── renameManager.cjs    # Listado y renombrado de archivos
 │   ├── videoConversion.cjs  # Conversión FFmpeg/HandBrake
@@ -253,7 +255,7 @@ CHUCK's Tools Suite/
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, colecciones, scraping y renombrado
+├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes y renombrado
 ├── vite.config.ts
 └── package.json
 ```
@@ -313,6 +315,10 @@ Algunos servidores no admiten solicitudes por rangos. En esos casos, reanudar pu
 ### Un comprimido solicita contraseña
 
 Usa la acción de contraseña en la descarga pendiente. También puedes asignar una contraseña individual o común antes de añadir enlaces a la cola.
+
+### El buscador de imágenes no devuelve resultados en un motor
+
+Algunos motores limitan las consultas automatizadas (Google sirve resultados solo con JavaScript y DuckDuckGo puede bloquear ciertas redes). Prueba con otro motor de la modal, por ejemplo Bing o Wikimedia Commons.
 
 ## Licencia
 
