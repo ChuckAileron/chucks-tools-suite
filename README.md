@@ -58,6 +58,7 @@ Características:
 - Progreso global y por archivo en tiempo real con cancelación del proceso activo.
 - Cola dinámica: se pueden añadir o quitar carpetas durante la conversión, con recálculo del progreso.
 - Carpetas colapsables con selección persistente de pistas y accesos rápidos para seleccionar o deseleccionar todas las pistas de audio y subtítulos de cada video.
+- Las carpetas que dejes colapsadas se mantienen así al navegar entre secciones o reiniciar la aplicación.
 - Indicador de completado por archivo: cada video ya convertido se marca con ✓ y la carpeta se resalta cuando todos sus archivos están procesados.
 - Botón Limpiar que restablece la cola, las selecciones de pistas y el estado del proceso también en el menú lateral.
 - Normalización opcional del audio con `loudnorm` y objetivo de LUFS configurable (recomendado -16).
@@ -91,7 +92,7 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 - Campos obligatorios y validación de datos antes de guardar.
 - Vista en tarjetas con imágenes remotas por URL HTTP o HTTPS.
 - Búsqueda, edición y eliminación de ítems.
-- Buscador de imágenes en internet al crear o editar un ítem: modal con motores Bing, Google, DuckDuckGo y Wikimedia Commons que muestra solo imágenes; al hacer clic en una y confirmar con "Usar esta imagen", su URL queda asignada al ítem.
+- Buscador de imágenes en internet al crear o editar un ítem: modal con motores Bing, Google, DuckDuckGo, Wikimedia Commons y Openverse que muestra solo imágenes; al hacer clic en una y confirmar con "Usar esta imagen", su URL queda asignada al ítem. Cambiar de motor o lanzar una búsqueda limpia los resultados anteriores.
 - Importación y exportación de cada colección en formato JSON.
 - Base de datos guardada en el directorio local de datos de Electron.
 - Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
@@ -109,6 +110,8 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Renombrado antes de descargar y mientras la tarea no esté activa.
 - Cola persistente agrupada por carpeta de destino.
 - Grupos colapsables con barra de progreso general en el encabezado.
+- Los grupos y colecciones que dejes colapsados se mantienen así al navegar entre secciones o reiniciar la aplicación.
+- Contraseña de extracción asignable a un grupo o colección completa (botón ⌕ del encabezado): se aplica a las tareas pendientes y reintenta la extracción de las que requieren contraseña.
 - Indicador de éxito cuando todas las descargas de un grupo se completan.
 - Segundo nivel de agrupación por colección de enlaces, también colapsable, con nombre editable asignable a varios enlaces.
 - Expansión recursiva de carpetas públicas de MediaFire (conservando subcolecciones) y resolución de páginas de archivo al enlace directo de su CDN, sin sesión.
@@ -134,6 +137,25 @@ Para configurar Google Drive:
 3. Crea una credencial de tipo **API key**.
 4. Restringe la clave para que solo pueda utilizar Google Drive API.
 5. Pega la clave en la pestaña Configuración.
+
+### AnalogReplayTV
+
+Configuración de canales, programas y la programación de televisión compartida con AnalogReplayTV mediante una base de datos SQLite común. La interfaz se organiza en cuatro pestañas con contadores: Inicio, Canales, Programas y Programación.
+
+- **Inicio**: resumen de la configuración con contadores de canales activos, programas, episodios totales y estado de la programación, más acciones rápidas para crear canales y programas.
+- **Canales**: creación, edición y eliminación de canales de TV con número (1-999), nombre, descripción y estado habilitado; importación desde archivo JSON.
+- **Programas**: fichas con nombre, canales asignados (por id, uuid o nombre), años de transmisión, opción "hasta la fecha" y modo de emisión (repetición diaria o una emisión por día).
+  - Temporadas y episodios con título, duración y archivos; detección de episodios al elegir una carpeta de contenido y emparejamiento opcional de carpetas adicionales con los episodios existentes.
+  - Ordenamiento de la lista por "Canal + Nombre", "Nombre" o "Año", y filtrado por canal.
+  - Importación de programas desde archivo JSON.
+- **Programación**: generación de la parrilla para un año eligiendo década y año, regeneración y reseteo completo.
+  - Los programas se asignan a los canales que los tengan configurados y sean elegibles por la década de sus años de transmisión (o marcados como "hasta la fecha").
+  - Los episodios se agrupan en bloques (capítulos de varias partes) y solo se programan temporadas cuya carpeta de contenido real exista.
+  - El año se reparte en franjas de 30 minutos: el programa ocupa los bloques según su duración y el espacio sobrante se rellena con "Identificación de estación".
+  - Los programas en modo "repetición diaria" se vuelven a emitir tras completar su ciclo; en modo "una emisión por día" se programan una sola vez al día.
+  - Vista del día con rejilla de canales por franjas; el mes en curso se genera automáticamente si aún no existe al abrir la sección.
+
+La base de datos SQLite compartida se guarda en el directorio local de datos de Electron.
 
 ## Requisitos
 
@@ -233,8 +255,9 @@ CHUCK's Tools Suite/
 │   ├── main.cjs             # Ventana, IPC y coordinación de procesos
 │   ├── preload.cjs          # API segura expuesta al renderer
 │   ├── audioNormalizer.cjs  # Normalización mediante FFmpeg
+│   ├── analogReplay.cjs     # Canales, programas y generación de programación
 │   ├── collectionManager.cjs # Colecciones y persistencia SQLite
-│   ├── imageSearch.cjs      # Búsqueda de imágenes (Bing, Google, DuckDuckGo, Wikimedia)
+│   ├── imageSearch.cjs      # Búsqueda de imágenes (Bing, Google, DuckDuckGo, Wikimedia, Openverse)
 │   ├── priceScraper.cjs     # Scraping de precios para la wishlist
 │   ├── renameManager.cjs    # Listado y renombrado de archivos
 │   ├── videoConversion.cjs  # Conversión FFmpeg/HandBrake
@@ -250,12 +273,14 @@ CHUCK's Tools Suite/
 │   ├── NormalizeTool.tsx # Normalización de volumen
 │   ├── CollectionTool.tsx # Catálogos y fichas personalizadas
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
+│   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
+│   ├── collapseState.ts  # Persistencia de grupos colapsados (localStorage)
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes y renombrado
+├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes, renombrado y programación analog
 ├── vite.config.ts
 └── package.json
 ```
@@ -318,7 +343,7 @@ Usa la acción de contraseña en la descarga pendiente. También puedes asignar 
 
 ### El buscador de imágenes no devuelve resultados en un motor
 
-Algunos motores limitan las consultas automatizadas (Google sirve resultados solo con JavaScript y DuckDuckGo puede bloquear ciertas redes). Prueba con otro motor de la modal, por ejemplo Bing o Wikimedia Commons.
+Algunos motores limitan las consultas automatizadas (Google sirve resultados solo con JavaScript y DuckDuckGo puede bloquear ciertas redes). Prueba con otro motor de la modal, por ejemplo Bing, Wikimedia Commons u Openverse (imágenes libres de más de 800 millones de archivos; respeta sus licencias al reutilizarlas).
 
 ## Licencia
 

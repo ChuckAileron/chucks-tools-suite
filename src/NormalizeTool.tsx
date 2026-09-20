@@ -13,8 +13,16 @@ const EMPTY_NORMALIZE: NormalizeState = {
   running: false,
   globalProgress: 0,
   fileProgress: 0,
-  activeFile: 'Ningún archivo en proceso',
+  activeFile: 'Sin procesos activos',
   message: '',
+  targetDb: -16,
+  folders: [],
+  type: 'audio',
+  files: [],
+  selected: [],
+  processed: [],
+  logs: [],
+  activeFolder: '',
 };
 export default function NormalizeTool() {
   const [folders, setFolders] = useState<string[]>([]);
@@ -25,39 +33,58 @@ export default function NormalizeTool() {
   const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
   const [message, setMessage] = useState('');
   const [processed, setProcessed] = useState<Set<string>>(new Set());
+  const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
   useEffect(() => {
-    window.tools.getNormalizeState().then((state) => {
+    const hydrate = (state: NormalizeState) => {
       setNormalize(state);
+      setFolders(state.folders);
+      setType(state.type);
       if (typeof state.targetDb === 'number') setTarget(state.targetDb);
-    });
-    const stop = window.tools.onNormalizeState(setNormalize);
-    return stop;
+      setFiles(state.files);
+      setSelected(new Set(state.selected));
+      setProcessed(new Set(state.processed));
+      setLogs(state.logs);
+    };
+    window.tools.getNormalizeState().then(hydrate);
+    return window.tools.onNormalizeState(hydrate);
   }, []);
-  useEffect(() => {
-    return window.tools.onNormalizeProgress((data) => {
-      if (data.type !== 'file-done' || !data.path) return;
-      const filePath = data.path;
-      setProcessed((current) => {
-        const next = new Set(current);
-        next.add(filePath);
-        return next;
-      });
-    });
-  }, []);
+  const pushUi = (patch: Partial<NormalizeState>) => {
+    void window.tools.setNormalizeUi(patch);
+  };
   const addFolders = async () => {
     const paths = await window.tools.selectNormalizeFolders();
-    setFolders((current) => [...new Set([...current, ...paths])]);
+    const nextFolders = [...new Set([...folders, ...paths])];
+    setFolders(nextFolders);
     setFiles([]);
     setSelected(new Set());
     setProcessed(new Set());
+    setLogs([]);
+    setNormalize(EMPTY_NORMALIZE);
+    pushUi({
+      folders: nextFolders,
+      files: [],
+      selected: [],
+      processed: [],
+      logs: [],
+      running: false,
+    });
   };
   const scan = async () => {
     setMessage('Explorando archivos...');
+    setLogs([]);
+    setNormalize(EMPTY_NORMALIZE);
     try {
       const result = await window.tools.scanNormalizeFiles({ folders, type });
       setFiles(result);
       setSelected(new Set(result.map((file) => file.path)));
       setProcessed(new Set(result.filter((file) => file.processed).map((file) => file.path)));
+      pushUi({
+        files: result,
+        selected: result.map((file) => file.path),
+        processed: result.filter((file) => file.processed).map((file) => file.path),
+        logs: [],
+        running: false,
+      });
       setMessage(
         result.length
           ? 'Revisa la selección antes de continuar.'
@@ -71,13 +98,60 @@ export default function NormalizeTool() {
     if (target < -50 || target > -5)
       return setMessage('El objetivo debe estar entre -50 y -5 LUFS.');
     setMessage('');
+    setLogs([]);
+    pushUi({ logs: [] });
     await window.tools.startNormalization({
       files: files.filter((file) => selected.has(file.path)),
       type,
       targetDb: target,
     });
   };
+  const clear = () => {
+    setFolders([]);
+    setFiles([]);
+    setSelected(new Set());
+    setProcessed(new Set());
+    setLogs([]);
+    setNormalize(EMPTY_NORMALIZE);
+    pushUi({ folders: [], files: [], selected: [], processed: [], logs: [], running: false });
+  };
+  const removeFolder = async (folder: string) => {
+    if (normalize.running) {
+      const ok = await window.tools.skipNormalizeFolder(folder);
+      if (!ok)
+        setMessage('No se puede quitar una carpeta mientras se procesa uno de sus archivos.');
+      return;
+    }
+    const nextFolders = folders.filter((item) => item !== folder);
+    const kept = new Set(files.filter((file) => file.folder !== folder).map((file) => file.path));
+    const nextFiles = files.filter((file) => kept.has(file.path));
+    setFolders(nextFolders);
+    setFiles(nextFiles);
+    const nextSelected = [...selected].filter((path) => kept.has(path));
+    const nextProcessed = [...processed].filter((path) => kept.has(path));
+    setSelected(new Set(nextSelected));
+    setProcessed(new Set(nextProcessed));
+    pushUi({
+      folders: nextFolders,
+      files: nextFiles,
+      selected: nextSelected,
+      processed: nextProcessed,
+    });
+  };
+  const toggleSelected = (path: string) => {
+    const next = new Set(selected);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setSelected(next);
+    pushUi({ selected: [...next] });
+  };
+  const toggleAll = () => {
+    const next = all ? new Set<string>() : new Set(files.map((file) => file.path));
+    setSelected(next);
+    pushUi({ selected: [...next] });
+  };
   const all = files.length > 0 && selected.size === files.length;
+  const normalizedCount = files.filter((file) => processed.has(file.path)).length;
   return (
     <section className="tool normalize-tool">
       <header>
@@ -100,25 +174,28 @@ export default function NormalizeTool() {
           <button disabled={normalize.running} onClick={addFolders}>
             + Añadir carpetas
           </button>
-          <button
-            disabled={normalize.running || !folders.length}
-            onClick={() => {
-              setFolders([]);
-              setFiles([]);
-              setSelected(new Set());
-              setProcessed(new Set());
-            }}
-          >
+          <button disabled={normalize.running || !folders.length} onClick={clear}>
             Limpiar
           </button>
           <select
             disabled={normalize.running}
             value={type}
             onChange={(event) => {
-              setType(event.target.value as MediaType);
+              const next = event.target.value as MediaType;
+              setType(next);
               setFiles([]);
               setSelected(new Set());
               setProcessed(new Set());
+              setLogs([]);
+              setNormalize(EMPTY_NORMALIZE);
+              pushUi({
+                type: next,
+                files: [],
+                selected: [],
+                processed: [],
+                logs: [],
+                running: false,
+              });
             }}
           >
             <option value="audio">Archivos de audio</option>
@@ -127,17 +204,26 @@ export default function NormalizeTool() {
         </div>
         <div className="normalize-folders">
           {folders.length ? (
-            folders.map((folder) => (
-              <div key={folder}>
-                <span title={folder}>{folder}</span>
-                <button
-                  disabled={normalize.running}
-                  onClick={() => setFolders((current) => current.filter((item) => item !== folder))}
-                >
-                  Quitar
-                </button>
-              </div>
-            ))
+            folders.map((folder) => {
+              const folderFiles = files.filter((file) => file.folder === folder);
+              const folderDone = folderFiles.filter((file) => processed.has(file.path)).length;
+              return (
+                <div key={folder}>
+                  <span title={folder}>{folder}</span>
+                  {folderFiles.length > 0 && (
+                    <em>
+                      {folderDone} de {folderFiles.length}
+                    </em>
+                  )}
+                  <button
+                    disabled={normalize.running && normalize.activeFolder === folder}
+                    onClick={() => void removeFolder(folder)}
+                  >
+                    Quitar
+                  </button>
+                </div>
+              );
+            })
           ) : (
             <p>No hay carpetas seleccionadas.</p>
           )}
@@ -192,14 +278,7 @@ export default function NormalizeTool() {
           <div className="results normalize-results">
             <div>
               <label>
-                <input
-                  type="checkbox"
-                  checked={all}
-                  onChange={() =>
-                    setSelected(all ? new Set() : new Set(files.map((file) => file.path)))
-                  }
-                />{' '}
-                {files.length} archivos
+                <input type="checkbox" checked={all} onChange={toggleAll} /> {files.length} archivos
               </label>
               <span>{selected.size} seleccionados</span>
             </div>
@@ -209,25 +288,18 @@ export default function NormalizeTool() {
                   <input
                     type="checkbox"
                     checked={selected.has(file.path)}
-                    onChange={() => {
-                      const next = new Set(selected);
-                      if (next.has(file.path)) next.delete(file.path);
-                      else next.add(file.path);
-                      setSelected(next);
-                    }}
+                    onChange={() => toggleSelected(file.path)}
                   />
                   <span>
-                    <strong>
-                      {file.name}
-                      {processed.has(file.path) && (
-                        <em className="file-check" title="Archivo procesado">
-                          ✓
-                        </em>
-                      )}
-                    </strong>
+                    <strong>{file.name}</strong>
                     <small>{file.folder}</small>
                   </span>
                   <i>{formatSize(file.size)}</i>
+                  {processed.has(file.path) && (
+                    <em className="file-check" title="Archivo procesado" aria-hidden="true">
+                      ✓
+                    </em>
+                  )}
                 </label>
               ))}
             </section>
@@ -235,12 +307,36 @@ export default function NormalizeTool() {
         )}
         <div className="normalize-progress">
           <span>
+            <strong>Progreso global</strong>
+            <b>{normalize.globalProgress}%</b>
+          </span>
+          <i>
+            <b style={{ width: `${normalize.globalProgress}%` }} />
+          </i>
+          {files.length > 0 && (
+            <em>
+              {normalizedCount} de {files.length} archivos procesados
+            </em>
+          )}
+          <br />
+          <span>
             <strong>{normalize.message || 'Sin procesos activos'}</strong>
             <b>{normalize.fileProgress}%</b>
           </span>
           <i>
             <b style={{ width: `${normalize.fileProgress}%` }} />
           </i>
+        </div>
+        <div className="normalize-log">
+          {logs.length ? (
+            logs.map((item, index) => (
+              <div className={item.tone} key={`${index}-${item.text}`}>
+                {item.text}
+              </div>
+            ))
+          ) : (
+            <span>El registro de normalización aparecerá aquí.</span>
+          )}
         </div>
         <div className="tool-action simple">
           <span>

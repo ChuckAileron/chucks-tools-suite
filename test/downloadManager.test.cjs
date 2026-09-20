@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { DownloadManager, extractLinks } = require('../electron/downloadManager.cjs');
 
 const manager = new DownloadManager('unused-download-test.json', () => {});
@@ -75,4 +78,25 @@ test('extrae múltiples enlaces de texto mixto y limpia puntuación final', () =
 test('deduplica enlaces repetidos y no captura texto sin URLs', () => {
   assert.deepEqual(extractLinks('hola mundo sin enlaces'), []);
   assert.deepEqual(extractLinks('https://a.com/1 https://a.com/1'), ['https://a.com/1']);
+});
+
+test('permite cambiar la contraseña de una tarea activa (descargando)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dm-update-test-'));
+  const isolated = new DownloadManager(path.join(dir, 'downloads.json'), () => {});
+  isolated.tasks.set('t1', { id: 't1', status: 'downloading', password: '' });
+  isolated.active.set('t1', {});
+  assert.equal(isolated.update('t1', { password: 'secreta' }), true);
+  assert.equal(isolated.tasks.get('t1').password, 'secreta');
+  const persisted = JSON.parse(fs.readFileSync(path.join(dir, 'downloads.json'), 'utf8'));
+  assert.equal(persisted.tasks[0].password, 'secreta');
+});
+
+test('sigue bloqueando otros cambios en tareas activas', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dm-update-test-'));
+  const isolated = new DownloadManager(path.join(dir, 'downloads.json'), () => {});
+  isolated.tasks.set('t1', { id: 't1', status: 'downloading', progress: 10 });
+  isolated.active.set('t1', {});
+  assert.equal(isolated.update('t1', { progress: 99 }), false);
+  assert.equal(isolated.tasks.get('t1').progress, 10);
+  assert.equal(isolated.update('no-existe', { password: 'x' }), false);
 });

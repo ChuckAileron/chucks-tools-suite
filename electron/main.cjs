@@ -9,6 +9,7 @@ const { DownloadManager } = require('./downloadManager.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
 const { scrapePrice } = require('./priceScraper.cjs');
 const { searchImages } = require('./imageSearch.cjs');
+const analogReplay = require('./analogReplay.cjs');
 const { listFiles, renameFile } = require('./renameManager.cjs');
 let downloadManager;
 let collectionManager;
@@ -36,7 +37,7 @@ let videoState = {
   trackSelections: {},
   globalProgress: 0,
   fileProgress: 0,
-  activeFile: 'Ningún archivo en proceso',
+  activeFile: 'Sin procesos activos',
   activeFolder: '',
   logs: [],
   normalizeAudio: false,
@@ -50,13 +51,22 @@ const parseVideoTarget = (value) => {
 };
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
+let normalizeQueue = [];
+let activeNormalizeFilePath = '';
 let normalizeState = {
   running: false,
   globalProgress: 0,
   fileProgress: 0,
-  activeFile: 'Ningún archivo en proceso',
+  activeFile: 'Sin procesos activos',
   message: '',
   targetDb: -16,
+  folders: [],
+  type: 'audio',
+  files: [],
+  selected: [],
+  processed: [],
+  logs: [],
+  activeFolder: '',
 };
 const parseTargetDb = (value) => {
   const parsed = Number(value);
@@ -122,15 +132,23 @@ function emitVideoProgress(data) {
   }
 }
 function emitNormalizeProgress(data) {
+  const addLog = (text, tone) => {
+    normalizeState = {
+      ...normalizeState,
+      logs: [...(normalizeState.logs || []).slice(-99), { text, tone }],
+    };
+  };
   if (data.type === 'file-start') {
     normalizeState = {
       ...normalizeState,
       running: true,
       fileProgress: 0,
       activeFile: data.file || 'Archivo',
+      activeFolder: data.folder || '',
       globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
       message: `Procesando ${data.file}`,
     };
+    addLog(`Convirtiendo ${data.file}`);
   } else if (data.type === 'file-progress') {
     normalizeState = { ...normalizeState, fileProgress: data.percent || 0 };
   } else if (data.type === 'file-done') {
@@ -139,28 +157,37 @@ function emitNormalizeProgress(data) {
       fileProgress: 100,
       globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
       message: `${data.file} completado`,
+      processed: data.path
+        ? [...new Set([...(normalizeState.processed || []), data.path])]
+        : normalizeState.processed || [],
     };
+    addLog(`✓ ${data.file} completado`, 'success');
   } else if (data.type === 'error') {
     normalizeState = {
       ...normalizeState,
       message: `Error en ${data.file}: ${data.message}`,
     };
+    addLog(`Error en ${data.file || 'archivo'}: ${data.message || ''}`, 'error');
   } else if (data.type === 'done') {
     normalizeState = {
       ...normalizeState,
       running: false,
       fileProgress: 100,
       globalProgress: 100,
+      activeFolder: '',
       message: `${data.completed} archivos normalizados`,
     };
+    addLog(`${data.completed} archivos normalizados.`, 'success');
   } else if (data.type === 'cancelled') {
     normalizeState = {
       ...normalizeState,
       running: false,
       fileProgress: 0,
       globalProgress: 0,
+      activeFolder: '',
       message: 'Proceso cancelado',
     };
+    addLog('Proceso cancelado.', 'error');
   }
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('normalizer:progress', data);
@@ -454,6 +481,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('downloads:control', (_event, { id, action }) =>
     downloadManager.control(id, action),
   );
+  ipcMain.handle('downloads:control-many', (_event, { ids, action }) =>
+    downloadManager.controlMany(ids, action),
+  );
   ipcMain.handle('downloads:clear-completed', () => downloadManager.clearCompleted());
   ipcMain.handle('downloads:settings', (_event, settings) => downloadManager.setSettings(settings));
   ipcMain.handle('downloads:retry-extraction', (_event, { id, password }) =>
@@ -505,6 +535,48 @@ app.whenReady().then(async () => {
     return collectionManager.importCollection(payload, 'rename');
   });
   ipcMain.handle('images:search', (_event, data) => searchImages(data || {}));
+  ipcMain.handle('analog:channels:list', () => analogReplay.listChannels());
+  ipcMain.handle('analog:channels:create', (_event, data) => analogReplay.createChannel(data));
+  ipcMain.handle('analog:channels:update', (_event, { id, patch }) =>
+    analogReplay.updateChannel(id, patch),
+  );
+  ipcMain.handle('analog:channels:delete', (_event, id) => analogReplay.deleteChannel(id));
+  ipcMain.handle('analog:shows:list', () => analogReplay.listShows());
+  ipcMain.handle('analog:shows:create', (_event, data) => analogReplay.createShow(data));
+  ipcMain.handle('analog:shows:update', (_event, { id, patch }) =>
+    analogReplay.updateShow(id, patch),
+  );
+  ipcMain.handle('analog:shows:delete', (_event, id) => analogReplay.deleteShow(id));
+  ipcMain.handle('analog:select-json', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('analog:channels:import', (_event, filePath) =>
+    analogReplay.importChannelsFile(filePath),
+  );
+  ipcMain.handle('analog:shows:import', (_event, filePath) =>
+    analogReplay.importShowFile(filePath),
+  );
+  ipcMain.handle('analog:select-folder', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('analog:folder-videos', (_event, folderPath) =>
+    analogReplay.getFolderVideos(folderPath),
+  );
+  ipcMain.handle('analog:folder-match', (_event, { folderPath, episodes }) =>
+    analogReplay.matchFolderEpisodes(folderPath, episodes),
+  );
+  ipcMain.handle('analog:schedule:status', () => analogReplay.scheduleStatus());
+  ipcMain.handle('analog:schedule:config', () => analogReplay.loadScheduleConfig());
+  ipcMain.handle('analog:schedule:generate', (_event, year) => analogReplay.generateYear(year));
+  ipcMain.handle('analog:schedule:month', (_event, { year, month }) =>
+    analogReplay.getMonthSchedule(year, month),
+  );
+  ipcMain.handle('analog:schedule:reset', () => analogReplay.resetSchedule());
   ipcMain.handle('wishlist:list', (_event, q) => collectionManager.listWishlist(q));
   ipcMain.handle('wishlist:create', (_event, data) => collectionManager.createWishlistItem(data));
   ipcMain.handle('wishlist:update', (_event, { id, patch }) =>
@@ -588,7 +660,7 @@ app.whenReady().then(async () => {
       trackSelections,
       globalProgress: 0,
       fileProgress: 0,
-      activeFile: 'Ningún archivo en proceso',
+      activeFile: 'Sin procesos activos',
       activeFolder: '',
       logs: [],
       normalizeAudio: !!normalizeAudio,
@@ -692,7 +764,7 @@ app.whenReady().then(async () => {
       trackSelections: {},
       globalProgress: 0,
       fileProgress: 0,
-      activeFile: 'Ningún archivo en proceso',
+      activeFile: 'Sin procesos activos',
       activeFolder: '',
       logs: [],
     };
@@ -733,14 +805,39 @@ app.whenReady().then(async () => {
     });
     return result.canceled ? [] : result.filePaths;
   });
-  ipcMain.handle('normalizer:scan', (_event, data) => scanMedia(data.folders, data.type));
+  ipcMain.handle('normalizer:scan', async (_event, data) => {
+    const files = await scanMedia(data.folders, data.type);
+    normalizeState = {
+      ...normalizeState,
+      running: false,
+      folders: data.folders,
+      type: data.type,
+      files,
+      selected: files.map((file) => file.path),
+      processed: files.filter((file) => file.processed).map((file) => file.path),
+    };
+    return files;
+  });
   ipcMain.handle('normalizer:state', () => normalizeState);
   ipcMain.handle('normalizer:set-target', (_event, targetDb) => {
     normalizeState = { ...normalizeState, targetDb: parseTargetDb(targetDb) };
     return normalizeState.targetDb;
   });
+  ipcMain.handle('normalizer:set-ui', (_event, data) => {
+    const next = { ...normalizeState };
+    if (Array.isArray(data?.folders)) next.folders = data.folders;
+    if (data?.type === 'audio' || data?.type === 'video') next.type = data.type;
+    if (Array.isArray(data?.files)) next.files = data.files;
+    if (Array.isArray(data?.selected)) next.selected = data.selected;
+    if (Array.isArray(data?.processed)) next.processed = data.processed;
+    if (typeof data?.running === 'boolean') next.running = data.running;
+    normalizeState = next;
+    return true;
+  });
   ipcMain.handle('normalizer:start', async (_event, { files, type, targetDb }) => {
     normalizeCancelled = false;
+    activeNormalizeFilePath = '';
+    normalizeQueue = [...files];
     let completed = 0;
     normalizeState = {
       ...normalizeState,
@@ -749,18 +846,25 @@ app.whenReady().then(async () => {
       globalProgress: 0,
       fileProgress: 0,
       activeFile: 'Iniciando normalización',
+      activeFolder: '',
       message: 'Iniciando normalización',
+      selected: files.map((file) => file.path),
+      logs: [],
     };
     for (const window of BrowserWindow.getAllWindows())
       window.webContents.send('normalizer:state-changed', normalizeState);
-    for (const file of files) {
+    while (normalizeQueue.length) {
       if (normalizeCancelled) break;
+      const file = normalizeQueue.shift();
+      activeNormalizeFilePath = file.path;
+      const total = completed + normalizeQueue.length + 1;
       emitNormalizeProgress({
         type: 'file-start',
         file: file.name,
         path: file.path,
+        folder: file.folder,
         current: completed,
-        total: files.length,
+        total,
       });
       try {
         await normalizeMedia({
@@ -785,7 +889,7 @@ app.whenReady().then(async () => {
           file: file.name,
           path: file.path,
           current: completed,
-          total: files.length,
+          total: completed + normalizeQueue.length,
         });
       } catch (error) {
         if (error.code !== 'CANCELLED')
@@ -795,16 +899,37 @@ app.whenReady().then(async () => {
             message: error.message,
           });
       }
+      activeNormalizeFilePath = '';
     }
+    normalizeQueue = [];
     activeNormalizeProcess = null;
     emitNormalizeProgress({
       type: normalizeCancelled ? 'cancelled' : 'done',
       completed,
-      total: files.length,
+      total: completed,
     });
+  });
+  ipcMain.handle('normalizer:skip-folder', (_event, folder) => {
+    const activeFile = normalizeState.files.find((file) => file.path === activeNormalizeFilePath);
+    if (normalizeState.running && activeFile && activeFile.folder === folder) return false;
+    normalizeQueue = normalizeQueue.filter((file) => file.folder !== folder);
+    const removed = new Set(
+      normalizeState.files.filter((file) => file.folder === folder).map((file) => file.path),
+    );
+    normalizeState = {
+      ...normalizeState,
+      folders: normalizeState.folders.filter((item) => item !== folder),
+      files: normalizeState.files.filter((file) => file.folder !== folder),
+      selected: normalizeState.selected.filter((path) => !removed.has(path)),
+      processed: normalizeState.processed.filter((path) => !removed.has(path)),
+    };
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('normalizer:state-changed', normalizeState);
+    return true;
   });
   ipcMain.handle('normalizer:cancel', () => {
     normalizeCancelled = true;
+    normalizeQueue = [];
     if (activeNormalizeProcess && !activeNormalizeProcess.killed) {
       if (process.platform === 'win32')
         execFile('taskkill', ['/pid', String(activeNormalizeProcess.pid), '/T', '/F'], () => {});

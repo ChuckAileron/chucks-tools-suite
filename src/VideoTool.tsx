@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { VideoFolder, VideoState, VideoTrack } from './types';
+import { loadCollapsed, saveCollapsed } from './collapseState';
 
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
@@ -18,9 +19,12 @@ export default function VideoTool() {
   const [running, setRunning] = useState(false);
   const [globalProgress, setGlobalProgress] = useState(0);
   const [fileProgress, setFileProgress] = useState(0);
-  const [activeFile, setActiveFile] = useState('Ningún archivo en proceso');
+  const [activeFile, setActiveFile] = useState('Sin procesos activos');
   const [activeFolder, setActiveFolder] = useState('');
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(loadCollapsed('video')));
+  useEffect(() => {
+    saveCollapsed('video', [...collapsed]);
+  }, [collapsed]);
   const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
   const [normalizeAudio, setNormalizeAudio] = useState(false);
   const [normalizeTarget, setNormalizeTarget] = useState(-16);
@@ -66,13 +70,15 @@ export default function VideoTool() {
     setSelections((current) => {
       const next = { ...current };
       for (const folder of results)
-        for (const video of folder.videos)
+        for (const video of folder.videos) {
+          if (!video.audio.length && !video.subtitles.length && !video.probeError) continue;
           next[video.path] ||= {
             audio: video.audio.map((track) => track.index),
             subtitles: video.subtitles
               .filter((track) => MP4_SUBTITLE_CODECS.has(track.codec))
               .map((track) => track.index),
           };
+        }
       return next;
     });
     return results;
@@ -145,7 +151,7 @@ export default function VideoTool() {
     setLogs([]);
     setGlobalProgress(0);
     setFileProgress(0);
-    setActiveFile('Ningún archivo en proceso');
+    setActiveFile('Sin procesos activos');
     setActiveFolder('');
     await window.tools.clearVideoState();
   };
@@ -164,6 +170,10 @@ export default function VideoTool() {
     });
 
   const videoCount = folders.reduce((count, folder) => count + folder.videos.length, 0);
+  const processedCount = folders.reduce(
+    (count, folder) => count + folder.videos.filter((video) => video.processed).length,
+    0,
+  );
   return (
     <section className="tool video-tool">
       <header>
@@ -269,9 +279,27 @@ export default function VideoTool() {
             PGS y VobSub se omiten por incompatibilidad con MP4. Los originales no se modifican.
           </span>
         </aside>
-        <div className="video-progress">
-          <Progress label="Progreso global" value={globalProgress} />
-          <Progress label={activeFile} value={fileProgress} />
+        <div className="normalize-progress">
+          <span>
+            <strong>Progreso global</strong>
+            <b>{globalProgress}%</b>
+          </span>
+          <i>
+            <b style={{ width: `${globalProgress}%` }} />
+          </i>
+          {videoCount > 0 && (
+            <em>
+              {processedCount} de {videoCount} archivos procesados
+            </em>
+          )}
+          <br />
+          <span>
+            <strong>{activeFile}</strong>
+            <b>{fileProgress}%</b>
+          </span>
+          <i>
+            <b style={{ width: `${fileProgress}%` }} />
+          </i>
         </div>
         <div className="video-log">
           {logs.length ? (
@@ -303,20 +331,6 @@ export default function VideoTool() {
   );
 }
 
-function Progress({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <span>
-        <strong>{label}</strong>
-        <b>{value}%</b>
-      </span>
-      <i>
-        <b style={{ width: `${value}%` }} />
-      </i>
-    </div>
-  );
-}
-
 function FolderCard({
   folder,
   selections,
@@ -338,6 +352,7 @@ function FolderCard({
   onToggle: (path: string, type: 'audio' | 'subtitles', index: number) => void;
   onSelect: (path: string, type: 'audio' | 'subtitles', indices: number[]) => void;
 }) {
+  const doneCount = folder.videos.filter((video) => video.processed).length;
   return (
     <article className={`${folder.processed ? 'processed' : ''} ${collapsed ? 'collapsed' : ''}`}>
       <header>
@@ -350,7 +365,6 @@ function FolderCard({
         </button>
         <span title={folder.folder}>{folder.folder}</span>
         <b>{folder.videos.length} videos</b>
-        {folder.processed && <em>Completada</em>}
         <button
           disabled={removeDisabled}
           onClick={onRemove}
@@ -362,47 +376,58 @@ function FolderCard({
         >
           Quitar
         </button>
+        <em>
+          {doneCount} de {folder.videos.length}
+          {folder.processed ? ' · Completada' : ''}
+        </em>
       </header>
       {!collapsed &&
-        folder.videos.map(
-          (video) =>
-            (video.audio.length || video.subtitles.length || video.probeError) && (
-              <details key={video.path}>
-                <summary>
-                  {video.file}
-                  {video.processed && (
-                    <em className="file-check" title="Archivo procesado">
-                      ✓
-                    </em>
-                  )}
-                  {' · '}
-                  {video.audio.length} audio · {video.subtitles.length} subtítulos
-                </summary>
-                {video.probeError ? (
-                  <p className="track-error">No se pudieron leer las pistas: {video.probeError}</p>
-                ) : (
-                  <div className="tracks">
-                    <TrackGroup
-                      title="Audio"
-                      tracks={video.audio}
-                      selected={selections[video.path]?.audio || []}
-                      disabled={controlsDisabled}
-                      onToggle={(index) => onToggle(video.path, 'audio', index)}
-                      onSelect={(indices) => onSelect(video.path, 'audio', indices)}
-                    />
-                    <TrackGroup
-                      title="Subtítulos"
-                      tracks={video.subtitles}
-                      selected={selections[video.path]?.subtitles || []}
-                      disabled={controlsDisabled}
-                      onToggle={(index) => onToggle(video.path, 'subtitles', index)}
-                      onSelect={(indices) => onSelect(video.path, 'subtitles', indices)}
-                    />
-                  </div>
+        folder.videos.map((video) => (
+          <details key={video.path}>
+            <summary>
+              <span className="summary-info">
+                {video.file}
+                {!!(video.audio.length || video.subtitles.length) && (
+                  <>
+                    {' · '}
+                    {video.audio.length} audio · {video.subtitles.length} subtítulos
+                  </>
                 )}
-              </details>
-            ),
-        )}
+              </span>
+              {video.processed && (
+                <em className="file-check" title="Archivo procesado">
+                  ✓
+                </em>
+              )}
+            </summary>
+            {video.probeError ? (
+              <p className="track-error">No se pudieron leer las pistas: {video.probeError}</p>
+            ) : video.audio.length || video.subtitles.length ? (
+              <div className="tracks">
+                <TrackGroup
+                  title="Audio"
+                  tracks={video.audio}
+                  selected={selections[video.path]?.audio || []}
+                  disabled={controlsDisabled}
+                  onToggle={(index) => onToggle(video.path, 'audio', index)}
+                  onSelect={(indices) => onSelect(video.path, 'audio', indices)}
+                />
+                <TrackGroup
+                  title="Subtítulos"
+                  tracks={video.subtitles}
+                  selected={selections[video.path]?.subtitles || []}
+                  disabled={controlsDisabled}
+                  onToggle={(index) => onToggle(video.path, 'subtitles', index)}
+                  onSelect={(indices) => onSelect(video.path, 'subtitles', indices)}
+                />
+              </div>
+            ) : (
+              <p className="track-note">
+                Sin pistas detalladas; la conversión conserva las pistas originales.
+              </p>
+            )}
+          </details>
+        ))}
     </article>
   );
 }

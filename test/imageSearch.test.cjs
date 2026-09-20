@@ -6,6 +6,7 @@ const {
   extractDuckDuckGoToken,
   extractDuckDuckGoImages,
   extractWikimediaImages,
+  extractOpenverseImages,
   searchImages,
 } = require('../electron/imageSearch.cjs');
 
@@ -100,6 +101,31 @@ test('extrae resultados del API de Wikimedia Commons', () => {
   assert.equal(results[0].imageUrl, 'https://upload.wikimedia.org/full.jpg');
   assert.equal(results[0].source, 'Wikimedia Commons');
   assert.equal(extractWikimediaImages('{}').length, 0);
+});
+
+test('extrae resultados del API de Openverse', () => {
+  const body = JSON.stringify({
+    results: [
+      {
+        url: 'https://live.staticflickr.com/foto.jpg',
+        thumbnail: 'https://api.openverse.org/v1/images/abc/thumb/',
+        title: 'Gato de ejemplo',
+        foreign_landing_url: 'https://www.flickr.com/photos/origen',
+        creator: 'fotografo',
+        width: 450,
+        height: 344,
+      },
+      { title: 'Sin URL' },
+    ],
+  });
+  const results = extractOpenverseImages(body);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].imageUrl, 'https://live.staticflickr.com/foto.jpg');
+  assert.equal(results[0].thumbnailUrl, 'https://api.openverse.org/v1/images/abc/thumb/');
+  assert.equal(results[0].title, 'Gato de ejemplo');
+  assert.equal(results[0].source, 'fotografo');
+  assert.equal(results[0].pageUrl, 'https://www.flickr.com/photos/origen');
+  assert.equal(extractOpenverseImages('no-json').length, 0);
 });
 
 test('valida la consulta y el motor antes de buscar', async () => {

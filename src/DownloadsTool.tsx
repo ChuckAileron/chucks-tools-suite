@@ -7,6 +7,7 @@ import type {
   DownloadsState,
   DownloadTask,
 } from './types';
+import { loadCollapsed, saveCollapsed } from './collapseState';
 
 type Tab = 'downloads' | 'collector' | 'settings';
 const EMPTY: DownloadsState = {
@@ -24,7 +25,7 @@ const STATUS: Record<string, string> = {
   downloading: 'Descargando',
   paused: 'Pausada',
   stopped: 'Detenida',
-  completed: 'Completada',
+  completed: 'Finalizada',
   extracting: 'Extrayendo',
   'password-required': 'Requiere contraseña',
   error: 'Error',
@@ -63,7 +64,10 @@ export default function DownloadsTool({
 }) {
   const [tab, setTab] = useState<Tab>(candidates.length ? 'collector' : 'downloads');
   const [state, setState] = useState<DownloadsState>(EMPTY);
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed('downloads'));
+  useEffect(() => {
+    saveCollapsed('downloads', collapsed);
+  }, [collapsed]);
   const toggleCollapsed = (key: string) =>
     setCollapsed((current) =>
       current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
@@ -77,10 +81,15 @@ export default function DownloadsTool({
     setCandidates((current) => {
       const key = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
       const existing = new Set(current.map(key));
+      // Enlaces ya en cola/descargando no se vuelven a identificar, a menos
+      // que la tarea se haya borrado o ya haya finalizado.
+      const active = new Set(
+        state.tasks.filter((task) => task.status !== 'completed').map((task) => task.originalUrl),
+      );
       return [
         ...current,
         ...found
-          .filter((item) => !existing.has(key(item)))
+          .filter((item) => !existing.has(key(item)) && !active.has(item.originalUrl))
           .map((item) => ({
             ...item,
             destination: state.settings.defaultDirectory,
@@ -207,6 +216,38 @@ function DownloadsTab({
   toggleCollapsed: (key: string) => void;
 }) {
   const groups = Map.groupBy(tasks, (task) => task.destination);
+  const setGroupPassword = async (groupTasks: DownloadTask[], label: string) => {
+    const eligible = groupTasks.filter((task) => task.status !== 'completed');
+    if (!eligible.length) return;
+    const value = prompt(
+      `Contraseña para ${label} (${eligible.length} archivo${eligible.length === 1 ? '' : 's'}):`,
+    );
+    if (value === null) return;
+    for (const task of eligible) {
+      // Si el archivo ya se descargó (tiene filePath), la contraseña se usa
+      // para reintentar la extracción de inmediato en vez de solo guardarla.
+      if (task.filePath) await window.tools.retryExtraction(task.id, value);
+      else await window.tools.updateDownload(task.id, { password: value });
+    }
+  };
+  const groupSpeed = (groupTasks: DownloadTask[]) =>
+    groupTasks
+      .filter((task) => task.status === 'downloading')
+      .reduce((total, task) => total + (task.speed || 0), 0);
+  const controlGroup = (groupTasks: DownloadTask[], action: string, confirmMessage?: string) => {
+    const ids = groupTasks
+      .filter((task) => {
+        if (action === 'pause') return task.status === 'downloading';
+        if (action === 'resume') return ['paused', 'stopped', 'error'].includes(task.status);
+        if (action === 'stop') return ['downloading', 'paused', 'pending'].includes(task.status);
+        if (action === 'remove') return true;
+        return false;
+      })
+      .map((task) => task.id);
+    if (!ids.length) return;
+    if (confirmMessage && !confirm(confirmMessage)) return;
+    void window.tools.controlDownloads(ids, action);
+  };
   return (
     <>
       <div className="downloads-toolbar">
@@ -227,6 +268,15 @@ function DownloadsTab({
           const groupProgress = progressOf(items);
           const groupComplete =
             items.length > 0 && items.every((task) => task.status === 'completed');
+          const speed = groupSpeed(items);
+          const hasDownloading = items.some((task) => task.status === 'downloading');
+          const hasResumable = items.some((task) =>
+            ['paused', 'stopped', 'error'].includes(task.status),
+          );
+          const hasStoppable = items.some((task) =>
+            ['downloading', 'paused', 'pending'].includes(task.status),
+          );
+          const hasRemovable = items.length > 0;
           return (
             <section
               className={`download-group ${isCollapsed(groupKey) ? 'collapsed' : ''}${groupComplete ? ' complete' : ''}`}
@@ -245,11 +295,73 @@ function DownloadsTab({
                 <div className="download-group-info">
                   <span className="download-group-title">
                     <strong>{directory}</strong>
-                    {groupComplete && <em title="Grupo completado">✓</em>}
                   </span>
                   <small>
                     {items.length} archivos · {groupProgress}%
+                    {speed > 0 && ` · ${formatSize(speed)}/s`}
                   </small>
+                  {groupComplete && <em title="Grupo completado">✓</em>}
+                </div>
+                <div className="download-group-actions">
+                  {hasDownloading && (
+                    <button
+                      className="download-group-toggle"
+                      type="button"
+                      onClick={() => controlGroup(items, 'pause')}
+                      title="Pausar grupo"
+                      aria-label={`Pausar ${directory}`}
+                    >
+                      Ⅱ
+                    </button>
+                  )}
+                  {hasResumable && (
+                    <button
+                      className="download-group-toggle"
+                      type="button"
+                      onClick={() => controlGroup(items, 'resume')}
+                      title="Continuar grupo"
+                      aria-label={`Continuar ${directory}`}
+                    >
+                      ▶
+                    </button>
+                  )}
+                  {hasStoppable && (
+                    <button
+                      className="download-group-toggle"
+                      type="button"
+                      onClick={() => controlGroup(items, 'stop')}
+                      title="Detener grupo"
+                      aria-label={`Detener ${directory}`}
+                    >
+                      ■
+                    </button>
+                  )}
+                  <button
+                    className="download-group-toggle"
+                    type="button"
+                    onClick={() => void setGroupPassword(items, `el grupo "${directory}"`)}
+                    title="Contraseña para todo el grupo"
+                    aria-label={`Contraseña para ${directory}`}
+                  >
+                    ⌕
+                  </button>
+                  {hasRemovable && (
+                    <button
+                      className="download-group-toggle"
+                      type="button"
+                      onClick={() =>
+                        controlGroup(
+                          items,
+                          'remove',
+                          `¿Borrar ${items.length} descarga${items.length === 1 ? '' : 's'} de "${directory}"?`,
+                        )
+                      }
+                      title="Borrar grupo"
+                      aria-label={`Borrar ${directory}`}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
                 <div className="download-group-meter">
                   <span>
@@ -267,19 +379,32 @@ function DownloadsTab({
                         className={`download-collection ${isCollapsed(collectionKey) ? 'collapsed' : ''}`}
                         key={collection}
                       >
-                        <button
-                          className="collection-title"
-                          type="button"
-                          onClick={() => toggleCollapsed(collectionKey)}
-                          title={`${isCollapsed(collectionKey) ? 'Expandir colección' : 'Colapsar colección'} · ${collectionProgress}%`}
-                          aria-label={`${isCollapsed(collectionKey) ? 'Expandir' : 'Colapsar'} ${collection}`}
-                        >
-                          <strong>{collection}</strong>
-                          <small>
-                            {isCollapsed(collectionKey) ? '▸' : '▾'} {collectionTasks.length}{' '}
-                            enlaces · {collectionProgress}%
-                          </small>
-                        </button>
+                        <div className="collection-head">
+                          <button
+                            className="collection-title"
+                            type="button"
+                            onClick={() => toggleCollapsed(collectionKey)}
+                            title={`${isCollapsed(collectionKey) ? 'Expandir colección' : 'Colapsar colección'} · ${collectionProgress}%`}
+                            aria-label={`${isCollapsed(collectionKey) ? 'Expandir' : 'Colapsar'} ${collection}`}
+                          >
+                            <strong>{collection}</strong>
+                            <small>
+                              {isCollapsed(collectionKey) ? '▸' : '▾'} {collectionTasks.length}{' '}
+                              enlaces · {collectionProgress}%
+                            </small>
+                          </button>
+                          <button
+                            className="download-group-toggle"
+                            type="button"
+                            onClick={() =>
+                              void setGroupPassword(collectionTasks, `la colección "${collection}"`)
+                            }
+                            title="Contraseña para toda la colección"
+                            aria-label={`Contraseña para ${collection}`}
+                          >
+                            ⌕
+                          </button>
+                        </div>
                         {!isCollapsed(collectionKey) &&
                           collectionTasks.map((task) => <DownloadRow task={task} key={task.id} />)}
                       </div>
@@ -306,9 +431,17 @@ function DownloadRow({ task }: { task: DownloadTask }) {
     if (value !== null) await window.tools.retryExtraction(task.id, value);
   };
   const idle = !['downloading', 'extracting', 'completed'].includes(task.status);
-  const removable = ['paused', 'stopped', 'error', 'password-required', 'extracting'].includes(
-    task.status,
-  );
+  // Cualquier tarea puede borrarse en cualquier estado; si está descargando
+  // o extrayendo (p. ej. quedó colgada) se pide confirmación primero.
+  const removable = true;
+  const remove = () => {
+    if (
+      ['downloading', 'extracting'].includes(task.status) &&
+      !confirm(`¿Detener y borrar la descarga de "${task.name}"?`)
+    )
+      return;
+    void window.tools.controlDownload(task.id, 'remove');
+  };
   return (
     <article className={`download-row status-${task.status}`}>
       <div className="download-file">
@@ -365,7 +498,7 @@ function DownloadRow({ task }: { task: DownloadTask }) {
           ↗
         </button>
         {removable && (
-          <button title="Quitar" onClick={() => window.tools.controlDownload(task.id, 'remove')}>
+          <button title="Quitar" onClick={remove}>
             ×
           </button>
         )}

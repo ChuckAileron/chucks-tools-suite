@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FileType, MoveRecord, ScannedFile } from './types';
 const OPTIONS: { id: FileType; label: string; extensions: string; icon: string }[] = [
   { id: 'video', label: 'Videos', extensions: 'MP4, MKV, AVI, MOV...', icon: '▶' },
@@ -9,6 +9,32 @@ const OPTIONS: { id: FileType; label: string; extensions: string; icon: string }
 ];
 const same = (a: string, b: string) =>
   a.replace(/[\\/]+$/, '').toLowerCase() === b.replace(/[\\/]+$/, '').toLowerCase();
+const MOVER_TYPES_KEY = 'chucks.mover.types';
+const MOVER_CUSTOM_KEY = 'chucks.mover.custom';
+const DEFAULT_TYPES: FileType[] = ['video', 'audio'];
+const KNOWN_TYPES: FileType[] = ['video', 'audio', 'image', 'document', 'archive'];
+const loadMoverTypes = (): Set<FileType> => {
+  try {
+    const raw = localStorage.getItem(MOVER_TYPES_KEY);
+    if (!raw) return new Set(DEFAULT_TYPES);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set(DEFAULT_TYPES);
+    const valid = parsed.filter(
+      (entry): entry is FileType =>
+        typeof entry === 'string' && KNOWN_TYPES.includes(entry as FileType),
+    );
+    return new Set(valid);
+  } catch {
+    return new Set(DEFAULT_TYPES);
+  }
+};
+const loadMoverCustom = (): string => {
+  try {
+    return localStorage.getItem(MOVER_CUSTOM_KEY) ?? '';
+  } catch {
+    return '';
+  }
+};
 const size = (n: number) =>
   n < 1024
     ? `${n} B`
@@ -18,8 +44,8 @@ const size = (n: number) =>
 export default function MoverTool() {
   const [source, setSource] = useState('');
   const [destination, setDestination] = useState('');
-  const [types, setTypes] = useState<Set<FileType>>(new Set(['video', 'audio']));
-  const [custom, setCustom] = useState('');
+  const [types, setTypes] = useState<Set<FileType>>(loadMoverTypes);
+  const [custom, setCustom] = useState(loadMoverCustom);
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [remove, setRemove] = useState(false);
@@ -30,6 +56,20 @@ export default function MoverTool() {
   const [message, setMessage] = useState('');
   const [createName, setCreateName] = useState('archivos-organizados');
   const [showCreate, setShowCreate] = useState(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem(MOVER_TYPES_KEY, JSON.stringify([...types]));
+    } catch {
+      // almacenamiento no disponible; los tipos solo viven en memoria
+    }
+  }, [types]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(MOVER_CUSTOM_KEY, custom);
+    } catch {
+      // almacenamiento no disponible; el texto solo vive en memoria
+    }
+  }, [custom]);
   const [lastMove, setLastMove] = useState<{
     source: string;
     destination: string;

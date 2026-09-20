@@ -692,6 +692,7 @@ const IMAGE_ENGINES: { value: ImageSearchEngine; label: string }[] = [
   { value: 'google', label: 'Google' },
   { value: 'duckduckgo', label: 'DuckDuckGo' },
   { value: 'wikimedia', label: 'Wikimedia' },
+  { value: 'openverse', label: 'Openverse' },
 ];
 
 function ImageSearchModal({
@@ -725,6 +726,10 @@ function ImageSearchModal({
     if (!term || loading) return;
     setLoading(true);
     setError('');
+    if (!append) {
+      setResults([]);
+      setSelected(null);
+    }
     try {
       const found = await window.tools.searchImages({ query: term, engine, page: nextPage });
       setPage(nextPage);
@@ -732,6 +737,8 @@ function ImageSearchModal({
       setResults(append ? [...results, ...found] : found);
       if (!append) setSelected(null);
     } catch (failure) {
+      setResults([]);
+      setSelected(null);
       setError(String(failure));
     } finally {
       setLoading(false);
@@ -767,7 +774,14 @@ function ImageSearchModal({
               aria-selected={engine === item.value}
               className={engine === item.value ? 'active' : ''}
               disabled={loading}
-              onClick={() => setEngine(item.value)}
+              onClick={() => {
+                setEngine(item.value);
+                setResults([]);
+                setSelected(null);
+                setError('');
+                setPage(0);
+                setSearched(false);
+              }}
             >
               {item.label}
             </button>
@@ -913,8 +927,20 @@ function EmptyCollection({ text }: { text: string }) {
 function formatValue(value: unknown, type: CollectionColumnType) {
   if (Array.isArray(value)) return value.join(', ');
   if (type === 'boolean') return value ? 'Sí' : 'No';
-  if (type === 'date' && typeof value === 'string') return new Date(value).toLocaleDateString();
+  if (type === 'date' && typeof value === 'string') return formatDate(value);
   return String(value);
+}
+
+function formatDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    return new Date(year, month - 1, day).toLocaleDateString();
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 }
 
 function defaultDateColumn(collection: Collection) {

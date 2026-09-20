@@ -119,6 +119,13 @@ export type NormalizeState = {
   activeFile: string;
   message: string;
   targetDb?: number;
+  folders: string[];
+  type: 'audio' | 'video';
+  files: NormalizeFile[];
+  selected: string[];
+  processed: string[];
+  logs: { text: string; tone?: string }[];
+  activeFolder?: string;
 };
 export type CollectionColumnType = 'string' | 'number' | 'boolean' | 'date' | 'url' | 'tags';
 export type CollectionColumn = {
@@ -147,7 +154,7 @@ export type CollectionItem = {
   createdAt: string;
   updatedAt: string;
 };
-export type ImageSearchEngine = 'google' | 'bing' | 'duckduckgo' | 'wikimedia';
+export type ImageSearchEngine = 'google' | 'bing' | 'duckduckgo' | 'wikimedia' | 'openverse';
 export type ImageSearchResult = {
   imageUrl: string;
   thumbnailUrl: string;
@@ -156,6 +163,78 @@ export type ImageSearchResult = {
   pageUrl: string;
   width?: number;
   height?: number;
+};
+export type AnalogChannel = {
+  id: string | number;
+  uuid?: string;
+  name: string;
+  number: number;
+  description?: string;
+  isEnabled: boolean;
+};
+export type AnalogEpisode = {
+  episode: number;
+  title: string;
+  duration: string;
+  fileName?: string;
+  fileNames?: string[];
+};
+export type AnalogSeason = {
+  season: number;
+  year: number;
+  episodes: AnalogEpisode[];
+  contentPath?: string;
+  contentPaths?: string[];
+};
+export type AnalogShow = {
+  id: number;
+  uuid?: string;
+  name: string;
+  channel: string[];
+  seasons: AnalogSeason[];
+  airYears?: number[];
+  airUntilToDate?: boolean;
+  episodeAiringMode?: 'daily-repeat' | 'once-per-day';
+};
+export type AnalogScheduleEntry = {
+  id: string;
+  showId: string;
+  showName: string;
+  season: number;
+  episode: number;
+  episodeTitle?: string;
+  channelId: string;
+  channelName: string;
+  startTime: string;
+  endTime: string;
+  duration?: string;
+  type: 'show' | 'commercial' | 'filler';
+};
+export type AnalogMonthSchedule = {
+  year: number;
+  month: number;
+  monthName: string;
+  entries: AnalogScheduleEntry[];
+  generated: string;
+  primaryYear: number;
+};
+export type AnalogScheduleConfig = {
+  primaryYear: number;
+  secondaryYears: number[];
+  lastGenerated: string;
+  currentYear: number;
+  generatedMonths: string[];
+};
+export type AnalogScheduleStatus = {
+  status: 'needs_year_selection' | 'ready';
+  config: AnalogScheduleConfig;
+  error?: string;
+};
+export type AnalogFolderVideo = {
+  episode: number;
+  title: string;
+  duration: string;
+  fileName: string;
 };
 export type WishlistPrice = {
   id: number;
@@ -216,6 +295,7 @@ declare global {
       addDownloads(items: DownloadCandidate[]): Promise<void>;
       updateDownload(id: string, changes: Partial<DownloadTask>): Promise<boolean>;
       controlDownload(id: string, action: string): Promise<boolean>;
+      controlDownloads(ids: string[], action: string): Promise<boolean>;
       clearCompletedDownloads(): Promise<void>;
       setDownloadSettings(settings: Partial<DownloadSettings>): Promise<void>;
       retryExtraction(id: string, password: string): Promise<boolean>;
@@ -249,6 +329,36 @@ declare global {
         engine: ImageSearchEngine;
         page?: number;
       }): Promise<ImageSearchResult[]>;
+      analogListChannels(): Promise<AnalogChannel[]>;
+      analogCreateChannel(data: {
+        name: string;
+        number: number;
+        description?: string;
+        isEnabled?: boolean;
+      }): Promise<AnalogChannel>;
+      analogUpdateChannel(
+        id: string | number,
+        patch: Partial<AnalogChannel>,
+      ): Promise<AnalogChannel>;
+      analogDeleteChannel(id: string | number): Promise<boolean>;
+      analogListShows(): Promise<AnalogShow[]>;
+      analogCreateShow(data: Omit<AnalogShow, 'id'>): Promise<AnalogShow>;
+      analogUpdateShow(id: string | number, patch: Partial<AnalogShow>): Promise<AnalogShow>;
+      analogDeleteShow(id: string | number): Promise<boolean>;
+      analogSelectJson(): Promise<string | null>;
+      analogImportChannels(filePath: string): Promise<number>;
+      analogImportShows(filePath: string): Promise<AnalogShow[]>;
+      analogSelectFolder(): Promise<string | null>;
+      analogFolderVideos(folderPath: string): Promise<AnalogFolderVideo[]>;
+      analogFolderMatch(
+        folderPath: string,
+        episodes: { episode: number; fileNames: string[] }[],
+      ): Promise<Record<number, string | null>>;
+      analogScheduleStatus(): Promise<AnalogScheduleStatus>;
+      analogScheduleConfig(): Promise<AnalogScheduleConfig | null>;
+      analogScheduleGenerate(year: number): Promise<{ success: boolean; error?: string }>;
+      analogScheduleMonth(year: number, month: number): Promise<AnalogMonthSchedule | null>;
+      analogScheduleReset(): Promise<{ success: boolean; error?: string }>;
       getWishlist(q?: string): Promise<WishlistItem[]>;
       createWishlistItem(data: {
         name: string;
@@ -306,6 +416,8 @@ declare global {
         targetDb: number;
       }): Promise<void>;
       setNormalizeTarget(targetDb: number): Promise<boolean>;
+      setNormalizeUi(data: Partial<NormalizeState>): Promise<boolean>;
+      skipNormalizeFolder(folder: string): Promise<boolean>;
       cancelNormalization(): Promise<boolean>;
       getNormalizeState(): Promise<NormalizeState>;
       onNormalizeProgress(callback: (data: NormalizeProgress) => void): () => void;

@@ -1,6 +1,6 @@
 const { requestPage } = require('./urlResolver.cjs');
 
-const ENGINES = ['google', 'bing', 'duckduckgo', 'wikimedia'];
+const ENGINES = ['google', 'bing', 'duckduckgo', 'wikimedia', 'openverse'];
 const RESULTS_PER_PAGE = 24;
 const MAX_PAGE = 10;
 
@@ -128,6 +128,31 @@ function canonicalImageUrl(value) {
   return cut < 0 ? text : text.slice(0, cut);
 }
 
+function extractOpenverseImages(body) {
+  if (!body) return [];
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  const results = Array.isArray(payload.results) ? payload.results : [];
+  return uniqueImages(
+    results.map((item) => ({
+      imageUrl: String(item.url || ''),
+      thumbnailUrl: String(item.thumbnail || item.url || ''),
+      title: cleanText(String(item.title || '')),
+      source:
+        String(item.creator || item.provider || '').trim() ||
+        safeHostname(String(item.foreign_landing_url || '')) ||
+        'Openverse',
+      pageUrl: String(item.foreign_landing_url || ''),
+      width: Number(item.width) || undefined,
+      height: Number(item.height) || undefined,
+    })),
+  ).slice(0, RESULTS_PER_PAGE);
+}
+
 function extractBingImages(body) {
   if (!body) return [];
   const found = [];
@@ -180,6 +205,10 @@ async function searchGoogle(query, page) {
     `https://www.google.com/search?q=${encodeURIComponent(query)}` +
     `&tbm=isch&hl=es&safe=active&start=${start}`;
   const body = await fetchText(new URL(url));
+  if (/enablejs|\/httpservice\/retry/i.test(body))
+    throw new Error(
+      'Google bloqueó la búsqueda automatizada (exige JavaScript). Prueba con otro motor.',
+    );
   const results = extractGoogleImages(body);
   if (!results.length) throw new Error('Google no devolvió imágenes (posible bloqueo temporal).');
   return results;
@@ -209,6 +238,10 @@ async function searchDuckDuckGo(query, page) {
       },
     });
   } catch (error) {
+    if (/HTTP 403/.test(error.message || ''))
+      throw new Error(
+        'DuckDuckGo bloqueó la búsqueda automatizada. Prueba con otro motor de búsqueda.',
+      );
     throw new Error(`${error.message} Prueba con otro motor de búsqueda.`);
   }
   const results = extractDuckDuckGoImages(body);
@@ -234,7 +267,7 @@ async function searchWikimedia(query, page) {
     format: 'json',
     formatversion: '2',
     generator: 'search',
-    gsrsearch: `filetype:bitmap ${query}`,
+    gsrsearch: query,
     gsrnamespace: '6',
     gsrlimit: String(RESULTS_PER_PAGE),
     gsroffset: String(offset),
@@ -244,7 +277,29 @@ async function searchWikimedia(query, page) {
   });
   const body = await fetchText(new URL(`https://commons.wikimedia.org/w/api.php?${params}`));
   const results = extractWikimediaImages(body);
-  if (!results.length) throw new Error('Wikimedia Commons no tiene imágenes para esta búsqueda.');
+  if (!results.length)
+    throw new Error(
+      'Wikimedia Commons no tiene imágenes libres para esta búsqueda (solo aloja contenido libre, sin pósters ni portadas con derechos).',
+    );
+  return results;
+}
+
+async function searchOpenverse(query, page) {
+  // Openverse limita page_size a 20 en peticiones anónimas (sin API key).
+  const params = new URLSearchParams({
+    q: query,
+    page_size: String(Math.min(RESULTS_PER_PAGE, 20)),
+    page: String(page),
+  });
+  const body = await fetchText(
+    new URL(`https://api.openverse.org/v1/images/?${params}`),
+    undefined,
+    {
+      headers: { accept: 'application/json' },
+    },
+  );
+  const results = extractOpenverseImages(body);
+  if (!results.length) throw new Error('Openverse no devolvió imágenes para esta búsqueda.');
   return results;
 }
 
@@ -256,6 +311,7 @@ async function searchImages({ query, engine = 'bing', page = 1 }) {
   if (engine === 'google') return searchGoogle(text, safePage);
   if (engine === 'duckduckgo') return searchDuckDuckGo(text, safePage);
   if (engine === 'wikimedia') return searchWikimedia(text, safePage);
+  if (engine === 'openverse') return searchOpenverse(text, safePage);
   return searchBing(text, safePage);
 }
 
@@ -268,4 +324,5 @@ module.exports = {
   extractDuckDuckGoToken,
   extractDuckDuckGoImages,
   extractWikimediaImages,
+  extractOpenverseImages,
 };

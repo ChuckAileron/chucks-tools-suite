@@ -33,6 +33,18 @@ sevenZip.config({ binaryPath: resolveSevenZa() });
 
 const PRIORITY = { urgent: 0, high: 1, medium: 2, low: 3 };
 const ARCHIVE = /\.(zip|7z|rar|tar|gz|bz2|xz)$/i;
+const EXTRACTION_TIMEOUT = 10 * 60 * 1000;
+// Si el error viene de una contraseña incorrecta/faltante, 7-Zip lo reporta
+// en stderr (el `message` genérico solo trae el código de salida).
+function extractionFailureStatus(error) {
+  const detail = `${error?.stderr || ''} ${error?.message || ''}`;
+  return /wrong password|contraseñ|password|data error/i.test(detail)
+    ? 'password-required'
+    : 'error';
+}
+function extractionErrorMessage(error) {
+  return (error?.stderr || error?.message || '').trim() || 'No se pudo extraer el archivo.';
+}
 const LINKS = /https?:\/\/[^\s<>"']+/gi;
 const NAKED_LINKS = [
   /(?:www\.|m\.)?download\d*\.mediafire\.com\/[^\s<>"']*/gi,
@@ -61,6 +73,7 @@ class DownloadManager {
     this.send = send;
     this.tasks = new Map();
     this.active = new Map();
+    this.starting = new Set();
     this.settings = {
       defaultDirectory: '',
       concurrency: 3,
@@ -76,6 +89,7 @@ class DownloadManager {
       this.settings = { ...this.settings, ...data.settings };
       for (const task of data.tasks || []) {
         if (task.status === 'downloading') task.status = 'paused';
+        if (task.downloaded > 0) task.startedOnce = true;
         this.tasks.set(task.id, task);
       }
     } catch {}
@@ -445,39 +459,78 @@ class DownloadManager {
   }
   update(id, changes) {
     const task = this.tasks.get(id);
-    if (!task || this.active.has(id)) return false;
+    if (!task) return false;
+    if (this.active.has(id)) {
+      // La contraseña (y el nombre) pueden cambiarse mientras la tarea está
+      // activa: la extracción ocurre después de la descarga y lee task.password.
+      const safe = {};
+      if (typeof changes.password === 'string') safe.password = changes.password;
+      if (changes.name) safe.name = this.sanitize(changes.name);
+      if (!Object.keys(safe).length) return false;
+      Object.assign(task, safe);
+      this.emit();
+      return true;
+    }
     if (changes.name) changes.name = this.sanitize(changes.name);
     Object.assign(task, changes);
     this.emit();
     return true;
   }
-  control(id, action) {
-    const task = this.tasks.get(id),
-      downloader = this.active.get(id);
-    if (!task) return false;
+  applyControl(task, action) {
+    const downloader = this.active.get(task.id);
     if (action === 'pause') {
+      if (task.status !== 'downloading') return false;
       if (downloader) {
         if (task.videoFormat) {
           downloader.stop();
-          this.active.delete(id);
+          this.active.delete(task.id);
         } else downloader.pause();
       }
       task.status = 'paused';
     } else if (action === 'resume') {
+      if (!['paused', 'stopped', 'error'].includes(task.status)) return false;
       task.status = 'pending';
+      task.error = '';
     } else if (action === 'stop') {
+      if (!['downloading', 'paused', 'pending'].includes(task.status)) return false;
       if (downloader) {
-        if (task.videoFormat) {
-          downloader.stop();
-          this.active.delete(id);
-        } else downloader.stop();
+        downloader.stop();
+        this.active.delete(task.id);
       }
       task.status = 'stopped';
-    } else if (action === 'remove' && !downloader) this.tasks.delete(id);
-    else return false;
-    this.emit();
-    this.process();
+    } else if (action === 'remove') {
+      // Se permite borrar en cualquier estado, incluido "extracting": si el
+      // proceso de 7-Zip quedó colgado (p. ej. esperando una contraseña por
+      // stdin), el usuario no debe quedar bloqueado sin poder limpiar la fila.
+      if (downloader) {
+        downloader.stop();
+        this.active.delete(task.id);
+      }
+      this.tasks.delete(task.id);
+    } else return false;
     return true;
+  }
+  control(id, action) {
+    const task = this.tasks.get(id);
+    if (!task) return false;
+    const applied = this.applyControl(task, action);
+    if (applied) {
+      this.emit();
+      this.process();
+    }
+    return applied;
+  }
+  controlMany(ids, action) {
+    let applied = false;
+    for (const id of ids) {
+      const task = this.tasks.get(id);
+      if (task && this.applyControl(task, action)) applied = true;
+    }
+    if (applied) {
+      this.emit();
+      this.process();
+    }
+    return applied;
   }
   clearCompleted() {
     for (const [id, task] of this.tasks) if (task.status === 'completed') this.tasks.delete(id);
@@ -497,8 +550,8 @@ class DownloadManager {
         task.status = 'completed';
         task.error = '';
       } catch (error) {
-        task.status = /password/i.test(error.message) ? 'password-required' : 'error';
-        task.error = error.message;
+        task.status = extractionFailureStatus(error);
+        task.error = extractionErrorMessage(error);
       }
       this.emit();
     }
@@ -513,21 +566,35 @@ class DownloadManager {
     this.process();
   }
   process() {
-    while (this.active.size < this.settings.concurrency) {
+    while (this.active.size + this.starting.size < this.settings.concurrency) {
       const task = [...this.tasks.values()]
-        .filter((item) => item.status === 'pending')
+        .filter((item) => item.status === 'pending' && !this.starting.has(item.id))
         .sort(
           (a, b) => PRIORITY[a.priority] - PRIORITY[b.priority] || a.createdAt - b.createdAt,
         )[0];
       if (!task) break;
-      this.start(task);
+      this.starting.add(task.id);
+      this.start(task).finally(() => this.starting.delete(task.id));
     }
   }
-  start(task) {
+  async start(task) {
     if (task.videoFormat) {
       this.startVideo(task);
       return;
     }
+    // Los enlaces directos (MediaFire, etc.) expiran; al reanudar una tarea
+    // ya iniciada previamente, se vuelve a resolver antes de reintentar.
+    // Google Drive usa una URL firmada con la API key que no se resuelve
+    // igual, así que se excluye de este refresco.
+    if (task.startedOnce && task.originalUrl && task.host !== 'drive.google.com') {
+      try {
+        const resolved = await resolveUrl(task.originalUrl);
+        task.url = resolved.finalUrl;
+      } catch {
+        // Si falla la resolución, se reintenta con la URL almacenada.
+      }
+    }
+    task.startedOnce = true;
     fs.mkdirSync(task.destination, { recursive: true });
     const downloader = new DownloaderHelper(task.url, task.destination, {
       fileName: task.name,
@@ -566,8 +633,8 @@ class DownloadManager {
         try {
           await this.extract(task);
         } catch (error) {
-          task.status = /password/i.test(error.message) ? 'password-required' : 'error';
-          task.error = error.message;
+          task.status = extractionFailureStatus(error);
+          task.error = extractionErrorMessage(error);
           this.emit();
           this.process();
           return;
@@ -635,9 +702,19 @@ class DownloadManager {
       path.basename(task.filePath, path.extname(task.filePath)),
     );
     fs.mkdirSync(output, { recursive: true });
-    const args = ['x', task.filePath, `-o${output}`, '-y'];
-    if (task.password) args.push(`-p${task.password}`);
-    await sevenZip.cmd(args);
+    // Siempre se pasa -p (aunque esté vacía): si no se indica y el archivo
+    // requiere contraseña, 7-Zip se queda esperando input por stdin y el
+    // proceso nunca termina, dejando la tarea colgada en "extracting".
+    const args = ['x', task.filePath, `-o${output}`, '-y', `-p${task.password || ''}`];
+    await Promise.race([
+      sevenZip.cmd(args),
+      new Promise((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error('La extracción superó el tiempo máximo de espera.')),
+          EXTRACTION_TIMEOUT,
+        ),
+      ),
+    ]);
     task.extractedTo = output;
   }
   async retryExtraction(id, password) {
@@ -651,8 +728,8 @@ class DownloadManager {
       task.status = 'completed';
       task.error = '';
     } catch (error) {
-      task.status = 'password-required';
-      task.error = error.message;
+      task.status = extractionFailureStatus(error);
+      task.error = extractionErrorMessage(error);
     }
     this.emit();
     return task.status === 'completed';
