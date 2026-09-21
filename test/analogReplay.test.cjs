@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { installHooks, restoreHooks } = require('./helpers/moduleHooks.cjs');
+const { DatabaseSync: RealDatabaseSync } = require('node:sqlite');
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-replay-test-'));
 process.env.ANALOG_REPLAY_TV_USER_DATA = sandbox;
@@ -206,4 +208,295 @@ test('empareja episodios contra archivos reales de una carpeta', async () => {
   assert.equal(matches[1], 'Serie - 01a - Piloto.mkv');
   assert.equal(matches[2], null);
   assert.deepEqual(await analog.matchFolderEpisodes(path.join(folder, 'no-existe'), []), {});
+});
+
+test('matchFolderEpisodes: coincidencia exacta, normalizada y lectura fallida', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-exact-'));
+  fs.writeFileSync(path.join(folder, 'Capitulo 5.mkv'), 'x');
+  fs.writeFileSync(path.join(folder, 'CAPITULO 6.MKV'), 'x');
+  const exact = await analog.matchFolderEpisodes(folder, [
+    { episode: 1, fileNames: ['Capitulo 5.mkv'] },
+  ]);
+  assert.equal(exact[1], 'Capitulo 5.mkv');
+  const fuzzy = await analog.matchFolderEpisodes(folder, [
+    { episode: 2, fileNames: ['Capitulo 6.mkv'] },
+  ]);
+  assert.equal(fuzzy[2], 'CAPITULO 6.MKV');
+  const failed = await analog.matchFolderEpisodes(path.join(folder, 'no-existe'), [
+    { episode: 3, fileNames: ['Capitulo 7.mkv'] },
+  ]);
+  assert.deepEqual(failed, {});
+});
+
+test('parseDurationToSeconds: formato de una sola parte cae en el fallback', () => {
+  assert.equal(analog.parseDurationToSeconds('75'), 300);
+});
+
+test('resolveAnalogDir sin override: empaquetada, dev y fallback con APPDATA', () => {
+  const savedOverride = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  const savedAppData = process.env.APPDATA;
+  try {
+    delete process.env.ANALOG_REPLAY_TV_USER_DATA;
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-base-'));
+    process.env.APPDATA = base;
+
+    assert.equal(analog.resolveAnalogDir(), path.join(base, 'Electron'));
+
+    fs.mkdirSync(path.join(base, 'analog-replay-tv'), { recursive: true });
+    assert.equal(analog.resolveAnalogDir(), path.join(base, 'analog-replay-tv'));
+
+    fs.writeFileSync(path.join(base, 'analog-replay-tv', 'analog-replay-tv.sqlite'), 'x');
+    assert.equal(analog.resolveAnalogDir(), path.join(base, 'analog-replay-tv'));
+
+    fs.rmSync(path.join(base, 'analog-replay-tv'), { recursive: true, force: true });
+    fs.mkdirSync(path.join(base, 'Electron'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'Electron', 'analog-replay-tv.sqlite'), 'x');
+    assert.equal(analog.resolveAnalogDir(), path.join(base, 'Electron'));
+
+    delete process.env.APPDATA;
+    assert.equal(typeof analog.resolveAnalogDir(), 'string');
+  } finally {
+    if (savedOverride === undefined) delete process.env.ANALOG_REPLAY_TV_USER_DATA;
+    else process.env.ANALOG_REPLAY_TV_USER_DATA = savedOverride;
+    if (savedAppData === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = savedAppData;
+  }
+});
+
+test('importar canales con JSON inválido lanza un error descriptivo', () => {
+  const file = path.join(os.tmpdir(), `analog-bad-channels-${Date.now()}.json`);
+  fs.writeFileSync(file, 'esto no es un json');
+  try {
+    assert.throws(() => analog.importChannelsFile(file), /JSON válido/);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test('importar programas con JSON inválido lanza un error descriptivo', () => {
+  const file = path.join(os.tmpdir(), `analog-bad-shows-${Date.now()}.json`);
+  fs.writeFileSync(file, 'esto no es un json');
+  try {
+    assert.throws(() => analog.importShowFile(file), /JSON válido/);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test('la base se cierra y reabre al cambiar de directorio', () => {
+  const saved = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  try {
+    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-reopen-a-'));
+    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-reopen-b-'));
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dirA;
+    assert.deepEqual(analog.listChannels(), []);
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dirB;
+    assert.deepEqual(analog.listChannels(), []);
+  } finally {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = saved;
+  }
+});
+
+test('database(): un cierre fallido al cambiar de directorio se ignora', () => {
+  const saved = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  class FailingDatabaseSync extends RealDatabaseSync {
+    close() {
+      throw new Error('boom');
+    }
+  }
+  const resolved = require.resolve('../electron/analogReplay.cjs');
+  try {
+    installHooks({ 'node:sqlite': { DatabaseSync: FailingDatabaseSync } });
+    delete require.cache[resolved];
+    const hooked = require('../electron/analogReplay.cjs');
+    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-close-a-'));
+    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-close-b-'));
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dirA;
+    assert.deepEqual(hooked.listChannels(), []);
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dirB;
+    assert.deepEqual(hooked.listChannels(), []);
+    restoreHooks();
+  } finally {
+    restoreHooks();
+    process.env.ANALOG_REPLAY_TV_USER_DATA = saved;
+  }
+});
+
+test('scheduleStatus crea una configuración fresca sin estado previo', () => {
+  const saved = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-fresh-config-'));
+  try {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dir;
+    const status = analog.scheduleStatus();
+    assert.equal(status.status, 'needs_year_selection');
+    assert.equal(status.config.primaryYear, 0);
+  } finally {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = saved;
+  }
+});
+
+test('programación once-per-day: las horas libres se rellenan con identificación', () => {
+  const saved = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-filler-'));
+  try {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dir;
+    analog.replaceChannels([
+      { id: 1, uuid: 'canal-retro', name: 'RETRO', number: 3, isEnabled: true },
+    ]);
+    analog.createShow({
+      name: 'Clasico de Medianoche',
+      channel: ['RETRO'],
+      episodeAiringMode: 'once-per-day',
+      airUntilToDate: true,
+      seasons: [
+        {
+          season: 1,
+          year: 2024,
+          contentPath: dir,
+          episodes: [{ episode: 1, title: 'Película', duration: '45:00' }],
+        },
+      ],
+    });
+    const generated = analog.generateYear(2024);
+    assert.equal(generated.success, true);
+    const january = analog.getMonthSchedule(2024, 1);
+    assert.ok(january);
+    assert.ok(january.entries.some((entry) => entry.type === 'show'));
+    assert.ok(january.entries.some((entry) => entry.type === 'filler'));
+    assert.ok(
+      january.entries
+        .filter((entry) => entry.type === 'filler')
+        .every((entry) => entry.showName === 'AnalogReplayTV' && entry.channelName === 'RETRO'),
+    );
+  } finally {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = saved;
+  }
+});
+
+test('getMonthSchedule lee y persiste un archivo de programación legado', () => {
+  const saved = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-legacy-'));
+  try {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dir;
+    const analogDirActual = analog.analogDir();
+    const schedulesDir = path.join(analogDirActual, 'schedules', '2023');
+    fs.mkdirSync(schedulesDir, { recursive: true });
+    const legacy = {
+      year: 2023,
+      month: 3,
+      monthName: 'march',
+      generated: '2023-04-01T00:00:00.000Z',
+      entries: [{ id: 'legacy-1', type: 'show', showName: 'Viejo Archivo' }],
+    };
+    fs.writeFileSync(path.join(schedulesDir, 'march-2023.json'), JSON.stringify(legacy));
+    const month = analog.getMonthSchedule(2023, 3);
+    assert.equal(month.entries[0].showName, 'Viejo Archivo');
+    assert.equal(analog.getMonthSchedule(2023, 3).entries[0].showName, 'Viejo Archivo');
+
+    fs.writeFileSync(
+      path.join(schedulesDir, 'february-2023.json'),
+      JSON.stringify({
+        year: 2023,
+        month: 2,
+        monthName: 'february',
+        entries: [{ id: 'legacy-2', type: 'show', showName: 'Sin Fecha' }],
+      }),
+    );
+    assert.equal(analog.getMonthSchedule(2023, 2).entries[0].showName, 'Sin Fecha');
+  } finally {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = saved;
+  }
+});
+
+test('getFolderVideos sonda duraciones y deduce títulos de los archivos', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-videos-'));
+  fs.writeFileSync(path.join(folder, '10 Episodio - Piloto.mkv'), 'x');
+  fs.writeFileSync(path.join(folder, '2 Segundo - fail.mkv'), 'x');
+  fs.writeFileSync(path.join(folder, '3 Raro - raro.mkv'), 'x');
+  fs.writeFileSync(path.join(folder, 'notas.txt'), 'x');
+  const fakeExecFile = (command, args, options, cb) => {
+    const file = String(args[args.length - 1]);
+    if (/fail\.mkv$/i.test(file)) return cb(new Error('ffprobe falló'));
+    if (/raro\.mkv$/i.test(file)) return cb(null, 'no-es-un-numero\n');
+    cb(null, '600.5\n');
+  };
+  const resolved = require.resolve('../electron/analogReplay.cjs');
+  installHooks({ 'node:child_process': { execFile: fakeExecFile } });
+  delete require.cache[resolved];
+  const hooked = require('../electron/analogReplay.cjs');
+  try {
+    const videos = await hooked.getFolderVideos(folder);
+    assert.equal(videos.length, 3);
+    assert.equal(videos[0].fileName, '2 Segundo - fail.mkv');
+    assert.equal(videos[0].title, 'Segundo   fail');
+    assert.equal(videos[0].duration, '00:00');
+    assert.equal(videos[1].fileName, '3 Raro - raro.mkv');
+    assert.equal(videos[1].title, 'Raro   raro');
+    assert.equal(videos[1].duration, '00:00');
+    assert.equal(videos[2].fileName, '10 Episodio - Piloto.mkv');
+    assert.equal(videos[2].title, 'Episodio   Piloto');
+    assert.equal(videos[2].duration, '10:00');
+  } finally {
+    restoreHooks();
+  }
+});
+
+test('flattenShowEpisodes ignora temporadas cuyo directorio falla al inspeccionarse', () => {
+  const realFs = require('node:fs');
+  const MARKER = 'analog://marcador';
+  const resolved = require.resolve('../electron/analogReplay.cjs');
+  installHooks({
+    'node:fs': {
+      ...realFs,
+      existsSync: (p) => (p === MARKER ? true : realFs.existsSync(p)),
+      statSync: (p, o) => {
+        if (p === MARKER) throw new Error('boom');
+        return realFs.statSync(p, o);
+      },
+    },
+  });
+  delete require.cache[resolved];
+  const hooked = require('../electron/analogReplay.cjs');
+  try {
+    const flat = hooked.flattenShowEpisodes({
+      name: 'Serie',
+      channel: [],
+      seasons: [
+        {
+          season: 1,
+          year: 2000,
+          contentPath: MARKER,
+          episodes: [{ episode: 1, title: 'A', duration: '11:00' }],
+        },
+      ],
+    });
+    assert.deepEqual(flat, []);
+  } finally {
+    restoreHooks();
+  }
+});
+
+test('tablas degradadas reportan errores reales de la base (canales y programación)', () => {
+  const saved = process.env.ANALOG_REPLAY_TV_USER_DATA;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'analog-degraded-'));
+  try {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = dir;
+    analog.listChannels();
+    const db = new RealDatabaseSync(path.join(dir, 'analog-replay-tv.sqlite'));
+    try {
+      db.exec(
+        'PRAGMA foreign_keys = OFF; DROP TABLE channels; CREATE TABLE channels (storage_key TEXT PRIMARY KEY, legacy_id TEXT); DROP TABLE schedule_months; DROP TABLE schedule_config;',
+      );
+    } finally {
+      db.close();
+    }
+    assert.throws(
+      () => analog.createChannel({ name: 'Degradado', number: 1 }),
+      /no column named uuid/,
+    );
+    assert.equal(analog.generateYear(2020).success, false);
+    assert.equal(analog.resetSchedule().success, false);
+  } finally {
+    process.env.ANALOG_REPLAY_TV_USER_DATA = saved;
+  }
 });

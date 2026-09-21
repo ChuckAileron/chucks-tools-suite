@@ -15,9 +15,21 @@ import type {
   VideoState,
 } from './types';
 type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'downloads' | 'collection' | 'replay';
+type Theme = 'light' | 'dark';
+const THEME_KEY = 'chucks-tools-theme';
+function readInitialTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    // localStorage no disponible
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 const EMPTY_DOWNLOADS: DownloadsState = {
   settings: {
     defaultDirectory: '',
+    defaultDeleteArchive: true,
     concurrency: 3,
     autoExtract: true,
     clipboard: true,
@@ -54,6 +66,16 @@ const EMPTY_NORMALIZE: NormalizeState = {
 };
 export default function App() {
   const [tool, setTool] = useState<Tool>('collection');
+  const [theme, setTheme] = useState<Theme>(readInitialTheme);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // localStorage no disponible
+    }
+  }, [theme]);
+  const toggleTheme = () => setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
   const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
   const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
   const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
@@ -72,6 +94,7 @@ export default function App() {
             destination: downloads.settings.defaultDirectory,
             priority: 'medium' as DownloadPriority,
             extract: true,
+            deleteArchive: downloads.settings.defaultDeleteArchive !== false,
           })),
       ];
     });
@@ -211,6 +234,16 @@ export default function App() {
             </span>
           </button>
         </nav>
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        >
+          <i>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</i>
+          <span>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
+        </button>
         <div className="local">
           <b>● Todo permanece local</b>
           <small>Tus archivos nunca salen de este equipo.</small>
@@ -274,6 +307,23 @@ function VolumeIcon() {
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
       <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </SidebarIcon>
+  );
+}
+
+function SunIcon() {
+  return (
+    <SidebarIcon>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </SidebarIcon>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <SidebarIcon>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </SidebarIcon>
   );
 }

@@ -8,6 +8,12 @@ const {
   extractWikimediaImages,
   extractOpenverseImages,
   searchImages,
+  cleanText,
+  isImageUrl,
+  uniqueImages,
+  safeHostname,
+  canonicalImageUrl,
+  responseCookies,
 } = require('../electron/imageSearch.cjs');
 
 test('extrae solo imagenes del HTML de Google sin el contenido', () => {
@@ -131,4 +137,55 @@ test('extrae resultados del API de Openverse', () => {
 test('valida la consulta y el motor antes de buscar', async () => {
   await assert.rejects(searchImages({ query: '   ', engine: 'google' }), /término/);
   await assert.rejects(searchImages({ query: 'gatos', engine: 'yahoo' }), /no soportado/);
+});
+
+test('limpia texto con escapes unicode y espacios', () => {
+  assert.equal(cleanText('  Hola\\u0021  mundo  '), 'Hola! mundo');
+  assert.equal(cleanText('a\\/b\\"c'), 'a/b"c');
+  assert.equal(cleanText(null), '');
+  assert.equal(cleanText(''), '');
+});
+
+test('valida URLs de imagen', () => {
+  assert.equal(isImageUrl('https://example.com/foto.jpg'), true);
+  assert.equal(isImageUrl('nota-texto'), false);
+  assert.equal(isImageUrl('https://www.google.com/search?q=x'), false);
+  assert.equal(isImageUrl('https://example.com/favicon.ico'), false);
+  assert.equal(isImageUrl('https://example.com/logo.png'), false);
+  assert.equal(isImageUrl(null), false);
+  assert.equal(isImageUrl(123), false);
+});
+
+test('elimina imágenes duplicadas o inválidas', () => {
+  const results = uniqueImages([
+    { imageUrl: 'https://a.com/1.jpg' },
+    { imageUrl: 'https://a.com/1.jpg' },
+    { imageUrl: 'nota-texto' },
+    null,
+    { imageUrl: 'https://b.com/2.png' },
+  ]);
+  assert.deepEqual(
+    results.map((item) => item.imageUrl),
+    ['https://a.com/1.jpg', 'https://b.com/2.png'],
+  );
+  assert.deepEqual(uniqueImages([]), []);
+});
+
+test('extrae hostname seguro y corta query de imagen', () => {
+  assert.equal(safeHostname('https://www.example.com/pagina'), 'example.com');
+  assert.equal(safeHostname('no-es-url'), '');
+  assert.equal(canonicalImageUrl('https://a.com/f.jpg?w=100'), 'https://a.com/f.jpg');
+  assert.equal(canonicalImageUrl('https://a.com/f.jpg#frag'), 'https://a.com/f.jpg');
+  assert.equal(canonicalImageUrl('https://a.com/f.jpg'), 'https://a.com/f.jpg');
+  assert.equal(canonicalImageUrl(''), '');
+});
+
+test('une cookies de respuesta', () => {
+  assert.equal(
+    responseCookies({ headers: { 'set-cookie': ['a=1; Path=/', 'b=2; Path=/'] } }),
+    'a=1; b=2',
+  );
+  assert.equal(responseCookies({ headers: { 'set-cookie': 'a=1; Path=/' } }), 'a=1');
+  assert.equal(responseCookies({ headers: {} }), '');
+  assert.equal(responseCookies(null), '');
 });

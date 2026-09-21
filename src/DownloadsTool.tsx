@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   DownloadCandidate,
+  DownloadDiskInfo,
   DownloadPriority,
   DownloadSettings,
   DownloadsState,
   DownloadTask,
+  VideoQualityOption,
 } from './types';
 import { loadCollapsed, saveCollapsed } from './collapseState';
 
@@ -13,6 +15,7 @@ type Tab = 'downloads' | 'collector' | 'settings';
 const EMPTY: DownloadsState = {
   settings: {
     defaultDirectory: '',
+    defaultDeleteArchive: true,
     concurrency: 3,
     autoExtract: true,
     clipboard: true,
@@ -64,6 +67,7 @@ export default function DownloadsTool({
 }) {
   const [tab, setTab] = useState<Tab>(candidates.length ? 'collector' : 'downloads');
   const [state, setState] = useState<DownloadsState>(EMPTY);
+  const [disk, setDisk] = useState<DownloadDiskInfo | null>(null);
   const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed('downloads'));
   useEffect(() => {
     saveCollapsed('downloads', collapsed);
@@ -95,6 +99,7 @@ export default function DownloadsTool({
             destination: state.settings.defaultDirectory,
             priority: 'medium' as DownloadPriority,
             extract: true,
+            deleteArchive: state.settings.defaultDeleteArchive !== false,
           })),
       ];
     });
@@ -107,6 +112,20 @@ export default function DownloadsTool({
     window.tools.getDownloads().then(setState);
     const stopState = window.tools.onDownloadsState(setState);
     return () => stopState();
+  }, []);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      window.tools
+        .getDownloadDiskInfo()
+        .then((info) => live && setDisk(info))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 30000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
   }, []);
 
   const analyze = async () => {
@@ -143,6 +162,12 @@ export default function DownloadsTool({
       ),
     );
   };
+  const deleteCandidates = (ids: string[]) =>
+    setCandidates((current) => current.filter((item) => !ids.includes(item.id)));
+  const deleteCollection = (collection: string) =>
+    setCandidates((current) =>
+      current.filter((item) => (item.collection || 'Sin colección') !== collection),
+    );
   const queue = async () => {
     const selected = candidates.filter((item) => item.selected && item.online);
     if (!selected.length) return setMessage('Selecciona al menos un enlace disponible.');
@@ -179,6 +204,7 @@ export default function DownloadsTool({
         {tab === 'downloads' ? (
           <DownloadsTab
             tasks={state.tasks}
+            disk={disk}
             isCollapsed={isCollapsed}
             toggleCollapsed={toggleCollapsed}
           />
@@ -194,6 +220,10 @@ export default function DownloadsTool({
             chooseFolder={chooseFolder}
             queue={queue}
             clear={() => setCandidates([])}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            deleteCandidates={deleteCandidates}
+            deleteCollection={deleteCollection}
           />
         ) : (
           <SettingsTab
@@ -206,15 +236,54 @@ export default function DownloadsTool({
   );
 }
 
+function LinksModal({ links, onClose }: { links: string[]; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const text = links.join('\n');
+  const copyAll = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="image-search-overlay" onClick={onClose}>
+      <div className="links-modal" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <h2>Todos los enlaces</h2>
+            <p>{links.length} enlace{links.length === 1 ? '' : 's'} en la cola de descargas.</p>
+          </div>
+        </header>
+        <textarea className="links-modal-text" readOnly value={text} />
+        <footer>
+          <span>{copied ? 'Copiado ✓' : ''}</span>
+          <div>
+            <button onClick={copyAll} disabled={!links.length}>
+              Copiar todos
+            </button>
+            <button onClick={onClose}>Cerrar</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function DownloadsTab({
   tasks,
+  disk,
   isCollapsed,
   toggleCollapsed,
 }: {
   tasks: DownloadTask[];
+  disk: DownloadDiskInfo | null;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
 }) {
+  const [showLinks, setShowLinks] = useState(false);
   const groups = Map.groupBy(tasks, (task) => task.destination);
   const setGroupPassword = async (groupTasks: DownloadTask[], label: string) => {
     const eligible = groupTasks.filter((task) => task.status !== 'completed');
@@ -248,19 +317,63 @@ function DownloadsTab({
     if (confirmMessage && !confirm(confirmMessage)) return;
     void window.tools.controlDownloads(ids, action);
   };
+  const hasAnyDownloading = tasks.some((task) => task.status === 'downloading');
+  const hasAnyResumable = tasks.some((task) => ['paused', 'stopped', 'error'].includes(task.status));
+  const hasAnyStoppable = tasks.some((task) =>
+    ['downloading', 'paused', 'pending'].includes(task.status),
+  );
   return (
     <>
+      {showLinks && (
+        <LinksModal
+          links={tasks.map((task) => task.originalUrl)}
+          onClose={() => setShowLinks(false)}
+        />
+      )}
       <div className="downloads-toolbar">
         <span>
           {tasks.length} descargas · {tasks.filter((task) => task.status === 'downloading').length}{' '}
           activas
         </span>
-        <button
-          disabled={!tasks.some((task) => task.status === 'completed')}
-          onClick={() => window.tools.clearCompletedDownloads()}
-        >
-          Limpiar completadas
-        </button>
+        <span className="downloads-disk" title="Espacio del disco predeterminado (C:)">
+          {disk
+            ? `Disco ${disk.drive} ${formatSize(disk.free)} libres de ${formatSize(disk.total)}`
+            : 'Disco —'}
+        </span>
+        <div className="downloads-toolbar-actions">
+          <button
+            disabled={!hasAnyDownloading}
+            title="Pausar todas las descargas"
+            onClick={() => controlGroup(tasks, 'pause')}
+          >
+            Ⅱ Pausar todo
+          </button>
+          <button
+            disabled={!hasAnyResumable}
+            title="Continuar todas las descargas"
+            onClick={() => controlGroup(tasks, 'resume')}
+          >
+            ▶ Continuar todo
+          </button>
+          <button
+            disabled={!hasAnyStoppable}
+            title="Detener todas las descargas"
+            onClick={() =>
+              controlGroup(tasks, 'stop', `¿Detener las ${tasks.length} descargas de la lista?`)
+            }
+          >
+            ■ Detener todo
+          </button>
+          <button disabled={!tasks.length} onClick={() => setShowLinks(true)}>
+            Listar enlaces
+          </button>
+          <button
+            disabled={!tasks.some((task) => task.status === 'completed')}
+            onClick={() => window.tools.clearCompletedDownloads()}
+          >
+            Limpiar completadas
+          </button>
+        </div>
       </div>
       {tasks.length ? (
         [...groups].map(([directory, items]) => {
@@ -344,6 +457,15 @@ function DownloadsTab({
                     aria-label={`Contraseña para ${directory}`}
                   >
                     ⌕
+                  </button>
+                  <button
+                    className="download-group-toggle"
+                    type="button"
+                    onClick={() => void window.tools.showDownloadDirectory(directory)}
+                    title="Mostrar carpeta en el explorador"
+                    aria-label={`Mostrar carpeta ${directory}`}
+                  >
+                    ▣
                   </button>
                   {hasRemovable && (
                     <button
@@ -508,6 +630,57 @@ function DownloadRow({ task }: { task: DownloadTask }) {
   );
 }
 
+const BEST_QUALITY: VideoQualityOption = { label: 'Mejor calidad', videoFormat: 'video:best' };
+
+// Selector de resolución para los videos de una lista de YouTube. Las
+// calidades reales del video se piden bajo demanda (al abrir el selector) en
+// vez de al identificar la lista completa, para no disparar cientos de
+// consultas a yt-dlp cuando se identifica una lista grande.
+function QualitySelect({
+  url,
+  value,
+  onChange,
+}: {
+  url: string;
+  value: string;
+  onChange: (videoFormat: string) => void;
+}) {
+  const [options, setOptions] = useState<VideoQualityOption[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const load = () => {
+    if (options || loading) return;
+    setLoading(true);
+    window.tools
+      .getVideoQualityOptions(url)
+      .then((result) => setOptions(result.length ? result : [BEST_QUALITY]))
+      .catch(() => setOptions([BEST_QUALITY]))
+      .finally(() => setLoading(false));
+  };
+  const known = options && options.length ? options : [BEST_QUALITY];
+  const hasCurrentValue = known.some((option) => option.videoFormat === value);
+  return (
+    <select
+      className="candidate-quality"
+      value={value}
+      title="Resolución a descargar"
+      onFocus={load}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {!hasCurrentValue && <option value={value}>{value}</option>}
+      {known.map((option) => (
+        <option value={option.videoFormat} key={option.videoFormat}>
+          {option.label}
+        </option>
+      ))}
+      {loading && (
+        <option value="" disabled>
+          Cargando calidades…
+        </option>
+      )}
+    </select>
+  );
+}
+
 type CollectorProps = {
   candidates: DownloadCandidate[];
   text: string;
@@ -519,6 +692,10 @@ type CollectorProps = {
   chooseFolder: (id?: string) => void;
   queue: () => void;
   clear: () => void;
+  isCollapsed: (key: string) => boolean;
+  toggleCollapsed: (key: string) => void;
+  deleteCandidates: (ids: string[]) => void;
+  deleteCollection: (collection: string) => void;
 };
 function CollectorTab({
   candidates,
@@ -531,6 +708,10 @@ function CollectorTab({
   chooseFolder,
   queue,
   clear,
+  isCollapsed,
+  toggleCollapsed,
+  deleteCandidates,
+  deleteCollection,
 }: CollectorProps) {
   const setSharedPassword = () => {
     const password = prompt('Contraseña para los enlaces seleccionados:');
@@ -597,63 +778,6 @@ function CollectorTab({
           </button>
         </div>
       </div>
-      {candidates.map((item) => (
-        <article className={`candidate ${item.online ? '' : 'offline'}`} key={item.id}>
-          <input
-            type="checkbox"
-            checked={item.selected}
-            disabled={!item.online}
-            onChange={(event) => update(item.id, { selected: event.target.checked })}
-          />
-          <div className="candidate-main">
-            <input
-              value={item.name}
-              disabled={!item.online}
-              onChange={(event) => update(item.id, { name: event.target.value })}
-            />
-            <span title={item.error || item.originalUrl}>
-              {item.host} ·{' '}
-              <b className={`candidate-status ${item.online ? 'online' : 'offline'}`}>
-                {item.online ? 'En línea' : 'No encontrado'}
-              </b>
-              {item.mode && ` · ${item.mode}`}
-            </span>
-            <input
-              className="candidate-collection"
-              value={item.collection || ''}
-              onChange={(event) => update(item.id, { collection: event.target.value })}
-              placeholder="Colección"
-            />
-          </div>
-          <select
-            value={item.priority || 'medium'}
-            onChange={(event) =>
-              update(item.id, { priority: event.target.value as DownloadPriority })
-            }
-          >
-            {PRIORITIES.map((priority) => (
-              <option value={priority} key={priority}>
-                {PRIORITY_LABEL[priority]}
-              </option>
-            ))}
-          </select>
-          <input
-            className="candidate-password"
-            type="password"
-            value={item.password || ''}
-            onChange={(event) => update(item.id, { password: event.target.value })}
-            placeholder="Contraseña"
-          />
-          <button
-            className="candidate-folder"
-            title={item.destination}
-            onClick={() => chooseFolder(item.id)}
-          >
-            {item.destination ? 'Destino ✓' : 'Destino'}
-          </button>
-          <button onClick={() => window.tools.openUrl(item.originalUrl)}>↗</button>
-        </article>
-      ))}
       <div className="collector-footer">
         <label>
           <input
@@ -673,6 +797,149 @@ function CollectorTab({
           Añadir a descargas →
         </button>
       </div>
+      {candidates.length ? (
+        [...Map.groupBy(candidates, (item) => item.collection || 'Sin colección')].map(
+          ([collection, items]) => {
+            const groupKey = `colc:${collection}`;
+            return (
+              <section
+                className={`collector-group ${isCollapsed(groupKey) ? 'collapsed' : ''}`}
+                key={groupKey}
+              >
+                <div className="collector-group-head">
+                  <button
+                    className="collector-group-toggle"
+                    type="button"
+                    onClick={() => toggleCollapsed(groupKey)}
+                    title={`${isCollapsed(groupKey) ? 'Expandir colección' : 'Colapsar colección'}`}
+                    aria-label={`${isCollapsed(groupKey) ? 'Expandir' : 'Colapsar'} ${collection}`}
+                  >
+                    {isCollapsed(groupKey) ? '▸' : '▾'}
+                  </button>
+                  <strong className="collector-group-title" title={collection}>
+                    {collection}
+                  </strong>
+                  <small className="collector-group-count">
+                    {items.length} enlace{items.length === 1 ? '' : 's'}
+                  </small>
+                  <button
+                    className="collector-group-delete"
+                    type="button"
+                    title={`Eliminar la colección ${collection}`}
+                    aria-label={`Eliminar colección ${collection}`}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `¿Eliminar la colección "${collection}" (${items.length} enlace${items.length === 1 ? '' : 's'} identificados)?`,
+                        )
+                      )
+                        deleteCollection(collection);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+                {!isCollapsed(groupKey) &&
+                  items.map((item) => (
+                    <article className={`candidate ${item.online ? '' : 'offline'}`} key={item.id}>
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        disabled={!item.online}
+                        onChange={(event) => update(item.id, { selected: event.target.checked })}
+                      />
+                      <div className="candidate-main">
+                        <input
+                          value={item.name}
+                          disabled={!item.online}
+                          onChange={(event) => update(item.id, { name: event.target.value })}
+                        />
+                        <span title={item.error || item.originalUrl}>
+                          {item.host} ·{' '}
+                          <b className={`candidate-status ${item.online ? 'online' : 'offline'}`}>
+                            {item.online ? 'En línea' : 'No encontrado'}
+                          </b>
+                          {item.mode && ` · ${item.mode}`}
+                        </span>
+                        <span className="candidate-controls">
+                          <input
+                            className="candidate-collection"
+                            value={item.collection || ''}
+                            onChange={(event) =>
+                              update(item.id, { collection: event.target.value })
+                            }
+                            placeholder="Colección"
+                          />
+                          <label
+                            className="candidate-delete-archive"
+                            title="Eliminar el comprimido original después de la extracción"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={item.deleteArchive !== false}
+                              onChange={(event) =>
+                                update(item.id, { deleteArchive: event.target.checked })
+                              }
+                            />
+                            <span>Eliminar comprimido</span>
+                          </label>
+                        </span>
+                      </div>
+                      {item.mode === 'Playlist' && item.videoUrl ? (
+                        <QualitySelect
+                          url={item.videoUrl}
+                          value={item.videoFormat || 'video:best'}
+                          onChange={(videoFormat) => update(item.id, { videoFormat })}
+                        />
+                      ) : (
+                        <span className="candidate-quality-placeholder" aria-hidden="true" />
+                      )}
+                      <select
+                        value={item.priority || 'medium'}
+                        onChange={(event) =>
+                          update(item.id, { priority: event.target.value as DownloadPriority })
+                        }
+                      >
+                        {PRIORITIES.map((priority) => (
+                          <option value={priority} key={priority}>
+                            {PRIORITY_LABEL[priority]}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className="candidate-password"
+                        type="password"
+                        value={item.password || ''}
+                        onChange={(event) => update(item.id, { password: event.target.value })}
+                        placeholder="Contraseña"
+                      />
+                      <button
+                        className="candidate-folder"
+                        title={item.destination}
+                        onClick={() => chooseFolder(item.id)}
+                      >
+                        {item.destination ? 'Destino ✓' : 'Destino'}
+                      </button>
+                      <button onClick={() => window.tools.openUrl(item.originalUrl)}>↗</button>
+                      <button
+                        title="Eliminar enlace identificado"
+                        aria-label={`Eliminar ${item.name}`}
+                        onClick={() => deleteCandidates([item.id])}
+                      >
+                        ×
+                      </button>
+                    </article>
+                  ))}
+              </section>
+            );
+          },
+        )
+      ) : (
+        <div className="collector-empty">
+          <b>↓</b>
+          <span>Identifica enlaces o pega texto para agruparlos en colecciones.</span>
+        </div>
+      )}
     </>
   );
 }
@@ -715,7 +982,7 @@ function SettingsTab({
       </section>
       <section>
         <h3>Automatización</h3>
-        <label>
+        <label className="check">
           <input
             type="checkbox"
             checked={settings.clipboard}
@@ -723,13 +990,21 @@ function SettingsTab({
           />{' '}
           Detectar enlaces copiados
         </label>
-        <label>
+        <label className="check">
           <input
             type="checkbox"
             checked={settings.autoExtract}
             onChange={(event) => save({ autoExtract: event.target.checked })}
           />{' '}
           Extraer comprimidos automáticamente
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.defaultDeleteArchive !== false}
+            onChange={(event) => save({ defaultDeleteArchive: event.target.checked })}
+          />{' '}
+          Eliminar comprimidos tras extraer (por defecto)
         </label>
       </section>
       <section>

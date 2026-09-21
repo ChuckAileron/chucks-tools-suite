@@ -96,28 +96,70 @@ function parseSize(value) {
   return Math.round(size * 1024 ** power);
 }
 
-async function fetchInfo(originalUrl) {
-  return run(['-J', '--no-playlist', '--no-warnings', '--no-check-certificates', originalUrl]);
+// yt-dlp puede quedar desactualizado frente a los cambios de YouTube y fallar
+// al reconocer el contenido del enlace. Se intenta auto-actualizarlo y
+// reintentar una sola vez antes de reportar el error al usuario.
+async function runWithRetry(args, timeout) {
+  try {
+    return await run(args, timeout);
+  } catch (error) {
+    if (isExtractionError(error.message) && (await selfUpdate())) return run(args, timeout);
+    throw error;
+  }
 }
 
-async function listVideoFormats(originalUrl) {
-  let output;
+function formatIdFor(format) {
+  if (format === 'audio') return 'ba/b';
+  const height = Number(String(format).replace(/^video:/, ''));
+  // "video:best" (o un formato sin altura numérica) descarga la mejor calidad.
+  return Number.isFinite(height) && height > 0
+    ? `bv*[height<=${height}]+ba/b[height<=${height}]/b`
+    : 'bv*+ba/b';
+}
+
+function isPlaylistUrl(value) {
   try {
-    output = await fetchInfo(originalUrl);
-  } catch (error) {
-    // yt-dlp puede quedar desactualizado frente a los cambios de YouTube y fallar
-    // al reconocer el contenido del enlace. Intentamos auto-actualizarlo y reintentar
-    // una sola vez antes de reportar el error al usuario.
-    if (isExtractionError(error.message) && (await selfUpdate())) {
-      output = await fetchInfo(originalUrl);
-    } else {
-      throw error;
-    }
+    const url = new URL(value);
+    const host = url.hostname;
+    if (!/(^|\.)(m\.|music\.)?youtube\.com$/i.test(host) && !/(^|\.)youtu\.be$/i.test(host))
+      return false;
+    if (url.searchParams.has('list')) return true;
+    return /^\/playlist(?:\/|$)/i.test(url.pathname);
+  } catch {
+    return false;
   }
-  const info = JSON.parse(output);
-  const title = String(info.title || 'Video').replace(/\s+/g, ' ').trim().slice(0, 120);
-  const host = new URL(info.webpage_url || originalUrl).hostname;
-  const formats = Array.isArray(info.formats) ? info.formats : [];
+}
+
+const PLAYLIST_LIMIT = 500;
+
+function parsePlaylistInfo(raw) {
+  const info = JSON.parse(raw);
+  if (info._type !== 'playlist' || !Array.isArray(info.entries)) return { title: '', videos: [] };
+  const title = String(info.title || 'Lista de YouTube')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  const videos = [];
+  for (const entry of info.entries) {
+    if (videos.length >= PLAYLIST_LIMIT) break;
+    if (!entry?.id) continue;
+    videos.push({
+      id: entry.id,
+      title:
+        String(entry.title || entry.id)
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 120) || entry.id,
+      url: `https://www.youtube.com/watch?v=${encodeURIComponent(entry.id)}`,
+    });
+  }
+  return { title, videos };
+}
+
+// Agrupa los formatos con video por altura, priorizando el que ya incluye
+// audio integrado, para no ofrecer variantes redundantes de una misma
+// resolución.
+function collectVideoHeights(formats) {
   const byHeight = new Map();
   const hasAudio = (format) => format.acodec && format.acodec !== 'none';
   for (const format of formats) {
@@ -127,9 +169,27 @@ async function listVideoFormats(originalUrl) {
     if (!existing) byHeight.set(key, format);
     else if (!hasAudio(existing) && hasAudio(format)) byHeight.set(key, format);
   }
+  return [...byHeight.entries()].sort((a, b) => Number(b[0]) - Number(a[0]));
+}
+
+function hasAudioOnlyFormat(formats) {
+  return formats.some((format) => !format.vcodec || format.vcodec === 'none');
+}
+
+async function listVideoFormats(originalUrl) {
+  const output = await runWithRetry([
+    '-J',
+    '--no-playlist',
+    '--no-warnings',
+    '--no-check-certificates',
+    originalUrl,
+  ]);
+  const info = JSON.parse(output);
+  const title = String(info.title || 'Video').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const host = new URL(info.webpage_url || originalUrl).hostname;
+  const formats = Array.isArray(info.formats) ? info.formats : [];
   const candidates = [];
-  const rows = [...byHeight.entries()].sort((a, b) => Number(b[0]) - Number(a[0]));
-  for (const [height, format] of rows) {
+  for (const [height, format] of collectVideoHeights(formats)) {
     const heightNumber = Number(height);
     const label = String(format.format_note || `${heightNumber}p`).trim();
     candidates.push({
@@ -146,7 +206,7 @@ async function listVideoFormats(originalUrl) {
       selected: true,
     });
   }
-  if (formats.some((format) => !format.vcodec || format.vcodec === 'none')) {
+  if (hasAudioOnlyFormat(formats)) {
     candidates.push({
       id: randomUUID(),
       originalUrl,
@@ -164,10 +224,56 @@ async function listVideoFormats(originalUrl) {
   return candidates;
 }
 
+// Devuelve solo las opciones de calidad disponibles para un video (sin
+// generar una fila por resolución); se usa para el selector de resolución
+// de cada video dentro de una lista de YouTube.
+async function listVideoQualityOptions(originalUrl) {
+  const output = await runWithRetry([
+    '-J',
+    '--no-playlist',
+    '--no-warnings',
+    '--no-check-certificates',
+    originalUrl,
+  ]);
+  const info = JSON.parse(output);
+  const formats = Array.isArray(info.formats) ? info.formats : [];
+  const options = [{ label: 'Mejor calidad', videoFormat: 'video:best' }];
+  for (const [height, format] of collectVideoHeights(formats)) {
+    const heightNumber = Number(height);
+    options.push({
+      label: String(format.format_note || `${heightNumber}p`).trim(),
+      videoFormat: `video:${heightNumber}`,
+    });
+  }
+  if (hasAudioOnlyFormat(formats)) options.push({ label: 'Solo audio', videoFormat: 'audio' });
+  return options;
+}
+
+// Listar los videos de una lista puede tardar bastante más que analizar un
+// solo video (yt-dlp recorre cada entrada de la lista), así que se usa un
+// tiempo de espera más generoso para evitar falsos "no funciona" en listas
+// grandes.
+const PLAYLIST_TIMEOUT = 180000;
+
+async function listPlaylistVideos(originalUrl) {
+  const output = await runWithRetry(
+    [
+      '-J',
+      '--flat-playlist',
+      '--playlist-end',
+      String(PLAYLIST_LIMIT),
+      '--no-warnings',
+      '--no-check-certificates',
+      originalUrl,
+    ],
+    PLAYLIST_TIMEOUT,
+  );
+  return parsePlaylistInfo(output);
+}
+
 function downloadVideo({ url, destination, name, format, onProgress }) {
   let stopped = false;
-  const height = String(format).replace(/^video:/, '');
-  const formatId = format === 'audio' ? 'ba/b' : `bv*[height<=${height}]+ba/b[height<=${height}]/b`;
+  const formatId = formatIdFor(format);
   const args = [
     '--no-playlist',
     '--no-warnings',
@@ -239,4 +345,19 @@ function downloadVideo({ url, destination, name, format, onProgress }) {
   return { result, stop };
 }
 
-module.exports = { listVideoFormats, downloadVideo, isVideoLink };
+module.exports = {
+  listVideoFormats,
+  listVideoQualityOptions,
+  listPlaylistVideos,
+  downloadVideo,
+  isVideoLink,
+  isPlaylistUrl,
+  parsePlaylistInfo,
+  formatIdFor,
+  // Helpers puros expuestos para pruebas unitarias.
+  resolveYtDlp,
+  isExtractionError,
+  parseSize,
+  collectVideoHeights,
+  hasAudioOnlyFormat,
+};

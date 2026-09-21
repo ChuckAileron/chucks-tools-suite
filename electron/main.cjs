@@ -52,6 +52,7 @@ const parseVideoTarget = (value) => {
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
 let normalizeQueue = [];
+let normalizeCompleted = 0;
 let activeNormalizeFilePath = '';
 let normalizeState = {
   running: false,
@@ -474,6 +475,9 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('downloads:state', () => downloadManager.snapshot());
   ipcMain.handle('downloads:analyze', (_event, text) => downloadManager.analyze(text));
+  ipcMain.handle('downloads:video-quality-options', (_event, url) =>
+    downloadManager.getVideoQualityOptions(url),
+  );
   ipcMain.handle('downloads:add', (_event, items) => downloadManager.add(items));
   ipcMain.handle('downloads:update', (_event, { id, changes }) =>
     downloadManager.update(id, changes),
@@ -499,6 +503,11 @@ app.whenReady().then(async () => {
     if (filePath) shell.showItemInFolder(path.resolve(filePath));
     return true;
   });
+  ipcMain.handle('downloads:show-directory', (_event, directory) => {
+    if (directory) shell.openPath(path.resolve(directory));
+    return true;
+  });
+  ipcMain.handle('downloads:disk-info', (_event, directory) => downloadManager.diskInfo(directory));
   ipcMain.handle('collections:list', () => collectionManager.listCollections());
   ipcMain.handle('collections:create', (_event, data) => collectionManager.createCollection(data));
   ipcMain.handle('collections:update', (_event, { id, patch }) =>
@@ -830,15 +839,23 @@ app.whenReady().then(async () => {
     if (Array.isArray(data?.files)) next.files = data.files;
     if (Array.isArray(data?.selected)) next.selected = data.selected;
     if (Array.isArray(data?.processed)) next.processed = data.processed;
+    if (Array.isArray(data?.logs)) next.logs = data.logs;
     if (typeof data?.running === 'boolean') next.running = data.running;
+    if (typeof data?.globalProgress === 'number') next.globalProgress = data.globalProgress;
+    if (typeof data?.fileProgress === 'number') next.fileProgress = data.fileProgress;
+    if (typeof data?.message === 'string') next.message = data.message;
+    if (typeof data?.activeFile === 'string') next.activeFile = data.activeFile;
+    if (typeof data?.activeFolder === 'string') next.activeFolder = data.activeFolder;
     normalizeState = next;
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('normalizer:state-changed', normalizeState);
     return true;
   });
   ipcMain.handle('normalizer:start', async (_event, { files, type, targetDb }) => {
     normalizeCancelled = false;
     activeNormalizeFilePath = '';
     normalizeQueue = [...files];
-    let completed = 0;
+    normalizeCompleted = 0;
     normalizeState = {
       ...normalizeState,
       targetDb: parseTargetDb(targetDb),
@@ -857,13 +874,13 @@ app.whenReady().then(async () => {
       if (normalizeCancelled) break;
       const file = normalizeQueue.shift();
       activeNormalizeFilePath = file.path;
-      const total = completed + normalizeQueue.length + 1;
+      const total = normalizeCompleted + normalizeQueue.length + 1;
       emitNormalizeProgress({
         type: 'file-start',
         file: file.name,
         path: file.path,
         folder: file.folder,
-        current: completed,
+        current: normalizeCompleted,
         total,
       });
       try {
@@ -883,13 +900,13 @@ app.whenReady().then(async () => {
               percent,
             }),
         });
-        completed += 1;
+        normalizeCompleted += 1;
         emitNormalizeProgress({
           type: 'file-done',
           file: file.name,
           path: file.path,
-          current: completed,
-          total: completed + normalizeQueue.length,
+          current: normalizeCompleted,
+          total: normalizeCompleted + normalizeQueue.length,
         });
       } catch (error) {
         if (error.code !== 'CANCELLED')
@@ -905,8 +922,8 @@ app.whenReady().then(async () => {
     activeNormalizeProcess = null;
     emitNormalizeProgress({
       type: normalizeCancelled ? 'cancelled' : 'done',
-      completed,
-      total: completed,
+      completed: normalizeCompleted,
+      total: normalizeCompleted,
     });
   });
   ipcMain.handle('normalizer:skip-folder', (_event, folder) => {
@@ -922,6 +939,11 @@ app.whenReady().then(async () => {
       files: normalizeState.files.filter((file) => file.folder !== folder),
       selected: normalizeState.selected.filter((path) => !removed.has(path)),
       processed: normalizeState.processed.filter((path) => !removed.has(path)),
+    };
+    const remaining = normalizeCompleted + normalizeQueue.length;
+    normalizeState = {
+      ...normalizeState,
+      globalProgress: remaining ? Math.floor((normalizeCompleted / remaining) * 100) : 100,
     };
     for (const window of BrowserWindow.getAllWindows())
       window.webContents.send('normalizer:state-changed', normalizeState);

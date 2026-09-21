@@ -3,7 +3,7 @@ const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 const candidates = [
   path.join(
-    process.resourcesPath,
+    process.resourcesPath || '',
     'app.asar.unpacked',
     'node_modules',
     'handbrake-js',
@@ -134,18 +134,30 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
     } catch {}
     const height = metadata.streams?.find((stream) => stream.codec_type === 'video')?.height || 0;
     const chosen = selections[input];
+    const audioStreams = (metadata.streams || []).filter((stream) => stream.codec_type === 'audio');
     let audioIndices;
     let subtitleIndices;
     if (chosen) {
-      audioIndices = chosen.audio || [];
+      const picked = chosen.audio || [];
+      // La selección pudo quedar obsoleta (el archivo fue reemplazado o los
+      // índices se inspeccionaron antes de un cambio) y apuntar a streams que
+      // ya no existen o no son de audio. Mapear "0:N" sin validar hace que
+      // ffmpeg falle o que el resultado salga sin pista de audio. Si ninguno
+      // de los elegidos existe en el archivo real y este sí tiene audio, se
+      // usan los streams reales en lugar de producir un video mudo.
+      const valid = audioStreams.length
+        ? picked.filter((track) => audioStreams.some((stream) => stream.index === track))
+        : picked;
+      audioIndices =
+        picked.length && audioStreams.length && !valid.length
+          ? audioStreams.map((stream) => stream.index)
+          : valid;
       subtitleIndices = (chosen.subtitles || []).filter((track) => {
         const stream = metadata.streams?.find((item) => item.index === track);
         return stream && MP4_SUBTITLE_CODECS.has(stream.codec_name);
       });
     } else {
-      audioIndices = (metadata.streams || [])
-        .filter((stream) => stream.codec_type === 'audio')
-        .map((stream) => stream.index);
+      audioIndices = audioStreams.map((stream) => stream.index);
       subtitleIndices = (metadata.streams || [])
         .filter(
           (stream) =>

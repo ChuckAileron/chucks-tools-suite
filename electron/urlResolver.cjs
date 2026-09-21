@@ -96,10 +96,11 @@ function requestPage(url, maxBytes = 1024 * 1024, options = {}) {
       (response) => {
         const contentType = String(response.headers['content-type'] || '');
         const isText = isTextualContentType(contentType);
-        if ((response.statusCode || 0) >= 200 && (response.statusCode || 0) < 300 && !isText) {
+        const status = response.statusCode || 0;
+        if (status >= 200 && status < 300 && !isText) {
           response.resume();
           return resolve({
-            status: response.statusCode || 0,
+            status,
             location: null,
             contentType,
             body: '',
@@ -181,6 +182,34 @@ function extractDestination(current, body) {
 
 const MEDIAFIRE_FILE = /^(?:www\.|m\.)?mediafire\.com$/i;
 const MEDIAFIRE_DIRECT = /^download\d*\.mediafire\.com$/i;
+const FIRELOAD_HOST = /^(?:www\.)?fireload\.com$/i;
+const FIRELOAD_DIRECT = /^(?:[\w-]+\.)?fireload\.com$/i;
+
+function extractFireloadTitle(body) {
+  if (!body) return '';
+  const $ = load(body);
+  const title = $('meta[property="og:title"]').attr('content') || $('title').first().text();
+  return (title || '').replace(/\s+/g, ' ').trim();
+}
+
+// Fireload sirve la descarga real detrás de un botón/formulario en la página
+// del archivo. Se intentan varios selectores conocidos y, como respaldo, un
+// patrón de URL con el token de descarga incrustado en el HTML/JS de la página.
+function extractFireloadDirect(body, base) {
+  if (!body) return null;
+  const $ = load(body);
+  const selector =
+    'a#downloadButton, a.download-button, a[href*="/download/"], a[data-download-url], button[data-url], a.btn-download';
+  const link = $(selector).first();
+  const fromAttr = urlCandidate(
+    link.attr('data-download-url') || link.attr('data-url') || link.attr('href'),
+    base,
+  );
+  if (fromAttr) return fromAttr;
+  const pattern = /https?:\\?\/\\?\/[^"'<>\s]*fireload\.com\\?\/download\\?\/[^"'<>\s]+/i;
+  const candidate = urlCandidate(body.match(pattern)?.[0]?.replaceAll('\\/', '/'), base);
+  return candidate;
+}
 
 function extractMediafireTitle(body) {
   if (!body) return '';
@@ -220,7 +249,6 @@ async function resolveUrl(input) {
       continue;
     }
     if (response.binary) {
-      if (response.status >= 400) throw new Error('El enlace de descarga no está disponible.');
       return {
         input,
         finalUrl: current.href,
@@ -238,7 +266,7 @@ async function resolveUrl(input) {
         return {
           input,
           finalUrl: direct,
-          domain: getDomain(current.hostname) || current.hostname,
+          domain: getDomain(current.hostname),
           chain,
           mode: 'mediafire-direct',
           title,
@@ -247,15 +275,36 @@ async function resolveUrl(input) {
       return {
         input,
         finalUrl: current.href,
-        domain: getDomain(current.hostname) || current.hostname,
+        domain: getDomain(current.hostname),
         chain,
         mode: 'mediafire-page',
         title,
       };
     }
-    const extracted = MEDIAFIRE_FILE.test(current.hostname)
-      ? null
-      : extractDestination(current, html);
+    if (FIRELOAD_HOST.test(current.hostname)) {
+      const direct = extractFireloadDirect(html, current);
+      const title = extractFireloadTitle(html);
+      if (direct) {
+        chain[chain.length - 1].method = 'fireload-direct';
+        return {
+          input,
+          finalUrl: direct,
+          domain: getDomain(current.hostname),
+          chain,
+          mode: 'fireload-direct',
+          title,
+        };
+      }
+      return {
+        input,
+        finalUrl: current.href,
+        domain: getDomain(current.hostname),
+        chain,
+        mode: 'fireload-page',
+        title,
+      };
+    }
+    const extracted = extractDestination(current, html);
     if (extracted && !visited.has(extracted.url)) {
       usedPageExtraction = true;
       chain[chain.length - 1].method = extracted.method;
@@ -266,6 +315,15 @@ async function resolveUrl(input) {
           domain: getDomain(current.hostname) || current.hostname,
           chain,
           mode: 'mediafire-direct',
+        };
+      }
+      if (FIRELOAD_DIRECT.test(new URL(extracted.url).hostname)) {
+        return {
+          input,
+          finalUrl: extracted.url,
+          domain: getDomain(current.hostname) || current.hostname,
+          chain,
+          mode: 'fireload-direct',
         };
       }
       current = await validatePublicUrl(extracted.url);
@@ -290,4 +348,9 @@ module.exports = {
   isTextualContentType,
   extractMediafireDirect,
   extractMediafireTitle,
+  extractFireloadDirect,
+  extractFireloadTitle,
+  // Helpers puros expuestos para pruebas unitarias.
+  urlCandidate,
+  extractDestination,
 };

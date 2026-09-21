@@ -67,6 +67,8 @@ export default function NormalizeTool() {
       processed: [],
       logs: [],
       running: false,
+      globalProgress: 0,
+      fileProgress: 0,
     });
   };
   const scan = async () => {
@@ -84,6 +86,8 @@ export default function NormalizeTool() {
         processed: result.filter((file) => file.processed).map((file) => file.path),
         logs: [],
         running: false,
+        globalProgress: 0,
+        fileProgress: 0,
       });
       setMessage(
         result.length
@@ -113,7 +117,16 @@ export default function NormalizeTool() {
     setProcessed(new Set());
     setLogs([]);
     setNormalize(EMPTY_NORMALIZE);
-    pushUi({ folders: [], files: [], selected: [], processed: [], logs: [], running: false });
+    pushUi({
+      folders: [],
+      files: [],
+      selected: [],
+      processed: [],
+      logs: [],
+      running: false,
+      globalProgress: 0,
+      fileProgress: 0,
+    });
   };
   const removeFolder = async (folder: string) => {
     if (normalize.running) {
@@ -131,11 +144,22 @@ export default function NormalizeTool() {
     const nextProcessed = [...processed].filter((path) => kept.has(path));
     setSelected(new Set(nextSelected));
     setProcessed(new Set(nextProcessed));
+    setNormalize((current) => ({
+      ...current,
+      globalProgress: 0,
+      fileProgress: 0,
+      running: false,
+      activeFile: 'Sin procesos activos',
+      activeFolder: '',
+    }));
     pushUi({
       folders: nextFolders,
       files: nextFiles,
       selected: nextSelected,
       processed: nextProcessed,
+      globalProgress: 0,
+      fileProgress: 0,
+      running: false,
     });
   };
   const toggleSelected = (path: string) => {
@@ -195,6 +219,8 @@ export default function NormalizeTool() {
                 processed: [],
                 logs: [],
                 running: false,
+                globalProgress: 0,
+                fileProgress: 0,
               });
             }}
           >

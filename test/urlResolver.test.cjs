@@ -6,6 +6,10 @@ const {
   isTextualContentType,
   extractMediafireDirect,
   extractMediafireTitle,
+  extractFireloadDirect,
+  extractFireloadTitle,
+  urlCandidate,
+  extractDestination,
 } = require('../electron/urlResolver.cjs');
 
 test('identifica rangos IPv4 e IPv6 privados', () => {
@@ -18,6 +22,85 @@ test('identifica rangos IPv4 e IPv6 privados', () => {
 test('rechaza protocolos y hosts locales', async () => {
   await assert.rejects(validatePublicUrl('file:///etc/passwd'), /HTTP o HTTPS/);
   await assert.rejects(validatePublicUrl('http://localhost/test'), /direcciones locales/);
+});
+
+test('rechaza URLs inválidas, con credenciales o .local', async () => {
+  await assert.rejects(validatePublicUrl('no-es-una-url'), /URL válida/);
+  await assert.rejects(validatePublicUrl('ftp://ejemplo.com/a.zip'), /HTTP o HTTPS/);
+  await assert.rejects(validatePublicUrl('https://user:pass@ejemplo.com/'), /credenciales/);
+  await assert.rejects(validatePublicUrl('http://mi-pc.local/a'), /direcciones locales/);
+});
+
+test('identifica más rangos privados y públicos', () => {
+  assert.equal(isPrivateAddress('10.0.0.1'), true);
+  assert.equal(isPrivateAddress('172.16.0.1'), true);
+  assert.equal(isPrivateAddress('172.31.255.255'), true);
+  assert.equal(isPrivateAddress('172.32.0.1'), false);
+  assert.equal(isPrivateAddress('0.0.0.0'), true);
+  assert.equal(isPrivateAddress('169.254.1.1'), true);
+  assert.equal(isPrivateAddress('224.0.0.1'), true);
+  assert.equal(isPrivateAddress('1.1.1.1'), false);
+  assert.equal(isPrivateAddress('::ffff:127.0.0.1'), true);
+  assert.equal(isPrivateAddress('::'), true);
+  assert.equal(isPrivateAddress('fe80::1'), true);
+  assert.equal(isPrivateAddress('fc00::1'), true);
+  assert.equal(isPrivateAddress('fd00::1'), true);
+  assert.equal(isPrivateAddress('2001:db8::1'), false);
+});
+
+test('normaliza URLs candidatas', () => {
+  assert.equal(urlCandidate(null), null);
+  assert.equal(urlCandidate(''), null);
+  assert.equal(urlCandidate('https://ejemplo.com/a.zip'), 'https://ejemplo.com/a.zip');
+  assert.equal(urlCandidate('https://ejemplo.com/r?x=1&amp;y=2'), 'https://ejemplo.com/r?x=1&y=2');
+  assert.equal(urlCandidate('https%3A%2F%2Fejemplo.com%2Fa.zip'), 'https://ejemplo.com/a.zip');
+  assert.equal(urlCandidate('/a.zip', 'https://ejemplo.com/base/'), 'https://ejemplo.com/a.zip');
+  assert.equal(urlCandidate('ftp://ejemplo.com/a.zip'), null);
+  assert.equal(urlCandidate('no-es-url'), null);
+});
+
+test('extrae destino desde parámetros de consulta', () => {
+  const current = new URL('https://acortador.com/x?url=https%3A%2F%2Fejemplo.com%2Fa.zip');
+  assert.deepEqual(extractDestination(current, ''), {
+    url: 'https://ejemplo.com/a.zip',
+    method: 'query',
+  });
+  // Sin parámetros ni cuerpo no hay destino.
+  assert.equal(extractDestination(new URL('https://ejemplo.com/a'), ''), null);
+  assert.equal(extractDestination(new URL('https://ejemplo.com/a?foo=bar'), ''), null);
+});
+
+test('extrae destino desde meta-refresh y enlaces de página', () => {
+  const current = new URL('https://publi.com/paso');
+  assert.deepEqual(
+    extractDestination(
+      current,
+      '<html><head><meta http-equiv="refresh" content="0; url=https://ejemplo.com/a.zip"></head></html>',
+    ),
+    { url: 'https://ejemplo.com/a.zip', method: 'meta-refresh' },
+  );
+  assert.deepEqual(
+    extractDestination(
+      current,
+      '<html><body><a id="downloadButton" href="https://cdn.com/a.zip">Bajar</a></body></html>',
+    ),
+    { url: 'https://cdn.com/a.zip', method: 'page-link' },
+  );
+  assert.deepEqual(
+    extractDestination(
+      current,
+      '<html><body><script>window.location="https://cdn.com/a.zip";</script></body></html>',
+    ),
+    { url: 'https://cdn.com/a.zip', method: 'page-script' },
+  );
+  assert.deepEqual(
+    extractDestination(
+      current,
+      '<html><body><script>const finalUrl = "https://cdn.com/a.zip";</script></body></html>',
+    ),
+    { url: 'https://cdn.com/a.zip', method: 'page-script' },
+  );
+  assert.equal(extractDestination(current, '<html><body>sin enlaces</body></html>'), null);
 });
 
 test('extrae la URL directa de MediaFire desde el boton de descarga', () => {
@@ -73,4 +156,39 @@ test('extrae el nombre real del archivo desde el titulo de MediaFire', () => {
   );
   assert.equal(extractMediafireTitle('<html></html>'), '');
   assert.equal(extractMediafireTitle(''), '');
+});
+
+test('extrae la URL directa de Fireload desde el boton de descarga', () => {
+  const base = new URL('https://www.fireload.com/file/abc12345/foo.zip');
+  const body = `<html><body>
+    <a id="downloadButton" href="https://cdn.fireload.com/download/abc12345/foo.zip">Download</a>
+  </body></html>`;
+  const direct = extractFireloadDirect(body, base);
+  assert.equal(direct, 'https://cdn.fireload.com/download/abc12345/foo.zip');
+});
+
+test('extrae la URL directa de Fireload desde atributo data-download-url', () => {
+  const base = new URL('https://www.fireload.com/file/abc12345/foo.zip');
+  const body = `<html><body>
+    <a class="btn-download" data-download-url="https://cdn.fireload.com/download/abc12345/foo.zip">Bajar</a>
+  </body></html>`;
+  assert.equal(
+    extractFireloadDirect(body, base),
+    'https://cdn.fireload.com/download/abc12345/foo.zip',
+  );
+});
+
+test('ignora Fireload sin enlace de descarga', () => {
+  const base = new URL('https://www.fireload.com/file/abc12345/foo.zip');
+  assert.equal(extractFireloadDirect('<html><body>sin enlaces</body></html>', base), null);
+  assert.equal(extractFireloadDirect('', base), null);
+});
+
+test('extrae el nombre real del archivo desde el titulo de Fireload', () => {
+  const body = `<html><head>
+    <meta property="og:title" content="Documento importante" />
+    <title>Documento importante</title>
+  </head></html>`;
+  assert.equal(extractFireloadTitle(body), 'Documento importante');
+  assert.equal(extractFireloadTitle(''), '');
 });

@@ -1,6 +1,6 @@
 {
   "name": "chucks-tools-suite",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "private": true,
   "type": "module",
   "description": "Suite de herramientas locales para archivos",
@@ -19,6 +19,7 @@
     "build": "tsc && vite build",
     "start": "electron .",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage test/",
     "lint": "eslint src vite.config.ts",
     "lint:fix": "eslint src vite.config.ts --fix",
     "format": "prettier --write .",

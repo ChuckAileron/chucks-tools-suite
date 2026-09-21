@@ -22,11 +22,13 @@ export type DownloadCandidate = {
   priority?: DownloadPriority;
   password?: string;
   extract?: boolean;
+  deleteArchive?: boolean;
   collection?: string;
   folderLink?: boolean;
   videoUrl?: string;
   videoFormat?: string;
 };
+export type VideoQualityOption = { label: string; videoFormat: string };
 export type DownloadTask = {
   id: string;
   originalUrl: string;
@@ -36,6 +38,7 @@ export type DownloadTask = {
   priority: DownloadPriority;
   password: string;
   extract: boolean;
+  deleteArchive: boolean;
   host: string;
   collection: string;
   status: string;
@@ -51,12 +54,14 @@ export type DownloadTask = {
 };
 export type DownloadSettings = {
   defaultDirectory: string;
+  defaultDeleteArchive?: boolean;
   concurrency: number;
   autoExtract: boolean;
   clipboard: boolean;
   googleDriveApiKey: string;
 };
 export type DownloadsState = { settings: DownloadSettings; tasks: DownloadTask[] };
+export type DownloadDiskInfo = { drive: string; total: number; free: number };
 export type VideoTrack = {
   index: number;
   codec: string;
@@ -292,6 +297,7 @@ declare global {
       openUrl(url: string): Promise<boolean>;
       getDownloads(): Promise<DownloadsState>;
       analyzeDownloads(text: string): Promise<DownloadCandidate[]>;
+      getVideoQualityOptions(url: string): Promise<VideoQualityOption[]>;
       addDownloads(items: DownloadCandidate[]): Promise<void>;
       updateDownload(id: string, changes: Partial<DownloadTask>): Promise<boolean>;
       controlDownload(id: string, action: string): Promise<boolean>;
@@ -301,6 +307,8 @@ declare global {
       retryExtraction(id: string, password: string): Promise<boolean>;
       selectDownloadDirectory(): Promise<string | null>;
       showDownloadedFile(filePath: string): Promise<boolean>;
+      showDownloadDirectory(directory: string): Promise<boolean>;
+      getDownloadDiskInfo(directory?: string): Promise<DownloadDiskInfo>;
       getCollections(): Promise<Collection[]>;
       createCollection(data: {
         name: string;

@@ -325,4 +325,11 @@ module.exports = {
   extractDuckDuckGoImages,
   extractWikimediaImages,
   extractOpenverseImages,
+  // Helpers puros expuestos para pruebas unitarias.
+  cleanText,
+  isImageUrl,
+  uniqueImages,
+  safeHostname,
+  canonicalImageUrl,
+  responseCookies,
 };

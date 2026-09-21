@@ -117,4 +117,11 @@ async function scrapePrice(value) {
   throw new Error('La página superó el máximo de redirecciones.');
 }
 
-module.exports = { scrapePrice, extractPrice, numberFromPrice };
+module.exports = {
+  scrapePrice,
+  extractPrice,
+  numberFromPrice,
+  // Helpers puros expuestos para pruebas unitarias.
+  currencyFromText,
+  findOffer,
+};

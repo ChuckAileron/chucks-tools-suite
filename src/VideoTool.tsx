@@ -71,7 +71,7 @@ export default function VideoTool() {
       const next = { ...current };
       for (const folder of results)
         for (const video of folder.videos) {
-          if (!video.audio.length && !video.subtitles.length && !video.probeError) continue;
+          if (!video.audio.length && !video.subtitles.length) continue;
           next[video.path] ||= {
             audio: video.audio.map((track) => track.index),
             subtitles: video.subtitles

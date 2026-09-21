@@ -7,8 +7,14 @@ const EXTENSIONS = {
 };
 async function scanMedia(folders, type) {
   const files = [];
-  for (const folder of folders)
-    for (const entry of await fs.promises.readdir(folder, { withFileTypes: true }))
+  for (const folder of folders) {
+    let entries;
+    try {
+      entries = await fs.promises.readdir(folder, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries)
       if (
         entry.isFile() &&
         EXTENSIONS[type].includes(path.extname(entry.name).toLowerCase()) &&
@@ -31,6 +37,7 @@ async function scanMedia(folders, type) {
           ),
         });
       }
+  }
   return files;
 }
 const durationOf = (input) =>
@@ -94,9 +101,9 @@ async function normalizeMedia({ input, type, targetDb, onProgress, onProcess, is
     outputDirectory = path.join(path.dirname(input), `normalized_output-${type}`);
   fs.mkdirSync(outputDirectory, { recursive: true });
   const output = path.join(
-    outputDirectory,
-    `${path.basename(input, extension)}_normalized${extension}`,
-  ),
+      outputDirectory,
+      `${path.basename(input, extension)}_normalized${extension}`,
+    ),
     temporary = `${output.slice(0, -extension.length)}.part${extension}`;
   if (fs.existsSync(output)) throw new Error(`El resultado ya existe: ${output}`);
   fs.rmSync(temporary, { force: true });

@@ -4,6 +4,8 @@ Aplicación de escritorio para Windows, macOS y Linux que reúne herramientas lo
 
 Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. El módulo de Descargas realiza solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
 
+La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Gestor de descargas, Identificador, Colección, Organizar, Renombrar, Video a SD, Normalizar, AnalogReplayTV, Wishlist y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos.
+
 ## Herramientas incluidas
 
 ### Organizar archivos
@@ -103,7 +105,7 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pestañas: Descargas, Identificador y Configuración.
 
 - Captura opcional de uno o varios enlaces desde el portapapeles.
-- Resolución previa de URLs cortas y páginas como MediaFire.
+- Resolución previa de URLs cortas y páginas como MediaFire y Fireload.
 - Comprobación de disponibilidad antes de añadir a la cola.
 - Carpeta de destino individual, múltiple o predeterminada.
 - Prioridades urgente, alta, media y baja.
@@ -114,7 +116,16 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Contraseña de extracción asignable a un grupo o colección completa (botón ⌕ del encabezado): se aplica a las tareas pendientes y reintenta la extracción de las que requieren contraseña.
 - Indicador de éxito cuando todas las descargas de un grupo se completan.
 - Segundo nivel de agrupación por colección de enlaces, también colapsable, con nombre editable asignable a varios enlaces.
+- Colapsado de grupos y colecciones en **Identificador** con estado persistente entre secciones y reinicios de la aplicación.
+- Eliminación individual de enlaces identificados o de una colección completa desde **Identificador**, con confirmación para colecciones.
+- Listado de enlaces identificados reubicado debajo del botón "Añadir a descargas →" para que el footer de envío sea visible junto a la selección actual.
 - Expansión recursiva de carpetas públicas de MediaFire (conservando subcolecciones) y resolución de páginas de archivo al enlace directo de su CDN, sin sesión.
+- Soporte de **Fireload** mediante detección por dominio y extracción del enlace directo desde el botón de descarga o atributos `data-download-url`/`data-url` de la página, sin sesión.
+- Botón **Mostrar carpeta** en el encabezado de cada grupo para abrir la carpeta destino en el explorador.
+- Botones globales **Pausar todo**, **Continuar todo** y **Detener todo** en la barra de descargas, que actúan sobre todas las tareas de la lista con la lógica de selección por estado ya existente.
+- Modal **Listar enlaces** desde la barra de descargas: muestra todas las URLs en cola, una por línea, con "Copiar todos" al portapapeles y "Cerrar".
+- Indicador en vivo del espacio del disco predeterminado (C: en Windows, raíz en macOS/Linux) con tamaño total y libre, refrescado cada 30 segundos.
+- En **Configuración > Automatización** aparece la casilla **Eliminar comprimidos tras extraer** (activada por defecto), que se aplica a cada nuevo candidato identificado y puede ajustarse individualmente por enlace.
 - Expansión recursiva de carpetas públicas de Google Drive con API key, detección de enlaces individuales y exportación automática de documentos de Google.
 - Identificación y descarga de videos de YouTube (incluidos los atajos `youtu.be`), Vimeo, Dailymotion, TikTok, Twitch, X/Twitter, Facebook, Instagram, SoundCloud, VK, OK y Rutube mediante `yt-dlp`, sin necesidad de sesión.
 - Al analizar un enlace de video, el **Identificador** muestra el título y genera un candidato por resolución disponible (de 144p a 2160p) más una opción de solo audio, todos seleccionados para añadir a la cola.
@@ -277,7 +288,7 @@ CHUCK's Tools Suite/
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
 │   ├── collapseState.ts  # Persistencia de grupos colapsados (localStorage)
 │   ├── main.tsx          # Entrada de React
-│   ├── styles.css        # Sistema visual y diseño responsive
+│   ├── styles.css        # Sistema visual, modo claro/oscuro y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
 ├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes, renombrado y programación analog
