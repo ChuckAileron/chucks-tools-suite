@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { NormalizeFile, NormalizeState } from './types';
 type MediaType = 'audio' | 'video';
 const formatSize = (bytes: number) =>
   bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+// Misma tolerancia (en LU) usada al procesar: si el LUFS medido de un
+// archivo ya está dentro de este margen del objetivo, se considera que no
+// necesita normalizarse y se omite su procesamiento.
+const LUFS_TOLERANCE = 1;
+const isAtTarget = (lufs: number | null | undefined, target: number) =>
+  typeof lufs === 'number' && Math.abs(lufs - target) <= LUFS_TOLERANCE;
 const LUFS_PRESETS = [
   { value: -14, label: '-14 Streaming' },
   { value: -16, label: '-16 General' },
@@ -48,6 +54,24 @@ export default function NormalizeTool() {
     window.tools.getNormalizeState().then(hydrate);
     return window.tools.onNormalizeState(hydrate);
   }, []);
+  // Mide el LUFS de cada archivo listado en segundo plano (de a pocos a la
+  // vez) para mostrarlo en la lista; se pausa mientras hay un proceso de
+  // normalización en curso para no competir por CPU con FFmpeg.
+  const measuringRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (normalize.running) return;
+    const pending = files.filter(
+      (file) => file.lufs === undefined && !measuringRef.current.has(file.path),
+    );
+    if (!pending.length) return;
+    for (const file of pending.slice(0, 2)) {
+      measuringRef.current.add(file.path);
+      window.tools
+        .measureNormalizeLufs(file.path)
+        .catch(() => null)
+        .finally(() => measuringRef.current.delete(file.path));
+    }
+  }, [files, normalize.running]);
   const pushUi = (patch: Partial<NormalizeState>) => {
     void window.tools.setNormalizeUi(patch);
   };
@@ -321,6 +345,21 @@ export default function NormalizeTool() {
                     <small>{file.folder}</small>
                   </span>
                   <i>{formatSize(file.size)}</i>
+                  <span
+                    className={`file-lufs ${isAtTarget(file.lufs, target) ? 'at-target' : ''}`}
+                    title={
+                      isAtTarget(file.lufs, target)
+                        ? `Ya está a ${LUFS_TOLERANCE} LU o menos del objetivo (${target} LUFS); se omitirá al normalizar`
+                        : 'Sonoridad integrada medida con FFmpeg'
+                    }
+                  >
+                    {file.lufs === undefined
+                      ? 'Midiendo…'
+                      : file.lufs === null
+                        ? 'Sin medir'
+                        : `${file.lufs.toFixed(1)} LUFS`}
+                    {isAtTarget(file.lufs, target) && <b> · en el objetivo</b>}
+                  </span>
                   {processed.has(file.path) && (
                     <em className="file-check" title="Archivo procesado" aria-hidden="true">
                       ✓

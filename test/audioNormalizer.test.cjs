@@ -24,7 +24,12 @@ function execFile(command, args, callback) {
 installHooks({
   'node:child_process': { execFile, spawn },
 });
-const { scanMedia, normalizeMedia } = require('../electron/audioNormalizer.cjs');
+const {
+  scanMedia,
+  normalizeMedia,
+  measureLufs,
+  LUFS_TOLERANCE,
+} = require('../electron/audioNormalizer.cjs');
 
 function reset() {
   state.spawnCalls.length = 0;
@@ -52,6 +57,7 @@ async function normalize(file, options = {}) {
     input: file,
     type: options.type || 'audio',
     targetDb: options.targetDb ?? -14,
+    knownLufs: options.knownLufs,
     onProgress: options.onProgress || (() => {}),
     onProcess: options.onProcess || (() => {}),
     isCancelled: options.isCancelled || (() => false),
@@ -137,9 +143,11 @@ test('normalizeMedia usa doble pasada y renombra el temporal al terminar', async
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
   emitData(convert, 'frame=  100 fps=30 time=00:00:05.12 size=1kB');
   closeChild(convert, 0);
-  const output = await promise;
+  const result = await promise;
   const expected = path.join(dir, 'normalized_output-audio', 'pista_normalized.mp3');
-  assert.equal(output, expected);
+  assert.equal(result.skipped, false);
+  assert.equal(result.output, expected);
+  assert.equal(result.measuredLufs, -16.4);
   assert.equal(fs.existsSync(expected), true);
   assert.equal(progress.at(-1), 100);
   assert.equal(convert.args.join(' ').includes('measured_I=-16.40'), true);
@@ -173,7 +181,7 @@ test('normalizeMedia falla limpiamente si ffmpeg de conversión sale con error',
   fs.writeFileSync(file, 'x');
   const promise = normalize(file);
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   emitData(convert, 'Error interno de ffmpeg');
@@ -201,7 +209,7 @@ test('normalizeMedia propaga la cancelación durante la conversión', async () =
   const cancelled = { value: false };
   const promise = normalize(file, { isCancelled: () => cancelled.value });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -219,7 +227,7 @@ test('normalizeMedia sin duración no reporta progreso intermedio', async () => 
   const progress = [];
   const promise = normalize(file, { onProgress: (v) => progress.push(v) });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -236,7 +244,7 @@ test('normalizeMedia mantiene video y sus pistas al normalizar', async () => {
   fs.writeFileSync(file, 'x');
   const promise = normalize(file, { type: 'video' });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -259,7 +267,7 @@ test('normalizeMedia reporta progreso según el tiempo transcurrido', async () =
   const progress = [];
   const promise = normalize(file, { onProgress: (v) => progress.push(v) });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -278,14 +286,14 @@ test('normalizeMedia lee la medición que llega por stdout', async () => {
   fs.writeFileSync(file, 'x');
   const promise = normalize(file);
   const [measure] = await spawned(1);
-  measure.stdout.emit('data', Buffer.from(JSON.stringify({ input_i: -14 })));
+  measure.stdout.emit('data', Buffer.from(JSON.stringify({ input_i: -30 })));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
   closeChild(convert, 0);
   await promise;
   const filter = convert.args.join(' ');
-  assert.equal(filter.includes('measured_I=-14.00'), true);
+  assert.equal(filter.includes('measured_I=-30.00'), true);
 });
 
 test('normalizeMedia rechaza si no se pudo renombrar el temporal', async () => {
@@ -295,7 +303,7 @@ test('normalizeMedia rechaza si no se pudo renombrar el temporal', async () => {
   fs.writeFileSync(file, 'x');
   const promise = normalize(file);
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   closeChild(convert, 0);
@@ -313,7 +321,7 @@ test('normalizeMedia no reporta progreso intermedio si ffprobe falla', async () 
   const progress = [];
   const promise = normalize(file, { onProgress: (v) => progress.push(v) });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -346,7 +354,7 @@ test('normalizeMedia propaga la cancelación si la medición cierra al cancelar'
   fs.writeFileSync(file, 'x');
   const promise = normalize(file, { isCancelled: () => true });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   await assert.rejects(promise, { code: 'CANCELLED' });
 });
@@ -392,7 +400,7 @@ test('normalizeMedia ignora el cierre posterior a un error de conversión', asyn
   fs.writeFileSync(file, 'x');
   const promise = normalize(file);
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -409,7 +417,7 @@ test('normalizeMedia usa el código de salida si ffmpeg no emite stderr', async 
   fs.writeFileSync(file, 'x');
   const promise = normalize(file);
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   fs.writeFileSync(convert.args.at(-1), 'fake-media');
@@ -425,10 +433,83 @@ test('normalizeMedia propaga la cancelación si la conversión no arranca', asyn
   const cancelled = { value: false };
   const promise = normalize(file, { isCancelled: () => cancelled.value });
   const [measure] = await spawned(1);
-  emitData(measure, JSON.stringify({ input_i: -14 }));
+  emitData(measure, JSON.stringify({ input_i: -30 }));
   closeChild(measure, 0);
   const [, convert] = await spawned(2);
   cancelled.value = true;
   failChild(convert, new Error('boom'));
   await assert.rejects(promise, { code: 'CANCELLED' });
+});
+
+test('normalizeMedia omite el procesamiento si el LUFS conocido ya está en el objetivo', async () => {
+  reset();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-known-skip-'));
+  const file = path.join(dir, 'pista.mp3');
+  fs.writeFileSync(file, 'x');
+  const result = await normalize(file, { targetDb: -16, knownLufs: -16.4 });
+  assert.deepEqual(result, { skipped: true, measuredLufs: -16.4, output: null });
+  // No debe spawnear ningún proceso: ni de medición ni de conversión.
+  assert.equal(state.spawnCalls.length, 0);
+});
+
+test('normalizeMedia procesa normalmente si el LUFS conocido está fuera de la tolerancia', async () => {
+  reset();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-known-noskip-'));
+  const file = path.join(dir, 'pista.mp3');
+  fs.writeFileSync(file, 'x');
+  const promise = normalize(file, { targetDb: -16, knownLufs: -16.4 - LUFS_TOLERANCE - 0.1 });
+  const [measure] = await spawned(1);
+  emitData(measure, JSON.stringify({ input_i: -30 }));
+  closeChild(measure, 0);
+  const [, convert] = await spawned(2);
+  fs.writeFileSync(convert.args.at(-1), 'fake-media');
+  closeChild(convert, 0);
+  const result = await promise;
+  assert.equal(result.skipped, false);
+  assert.equal(fs.existsSync(result.output), true);
+});
+
+test('normalizeMedia omite el procesamiento tras medir si el resultado cae en la tolerancia', async () => {
+  reset();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-measure-skip-'));
+  const file = path.join(dir, 'pista.mp3');
+  fs.writeFileSync(file, 'x');
+  const promise = normalize(file, { targetDb: -16 });
+  const [measure] = await spawned(1);
+  emitData(measure, JSON.stringify({ input_i: -16.5 }));
+  closeChild(measure, 0);
+  const result = await promise;
+  assert.deepEqual(result, { skipped: true, measuredLufs: -16.5, output: null });
+  // Nunca debe arrancar el segundo proceso (la conversión con ffmpeg).
+  assert.equal(state.spawnCalls.length, 1);
+});
+
+test('normalizeMedia respeta el límite exacto de tolerancia (frontera inclusive)', async () => {
+  reset();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-tolerance-edge-'));
+  const file = path.join(dir, 'pista.mp3');
+  fs.writeFileSync(file, 'x');
+  const result = await normalize(file, {
+    targetDb: -16,
+    knownLufs: -16 - LUFS_TOLERANCE,
+  });
+  assert.equal(result.skipped, true);
+});
+
+test('measureLufs devuelve el LUFS integrado sin convertir el archivo', async () => {
+  reset();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-measure-only-'));
+  const file = path.join(dir, 'pista.mp3');
+  fs.writeFileSync(file, 'x');
+  const promise = measureLufs(file);
+  const [measure] = await spawned(1);
+  assert.equal(measure.args.join(' ').includes('print_format=json'), true);
+  emitData(
+    measure,
+    JSON.stringify({ input_i: -18.3, input_tp: -1, input_lra: 5, input_thresh: -28 }),
+  );
+  closeChild(measure, 0);
+  const lufs = await promise;
+  assert.equal(lufs, -18.3);
+  assert.equal(state.spawnCalls.length, 1);
 });

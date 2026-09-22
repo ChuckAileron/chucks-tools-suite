@@ -106,6 +106,7 @@ export type NormalizeFile = {
   folder: string;
   size: number;
   processed: boolean;
+  lufs?: number | null;
 };
 export type NormalizeProgress = {
   type: string;
@@ -116,6 +117,7 @@ export type NormalizeProgress = {
   total?: number;
   completed?: number;
   percent?: number;
+  measuredLufs?: number | null;
 };
 export type NormalizeState = {
   running: boolean;
@@ -260,6 +262,53 @@ export type WishlistItem = {
   createdAt: string;
   updatedAt: string;
 };
+export type HddCategory = 'folder' | 'video' | 'image' | 'audio' | 'document' | 'other';
+export type HddDrive = {
+  id: number;
+  code: string;
+  label: string;
+  volumeId: string | null;
+  volumeLabel: string;
+  totalBytes: number;
+  lastMountPoint: string;
+  lastScannedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  connected: boolean;
+  mountPoint: string;
+  stats: { files: number; bytes: number };
+};
+export type HddEntry = {
+  id: number;
+  driveId: number;
+  relativePath: string;
+  parentPath: string;
+  name: string;
+  isDirectory: boolean;
+  category: HddCategory;
+  extension: string;
+  size: number;
+  modifiedAt: string | null;
+  mediaProperties: Record<string, unknown>;
+  hasThumbnail: boolean;
+  thumbnailPath: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type HddVolume = {
+  mountPoint: string;
+  volumeId: string | null;
+  label: string;
+  totalBytes: number;
+};
+export type HddScanState = {
+  running: boolean;
+  driveId: number | null;
+  processed: number;
+  thumbnails: number;
+  current: string;
+  error: string;
+};
 declare global {
   interface Window {
     tools: {
@@ -389,6 +438,7 @@ declare global {
       onDownloadsState(callback: (state: DownloadsState) => void): () => void;
       onClipboardLinks(callback: (text: string) => void): () => void;
       list(directories: string[]): Promise<{ folder: string; name: string }[]>;
+      listFolders(directories: string[]): Promise<{ folder: string; name: string }[]>;
       rename(data: { folder: string; oldName: string; newName: string }): Promise<boolean>;
       selectRenameFolders(): Promise<string[]>;
       selectVideoFolders(): Promise<string[]>;
@@ -418,6 +468,7 @@ declare global {
         folders: string[];
         type: 'audio' | 'video';
       }): Promise<NormalizeFile[]>;
+      measureNormalizeLufs(filePath: string): Promise<number | null>;
       startNormalization(data: {
         files: NormalizeFile[];
         type: 'audio' | 'video';
@@ -430,6 +481,28 @@ declare global {
       getNormalizeState(): Promise<NormalizeState>;
       onNormalizeProgress(callback: (data: NormalizeProgress) => void): () => void;
       onNormalizeState(callback: (state: NormalizeState) => void): () => void;
+      hddSelectRoot(): Promise<string | null>;
+      hddListVolumes(): Promise<HddVolume[]>;
+      hddList(): Promise<HddDrive[]>;
+      hddRegister(data: { rootPath: string; code: string; label?: string }): Promise<HddDrive>;
+      hddUpdate(id: number, patch: { code?: string; label?: string }): Promise<HddDrive>;
+      hddRemove(id: number): Promise<boolean>;
+      hddEntries(driveId: number, parentPath?: string): Promise<HddEntry[]>;
+      hddEntry(id: number): Promise<HddEntry | null>;
+      hddSearch(driveId: number, query: string): Promise<HddEntry[]>;
+      hddDescendantCount(driveId: number, entryId: number): Promise<number>;
+      hddShowInFolder(driveId: number, entryId: number): Promise<boolean>;
+      hddThumbnail(entryId: number): Promise<string | null>;
+      hddRename(data: {
+        driveId: number;
+        entryId: number;
+        newName: string;
+        applyToDisk: boolean;
+      }): Promise<{ entry: HddEntry; affected: number }>;
+      hddScanState(): Promise<HddScanState>;
+      hddStartScan(driveId: number): Promise<boolean>;
+      hddCancelScan(): Promise<boolean>;
+      onHddScanState(callback: (state: HddScanState) => void): () => void;
     };
   }
 }

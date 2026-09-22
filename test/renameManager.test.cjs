@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { listFiles, renameFile } = require('../electron/renameManager.cjs');
+const { listFiles, listFolders, renameFile } = require('../electron/renameManager.cjs');
 
 async function tempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'rename-test-'));
@@ -28,6 +28,27 @@ test('listFiles combina archivos de varias carpetas con su origen', async () => 
 
 test('listFiles ignora archivos inexistentes al vaciar el array', async () => {
   assert.deepEqual(await listFiles([]), []);
+});
+
+test('listFolders combina subcarpetas de varias carpetas con su origen', async () => {
+  const a = await tempDir();
+  const b = await tempDir();
+  try {
+    await fs.mkdir(path.join(a, 'sub1'));
+    await fs.mkdir(path.join(b, 'sub2'));
+    await fs.writeFile(path.join(a, 'archivo.txt'), 'a');
+    const list = await listFolders([a, b]);
+    assert.equal(list.length, 2);
+    assert.deepEqual(list.map((x) => x.name).sort(), ['sub1', 'sub2']);
+    assert.ok(list.every((x) => x.folder === a || x.folder === b));
+  } finally {
+    await fs.rm(a, { recursive: true, force: true });
+    await fs.rm(b, { recursive: true, force: true });
+  }
+});
+
+test('listFolders ignora carpetas inexistentes al vaciar el array', async () => {
+  assert.deepEqual(await listFolders([]), []);
 });
 
 test('renameFile mueve el archivo dentro de su carpeta', async () => {

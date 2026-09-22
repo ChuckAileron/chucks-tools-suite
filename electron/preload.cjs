@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('tools', {
     return () => ipcRenderer.removeListener('downloads:clipboard', listener);
   },
   list: (folders) => ipcRenderer.invoke('rename:list', folders),
+  listFolders: (folders) => ipcRenderer.invoke('rename:list-folders', folders),
   rename: (data) => ipcRenderer.invoke('rename:execute', data),
   selectRenameFolders: () => ipcRenderer.invoke('rename:select-folders'),
   selectVideoFolders: () => ipcRenderer.invoke('video:select-folders'),
@@ -99,6 +100,7 @@ contextBridge.exposeInMainWorld('tools', {
   },
   selectNormalizeFolders: () => ipcRenderer.invoke('normalizer:select-folders'),
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
+  measureNormalizeLufs: (filePath) => ipcRenderer.invoke('normalizer:measure-lufs', filePath),
   startNormalization: (data) => ipcRenderer.invoke('normalizer:start', data),
   setNormalizeTarget: (targetDb) => ipcRenderer.invoke('normalizer:set-target', targetDb),
   setNormalizeUi: (data) => ipcRenderer.invoke('normalizer:set-ui', data),
@@ -114,5 +116,28 @@ contextBridge.exposeInMainWorld('tools', {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('normalizer:state-changed', listener);
     return () => ipcRenderer.removeListener('normalizer:state-changed', listener);
+  },
+  hddSelectRoot: () => ipcRenderer.invoke('hdd:select-root'),
+  hddListVolumes: () => ipcRenderer.invoke('hdd:list-volumes'),
+  hddList: () => ipcRenderer.invoke('hdd:list'),
+  hddRegister: (data) => ipcRenderer.invoke('hdd:register', data),
+  hddUpdate: (id, patch) => ipcRenderer.invoke('hdd:update', { id, patch }),
+  hddRemove: (id) => ipcRenderer.invoke('hdd:remove', id),
+  hddEntries: (driveId, parentPath) => ipcRenderer.invoke('hdd:entries', { driveId, parentPath }),
+  hddEntry: (id) => ipcRenderer.invoke('hdd:entry', id),
+  hddSearch: (driveId, query) => ipcRenderer.invoke('hdd:search', { driveId, query }),
+  hddDescendantCount: (driveId, entryId) =>
+    ipcRenderer.invoke('hdd:descendant-count', { driveId, entryId }),
+  hddShowInFolder: (driveId, entryId) =>
+    ipcRenderer.invoke('hdd:show-in-folder', { driveId, entryId }),
+  hddThumbnail: (entryId) => ipcRenderer.invoke('hdd:thumbnail', entryId),
+  hddRename: (data) => ipcRenderer.invoke('hdd:rename', data),
+  hddScanState: () => ipcRenderer.invoke('hdd:scan-state'),
+  hddStartScan: (driveId) => ipcRenderer.invoke('hdd:start-scan', driveId),
+  hddCancelScan: () => ipcRenderer.invoke('hdd:cancel-scan'),
+  onHddScanState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('hdd:scan-state', listener);
+    return () => ipcRenderer.removeListener('hdd:scan-state', listener);
   },
 });

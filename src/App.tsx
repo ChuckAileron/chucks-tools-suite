@@ -7,6 +7,7 @@ import NormalizeTool from './NormalizeTool';
 import AnalogReplayTool from './AnalogReplayTool';
 import DownloadsTool from './DownloadsTool';
 import CollectionTool from './CollectionTool';
+import HddInventoryTool from './HddInventoryTool';
 import type {
   DownloadCandidate,
   DownloadPriority,
@@ -14,7 +15,8 @@ import type {
   NormalizeState,
   VideoState,
 } from './types';
-type Tool = 'mover' | 'rename' | 'video' | 'normalize' | 'downloads' | 'collection' | 'replay';
+type Tool =
+  'mover' | 'rename' | 'video' | 'normalize' | 'downloads' | 'collection' | 'replay' | 'hdd';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -233,6 +235,15 @@ export default function App() {
               <small>Configuración TV</small>
             </span>
           </button>
+          <button className={tool === 'hdd' ? 'active' : ''} onClick={() => setTool('hdd')}>
+            <i>
+              <HddIcon />
+            </i>
+            <span>
+              <strong>Inventario HDD</strong>
+              <small>Catálogo de discos</small>
+            </span>
+          </button>
         </nav>
         <button
           className="theme-toggle"
@@ -266,6 +277,8 @@ export default function App() {
           <AnalogReplayTool />
         ) : tool === 'collection' ? (
           <CollectionTool />
+        ) : tool === 'hdd' ? (
+          <HddInventoryTool />
         ) : (
           <DownloadsTool candidates={candidates} setCandidates={setCandidates} />
         )}
@@ -324,6 +337,17 @@ function MoonIcon() {
   return (
     <SidebarIcon>
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </SidebarIcon>
+  );
+}
+
+function HddIcon() {
+  return (
+    <SidebarIcon>
+      <rect x="2.5" y="4" width="19" height="16" rx="2" />
+      <line x1="2.5" y1="14" x2="21.5" y2="14" />
+      <circle cx="8" cy="17" r="1" fill="currentColor" stroke="none" />
+      <line x1="11.5" y1="17" x2="17" y2="17" />
     </SidebarIcon>
   );
 }

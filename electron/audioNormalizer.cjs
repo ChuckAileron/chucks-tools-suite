@@ -48,6 +48,11 @@ const durationOf = (input) =>
       (error, stdout) => resolve(error ? 0 : Number.parseFloat(stdout) || 0),
     ),
   );
+// Tolerancia (en LU) para considerar que un archivo ya está en el objetivo y
+// omitir su procesamiento. Las mediciones de loudnorm no son exactas entre
+// pasadas, así que se evita reprocesar archivos que estén "suficientemente
+// cerca" del valor deseado.
+const LUFS_TOLERANCE = 1;
 const cancelledError = () => Object.assign(new Error('Cancelado'), { code: 'CANCELLED' });
 async function measureLoudness(input, targetDb, onProcess, isCancelled) {
   const filter = `loudnorm=I=${targetDb}:TP=-1.5:LRA=11:print_format=json`;
@@ -94,9 +99,29 @@ async function measureLoudness(input, targetDb, onProcess, isCancelled) {
     });
   });
 }
-async function normalizeMedia({ input, type, targetDb, onProgress, onProcess, isCancelled }) {
+// Mide únicamente la sonoridad integrada (LUFS) de un archivo, sin aplicar
+// ninguna corrección. Se usa para mostrar el valor actual en el listado
+// antes de normalizar; el valor de "I" del filtro no afecta la medición.
+async function measureLufs(input, isCancelled = () => false) {
+  const measured = await measureLoudness(input, -16, () => {}, isCancelled);
+  return Number(measured.measured_i);
+}
+
+async function normalizeMedia({
+  input,
+  type,
+  targetDb,
+  knownLufs,
+  onProgress,
+  onProcess,
+  isCancelled,
+}) {
   if (!Number.isFinite(targetDb) || targetDb < -50 || targetDb > -5)
     throw new Error('El objetivo debe estar entre -50 y -5 LUFS.');
+  // Si ya se conoce el LUFS del archivo (medido al listar) y está dentro de
+  // la tolerancia del objetivo, se omite por completo el procesamiento.
+  if (Number.isFinite(knownLufs) && Math.abs(knownLufs - targetDb) <= LUFS_TOLERANCE)
+    return { skipped: true, measuredLufs: knownLufs, output: null };
   const extension = path.extname(input),
     outputDirectory = path.join(path.dirname(input), `normalized_output-${type}`);
   fs.mkdirSync(outputDirectory, { recursive: true });
@@ -115,6 +140,10 @@ async function normalizeMedia({ input, type, targetDb, onProgress, onProcess, is
     if (error.code === 'CANCELLED') throw error;
     measured = null;
   }
+  // Doble verificación tras medir en esta misma pasada, por si no se conocía
+  // el LUFS de antemano (p. ej. no se alcanzó a medir en el listado).
+  if (measured && Math.abs(Number(measured.measured_i) - targetDb) <= LUFS_TOLERANCE)
+    return { skipped: true, measuredLufs: Number(measured.measured_i), output: null };
   const filter = measured
     ? `loudnorm=I=${targetDb}:TP=-1.5:LRA=11:measured_I=${measured.measured_i}:measured_TP=${measured.measured_tp}:measured_LRA=${measured.measured_lra}:measured_thresh=${measured.measured_thresh}`
     : `loudnorm=I=${targetDb}:TP=-1.5:LRA=11`;
@@ -162,6 +191,6 @@ async function normalizeMedia({ input, type, targetDb, onProgress, onProcess, is
       finish();
     });
   });
-  return output;
+  return { skipped: false, output, measuredLufs: measured ? Number(measured.measured_i) : null };
 }
-module.exports = { scanMedia, normalizeMedia };
+module.exports = { scanMedia, normalizeMedia, measureLufs, LUFS_TOLERANCE };

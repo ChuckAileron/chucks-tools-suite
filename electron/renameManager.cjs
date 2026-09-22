@@ -13,6 +13,18 @@ async function listFiles(folders) {
   return entries;
 }
 
+async function listFolders(folders) {
+  const entries = [];
+  for (const folder of folders) {
+    const absolute = path.resolve(folder);
+    const names = (await fs.readdir(absolute, { withFileTypes: true }))
+      .filter((x) => x.isDirectory())
+      .map((x) => x.name);
+    for (const name of names) entries.push({ folder: absolute, name });
+  }
+  return entries;
+}
+
 async function renameFile({ folder, oldName, newName }) {
   if (
     !folder ||
@@ -26,4 +38,4 @@ async function renameFile({ folder, oldName, newName }) {
   return true;
 }
 
-module.exports = { listFiles, renameFile };
+module.exports = { listFiles, listFolders, renameFile };

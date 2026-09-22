@@ -1,18 +1,35 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
-const { scanMedia, normalizeMedia } = require('./audioNormalizer.cjs');
+const { scanMedia, normalizeMedia, measureLufs } = require('./audioNormalizer.cjs');
 const { validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
 const { scrapePrice } = require('./priceScraper.cjs');
 const { searchImages } = require('./imageSearch.cjs');
 const analogReplay = require('./analogReplay.cjs');
-const { listFiles, renameFile } = require('./renameManager.cjs');
+const { listFiles, listFolders, renameFile } = require('./renameManager.cjs');
+const hddInventory = require('./hddInventory.cjs');
 let downloadManager;
 let collectionManager;
+let hddManager;
+let hddThumbnailsDir;
+let hddScanCancelled = false;
+let hddScanState = {
+  running: false,
+  driveId: null,
+  processed: 0,
+  thumbnails: 0,
+  current: '',
+  error: '',
+};
+function emitHddScanState() {
+  for (const window of BrowserWindow.getAllWindows())
+    window.webContents.send('hdd:scan-state', hddScanState);
+}
 let lastClipboard = '';
 function looksLikeDownloadText(text) {
   return (
@@ -47,7 +64,7 @@ const parseVideoTarget = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= -50 && parsed <= -5
     ? parsed
-    : videoState.normalizeTarget ?? -16;
+    : (videoState.normalizeTarget ?? -16);
 };
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
@@ -73,7 +90,7 @@ const parseTargetDb = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= -50 && parsed <= -5
     ? parsed
-    : normalizeState.targetDb ?? -16;
+    : (normalizeState.targetDb ?? -16);
 };
 function emitVideoProgress(data) {
   const addLog = (text, tone) => {
@@ -163,6 +180,20 @@ function emitNormalizeProgress(data) {
         : normalizeState.processed || [],
     };
     addLog(`✓ ${data.file} completado`, 'success');
+  } else if (data.type === 'file-skipped') {
+    normalizeState = {
+      ...normalizeState,
+      fileProgress: 100,
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      message: `${data.file} ya está en el objetivo (${data.measuredLufs} LUFS), se omitió`,
+      processed: data.path
+        ? [...new Set([...(normalizeState.processed || []), data.path])]
+        : normalizeState.processed || [],
+    };
+    addLog(
+      `≈ ${data.file} ya está en ${data.measuredLufs} LUFS; se omitió su procesamiento`,
+      'success',
+    );
   } else if (data.type === 'error') {
     normalizeState = {
       ...normalizeState,
@@ -415,6 +446,11 @@ app.whenReady().then(async () => {
   collectionManager = new CollectionManager(
     path.join(app.getPath('userData'), 'collections.sqlite'),
   );
+  hddThumbnailsDir = path.join(app.getPath('userData'), 'hdd-thumbnails');
+  hddManager = new hddInventory.HddInventoryManager(
+    path.join(app.getPath('userData'), 'hdd-inventory.sqlite'),
+    hddThumbnailsDir,
+  );
   downloadManager = new DownloadManager(
     path.join(app.getPath('userData'), 'downloads.json'),
     (state) => {
@@ -635,6 +671,7 @@ app.whenReady().then(async () => {
     return result.canceled ? [] : result.filePaths;
   });
   ipcMain.handle('rename:list', (_e, folders) => listFiles(folders || []));
+  ipcMain.handle('rename:list-folders', (_e, folders) => listFolders(folders || []));
   ipcMain.handle('rename:execute', (_e, data) => renameFile(data));
   ipcMain.handle('video:select-folders', async () => {
     const result = await dialog.showOpenDialog({
@@ -646,95 +683,101 @@ app.whenReady().then(async () => {
     Promise.all(folders.map((folder) => inspectFolder(path.resolve(folder), codec))),
   );
   ipcMain.handle('video:state', () => videoState);
-  ipcMain.handle('video:start', async (_event, { folders, codec, trackSelections, normalizeAudio = false, normalizeTarget = -16 }) => {
-    if (videoState.running) throw new Error('Ya hay una conversión de video en curso.');
-    videoCancelled = false;
-    videoCompletedFiles = 0;
-    const inspectedFolders = await Promise.all(
-      folders.map(async (folder) => {
-        const absolute = path.resolve(folder);
-        const info = await inspectFolder(absolute, codec);
-        return info;
-      }),
-    );
-    videoQueue = inspectedFolders.map((info) => ({
-      folder: info.folder,
-      total: info.videos.length,
-    }));
-    videoTotalFiles = videoQueue.reduce((total, item) => total + item.total, 0);
-    videoState = {
-      running: true,
-      codec,
-      folders: inspectedFolders,
-      trackSelections,
-      globalProgress: 0,
-      fileProgress: 0,
-      activeFile: 'Sin procesos activos',
-      activeFolder: '',
-      logs: [],
-      normalizeAudio: !!normalizeAudio,
-      normalizeTarget,
-    };
-    emitVideoProgress({
-      type: 'queue-progress',
-      current: 0,
-      total: videoTotalFiles,
-    });
-    while (videoQueue.length) {
-      if (videoCancelled) break;
-      const item = videoQueue.shift();
-      const absolute = item.folder;
-      activeVideoFolder = absolute;
-      let completedInFolder = 0;
-      emitVideoProgress({ type: 'folder-start', folder: absolute });
-      try {
-        await convertFolder(
-          absolute,
-          codec,
-          trackSelections,
-          (data) => {
-            if (data.type === 'file-done') {
-              completedInFolder += 1;
-              videoCompletedFiles += 1;
-              emitVideoProgress({
-                type: 'queue-progress',
-                current: videoCompletedFiles,
-                total: videoTotalFiles,
-              });
-            }
-            emitVideoProgress(data);
-          },
-          {
-            isCancelled: () => videoCancelled,
-            setProcess: (process) => {
-              activeVideoProcess = process;
+  ipcMain.handle(
+    'video:start',
+    async (
+      _event,
+      { folders, codec, trackSelections, normalizeAudio = false, normalizeTarget = -16 },
+    ) => {
+      if (videoState.running) throw new Error('Ya hay una conversión de video en curso.');
+      videoCancelled = false;
+      videoCompletedFiles = 0;
+      const inspectedFolders = await Promise.all(
+        folders.map(async (folder) => {
+          const absolute = path.resolve(folder);
+          const info = await inspectFolder(absolute, codec);
+          return info;
+        }),
+      );
+      videoQueue = inspectedFolders.map((info) => ({
+        folder: info.folder,
+        total: info.videos.length,
+      }));
+      videoTotalFiles = videoQueue.reduce((total, item) => total + item.total, 0);
+      videoState = {
+        running: true,
+        codec,
+        folders: inspectedFolders,
+        trackSelections,
+        globalProgress: 0,
+        fileProgress: 0,
+        activeFile: 'Sin procesos activos',
+        activeFolder: '',
+        logs: [],
+        normalizeAudio: !!normalizeAudio,
+        normalizeTarget,
+      };
+      emitVideoProgress({
+        type: 'queue-progress',
+        current: 0,
+        total: videoTotalFiles,
+      });
+      while (videoQueue.length) {
+        if (videoCancelled) break;
+        const item = videoQueue.shift();
+        const absolute = item.folder;
+        activeVideoFolder = absolute;
+        let completedInFolder = 0;
+        emitVideoProgress({ type: 'folder-start', folder: absolute });
+        try {
+          await convertFolder(
+            absolute,
+            codec,
+            trackSelections,
+            (data) => {
+              if (data.type === 'file-done') {
+                completedInFolder += 1;
+                videoCompletedFiles += 1;
+                emitVideoProgress({
+                  type: 'queue-progress',
+                  current: videoCompletedFiles,
+                  total: videoTotalFiles,
+                });
+              }
+              emitVideoProgress(data);
             },
-          },
-          videoState.normalizeAudio
-            ? { normalize: true, targetDb: videoState.normalizeTarget }
-            : null,
-        );
-        emitVideoProgress({ type: 'folder-done', folder: absolute });
-      } catch (error) {
-        videoTotalFiles -= Math.max(0, item.total - completedInFolder);
-        emitVideoProgress({
-          type: 'queue-progress',
-          current: videoCompletedFiles,
-          total: videoTotalFiles,
-        });
-        if (error.code !== 'CANCELLED')
+            {
+              isCancelled: () => videoCancelled,
+              setProcess: (process) => {
+                activeVideoProcess = process;
+              },
+            },
+            videoState.normalizeAudio
+              ? { normalize: true, targetDb: videoState.normalizeTarget }
+              : null,
+          );
+          emitVideoProgress({ type: 'folder-done', folder: absolute });
+        } catch (error) {
+          videoTotalFiles -= Math.max(0, item.total - completedInFolder);
           emitVideoProgress({
-            type: 'error',
-            folder: absolute,
-            message: error.message,
+            type: 'queue-progress',
+            current: videoCompletedFiles,
+            total: videoTotalFiles,
           });
+          if (error.code !== 'CANCELLED')
+            emitVideoProgress({
+              type: 'error',
+              folder: absolute,
+              message: error.message,
+            });
+        }
+        activeVideoFolder = '';
       }
+      activeVideoProcess = null;
       activeVideoFolder = '';
-    }
-    activeVideoProcess = null;
-    activeVideoFolder = '';
-    emitVideoProgress({ type: videoCancelled ? 'cancelled' : 'all-done' });
-  });
+      emitVideoProgress({ type: videoCancelled ? 'cancelled' : 'all-done' });
+    },
+  );
   ipcMain.handle('video:cancel', () => {
     videoCancelled = true;
     if (activeVideoProcess && !activeVideoProcess.killed) {
@@ -827,6 +870,22 @@ app.whenReady().then(async () => {
     };
     return files;
   });
+  ipcMain.handle('normalizer:measure-lufs', async (_event, filePath) => {
+    try {
+      const lufs = await measureLufs(filePath);
+      normalizeState = {
+        ...normalizeState,
+        files: normalizeState.files.map((file) =>
+          file.path === filePath ? { ...file, lufs } : file,
+        ),
+      };
+      for (const window of BrowserWindow.getAllWindows())
+        window.webContents.send('normalizer:state-changed', normalizeState);
+      return lufs;
+    } catch {
+      return null;
+    }
+  });
   ipcMain.handle('normalizer:state', () => normalizeState);
   ipcMain.handle('normalizer:set-target', (_event, targetDb) => {
     normalizeState = { ...normalizeState, targetDb: parseTargetDb(targetDb) };
@@ -884,10 +943,11 @@ app.whenReady().then(async () => {
         total,
       });
       try {
-        await normalizeMedia({
+        const result = await normalizeMedia({
           input: file.path,
           type,
           targetDb,
+          knownLufs: Number.isFinite(file.lufs) ? file.lufs : undefined,
           isCancelled: () => normalizeCancelled,
           onProcess: (process) => {
             activeNormalizeProcess = process;
@@ -901,13 +961,24 @@ app.whenReady().then(async () => {
             }),
         });
         normalizeCompleted += 1;
-        emitNormalizeProgress({
-          type: 'file-done',
-          file: file.name,
-          path: file.path,
-          current: normalizeCompleted,
-          total: normalizeCompleted + normalizeQueue.length,
-        });
+        emitNormalizeProgress(
+          result.skipped
+            ? {
+                type: 'file-skipped',
+                file: file.name,
+                path: file.path,
+                current: normalizeCompleted,
+                total: normalizeCompleted + normalizeQueue.length,
+                measuredLufs: result.measuredLufs,
+              }
+            : {
+                type: 'file-done',
+                file: file.name,
+                path: file.path,
+                current: normalizeCompleted,
+                total: normalizeCompleted + normalizeQueue.length,
+              },
+        );
       } catch (error) {
         if (error.code !== 'CANCELLED')
           emitNormalizeProgress({
@@ -959,6 +1030,144 @@ app.whenReady().then(async () => {
     }
     return true;
   });
+  // --- Inventario HDD -----------------------------------------------------
+  const decorateDrive = (drive, volumes) => {
+    const connection = hddInventory.resolveConnection(drive, volumes);
+    if (connection.connected)
+      hddManager.touchDriveConnection(drive.id, {
+        volumeId: connection.volume.volumeId,
+        volumeLabel: connection.volume.label,
+        totalBytes: connection.volume.totalBytes,
+        mountPoint: connection.volume.mountPoint,
+      });
+    return {
+      ...drive,
+      connected: connection.connected,
+      mountPoint: connection.mountPoint,
+      stats: hddManager.countEntries(drive.id),
+    };
+  };
+  ipcMain.handle('hdd:select-root', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('hdd:list-volumes', () => hddInventory.listSystemVolumes());
+  ipcMain.handle('hdd:list', async () => {
+    const volumes = await hddInventory.listSystemVolumes();
+    return hddManager.listDrives().map((drive) => decorateDrive(drive, volumes));
+  });
+  ipcMain.handle('hdd:register', async (_event, { rootPath, code, label }) => {
+    const volumes = await hddInventory.listSystemVolumes();
+    const root = hddInventory.driveRootFromPath(rootPath);
+    const matched = volumes.find((v) => path.resolve(v.mountPoint) === path.resolve(root));
+    const drive = hddManager.registerDrive({
+      code,
+      label,
+      volumeId: matched?.volumeId || null,
+      volumeLabel: matched?.label || '',
+      totalBytes: matched?.totalBytes || 0,
+      mountPoint: root,
+    });
+    return decorateDrive(drive, volumes);
+  });
+  ipcMain.handle('hdd:update', async (_event, { id, patch }) => {
+    const drive = hddManager.updateDrive(id, patch || {});
+    const volumes = await hddInventory.listSystemVolumes();
+    return decorateDrive(drive, volumes);
+  });
+  ipcMain.handle('hdd:remove', (_event, id) => {
+    const removed = hddManager.deleteDrive(id);
+    fsSync.rmSync(path.join(hddThumbnailsDir, String(id)), { recursive: true, force: true });
+    return removed;
+  });
+  ipcMain.handle('hdd:entries', (_event, { driveId, parentPath }) =>
+    hddManager.listEntries(driveId, parentPath || ''),
+  );
+  ipcMain.handle('hdd:entry', (_event, id) => hddManager.getEntry(id));
+  ipcMain.handle('hdd:search', (_event, { driveId, query }) =>
+    hddManager.searchEntries(driveId, query),
+  );
+  ipcMain.handle('hdd:descendant-count', (_event, { driveId, entryId }) => {
+    const entry = hddManager.getEntry(entryId);
+    if (!entry || entry.driveId !== driveId || !entry.isDirectory) return 0;
+    return hddManager.descendantsOf(driveId, entry.relativePath).length;
+  });
+  ipcMain.handle('hdd:show-in-folder', async (_event, { driveId, entryId }) => {
+    const entry = hddManager.getEntry(entryId);
+    if (!entry || entry.driveId !== driveId) throw new Error('El elemento no existe en este HDD.');
+    const drive = hddManager.getDrive(driveId);
+    const volumes = await hddInventory.listSystemVolumes();
+    const connection = hddInventory.resolveConnection(drive, volumes);
+    if (!connection.connected)
+      throw new Error('El HDD no está conectado; no se puede abrir la carpeta real.');
+    const absolute = path.join(connection.mountPoint, entry.relativePath);
+    shell.showItemInFolder(absolute);
+    return true;
+  });
+  ipcMain.handle('hdd:thumbnail', async (_event, entryId) => {
+    const thumbnailPath = hddManager.getThumbnailFile(entryId);
+    if (!thumbnailPath || !fsSync.existsSync(thumbnailPath)) return null;
+    const data = await fs.readFile(thumbnailPath);
+    return `data:image/jpeg;base64,${data.toString('base64')}`;
+  });
+  ipcMain.handle('hdd:rename', async (_event, { driveId, entryId, newName, applyToDisk }) => {
+    const entry = hddManager.getEntry(entryId);
+    if (!entry || entry.driveId !== driveId) throw new Error('El elemento no existe en este HDD.');
+    if (applyToDisk) {
+      const drive = hddManager.getDrive(driveId);
+      const volumes = await hddInventory.listSystemVolumes();
+      const connection = hddInventory.resolveConnection(drive, volumes);
+      if (!connection.connected)
+        throw new Error('El HDD no está conectado; no se puede renombrar el archivo real.');
+      const oldAbsolute = path.join(connection.mountPoint, entry.relativePath);
+      const newAbsolute = path.join(connection.mountPoint, entry.parentPath, newName);
+      await fs.rename(oldAbsolute, newAbsolute);
+    }
+    return hddManager.renameEntryInDb(driveId, entryId, newName);
+  });
+  ipcMain.handle('hdd:scan-state', () => hddScanState);
+  ipcMain.handle('hdd:cancel-scan', () => {
+    hddScanCancelled = true;
+    return true;
+  });
+  ipcMain.handle('hdd:start-scan', async (_event, driveId) => {
+    if (hddScanState.running) throw new Error('Ya hay un análisis de HDD en curso.');
+    const drive = hddManager.getDrive(driveId);
+    if (!drive) throw new Error('El HDD no existe.');
+    const volumes = await hddInventory.listSystemVolumes();
+    const connection = hddInventory.resolveConnection(drive, volumes);
+    if (!connection.connected) throw new Error('El HDD no está conectado.');
+    if (connection.volume)
+      hddManager.touchDriveConnection(drive.id, {
+        volumeId: connection.volume.volumeId,
+        volumeLabel: connection.volume.label,
+        totalBytes: connection.volume.totalBytes,
+        mountPoint: connection.volume.mountPoint,
+      });
+    hddScanCancelled = false;
+    hddScanState = { running: true, driveId, processed: 0, thumbnails: 0, current: '', error: '' };
+    emitHddScanState();
+    (async () => {
+      try {
+        await hddInventory.scanDrive({
+          manager: hddManager,
+          driveId,
+          mountPoint: connection.mountPoint,
+          isCancelled: () => hddScanCancelled,
+          onProgress: ({ processed, thumbnails, current }) => {
+            hddScanState = { ...hddScanState, processed, thumbnails, current };
+            emitHddScanState();
+          },
+        });
+      } catch (error) {
+        hddScanState = { ...hddScanState, error: error.message };
+      } finally {
+        hddScanState = { ...hddScanState, running: false };
+        emitHddScanState();
+      }
+    })();
+    return true;
+  });
   createWindow();
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });
@@ -967,5 +1176,9 @@ app.on('before-quit', () => {
   if (collectionManager) {
     collectionManager.close();
     collectionManager = null;
+  }
+  if (hddManager) {
+    hddManager.close();
+    hddManager = null;
   }
 });

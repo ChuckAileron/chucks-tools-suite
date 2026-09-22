@@ -34,9 +34,9 @@ La carpeta de destino debe ser diferente de la de origen; si está dentro del or
 
 ### Renombrar archivos
 
-Permite modificar los nombres de los archivos de una o varias carpetas en una misma ejecución.
+Permite modificar los nombres de archivos o carpetas de una o varias rutas en una misma ejecución, organizado en tres pestañas: **Archivos**, **Carpetas** y **Crear nombres**.
 
-Características:
+Características comunes a Archivos y Carpetas:
 
 - Selección de varias carpetas (o una sola) con "Añadir carpetas", limpieza y eliminación individual.
 - Vista previa del resultado antes de aplicar cambios, mostrando la carpeta de origen cuando hay varias.
@@ -44,8 +44,21 @@ Características:
 - Reemplazo desde el inicio hasta incluir un texto determinado.
 - Reemplazo desde un texto determinado, incluyéndolo, hasta el final.
 - Adición de prefijos y sufijos.
-- Selección individual o global de archivos.
-- Conservación de la extensión original.
+- Botón de limpiar (×) en cada campo de transformación para vaciarlo rápidamente.
+- Selección individual o global de archivos o carpetas.
+- La pestaña **Archivos** conserva la extensión original; la pestaña **Carpetas** transforma el nombre completo, ya que las carpetas no tienen extensión.
+
+#### Crear nombres
+
+Genera una tabla temporal (vive solo mientras se navega dentro de Renombrar archivos) para construir nombres combinando varias columnas de datos:
+
+- Selección de **Archivos** o **Carpetas** y de una o varias carpetas de origen, igual que en las otras pestañas.
+- Botón **+ Agregar columna nombre**: crea una columna editable con un cuadro de texto donde se pega un listado de nombres, uno por línea; cada línea corresponde a la fila en el mismo orden que los archivos o carpetas listados.
+- La tabla se muestra como una grilla con el nombre original, cada columna de nombres agregada y el nombre nuevo resultante por fila.
+- Casilla **Combinar nombres**: al activarla aparecen los campos de "prefijo de unión" que se insertan antes del valor de cada columna al construir el nombre nuevo.
+- Con más de una columna nombre, una casilla adicional permite **usar el mismo prefijo de unión** para todas; si se desactiva, se define un prefijo independiente por columna.
+- Ejemplo: `nombrearchivo.txt` + columna 1 ("valor 1", prefijo `" "`) + columna 2 ("valor 2", prefijo `"-X-"`) → `nombrearchivo valor 1-X-valor 2.txt`.
+- Columnas renombrables y eliminables de forma independiente; renombrado final aplicado solo a las filas seleccionadas y con cambios reales.
 
 ### Video a SD
 
@@ -82,6 +95,8 @@ Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio c
 - Video copiado sin recodificar para evitar pérdida visual y reducir el tiempo de proceso.
 - Resultado guardado en `normalized_output-audio` (archivos de audio) o `normalized_output-video` (videos) dentro de cada carpeta, con el sufijo `_normalized`.
 - Los archivos originales nunca se reemplazan.
+- El listado muestra el LUFS medido de cada archivo (se mide en segundo plano con FFmpeg tras explorar, sin bloquear la interfaz).
+- Si el LUFS de un archivo ya está a 1 LU o menos del objetivo configurado, se marca como "en el objetivo" en el listado y su procesamiento se omite automáticamente al normalizar (no se reprocesa un archivo que ya cumple, dentro de una pequeña tolerancia por no ser mediciones exactas).
 
 La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya terminados en `_normalized` se excluyen del siguiente escaneo para evitar procesarlos repetidamente.
 
@@ -168,11 +183,28 @@ Configuración de canales, programas y la programación de televisión compartid
 
 La base de datos SQLite compartida se guarda en el directorio local de datos de Electron.
 
+### Inventario HDD
+
+Cataloga el contenido completo de discos duros externos en una base de datos local, con miniaturas y ficha técnica por archivo, similar en espíritu a MediaInfo.
+
+- Selección de la carpeta raíz del disco (por ejemplo `D:\`) y asignación de un identificador de texto propio, como `HDD-001`, más un nombre descriptivo opcional.
+- El barrido ("Analizar HDD") recorre recursivamente el disco y guarda la ruta completa de cada archivo y carpeta en la base de datos, junto con tamaño, fecha de modificación y categoría (video, foto, audio, documento u otro).
+- Reconocimiento del disco por un identificador de volumen estable (no por la letra de unidad): un HDD registrado se detecta como "conectado" aunque el sistema operativo lo monte en D:, E:, F:, etc. en una conexión posterior.
+- Miniaturas automáticas para video, fotos y documentos generadas y guardadas durante el análisis: fotograma intermedio para video, imagen redimensionada para fotos y, para documentos, la primera página del PDF (si hay Poppler/`pdftoppm` disponible) o un marcador genérico con la extensión.
+- Las miniaturas se regeneran solo cuando la fecha de modificación del archivo cambió desde el último análisis.
+- Campo dinámico `media_properties` (JSON) con las propiedades técnicas de archivos multimedia extraídas con FFprobe (contenedor, códecs, resolución, duración, bitrate, pistas, etc.), visible desde la ficha de cada archivo.
+- Botón "Analizar HDD" para re-escanear en cualquier momento: actualiza archivos nuevos o modificados, elimina del catálogo los que ya no existen en el disco y conserva sin cambios los que siguen igual.
+- Renombrado de archivos y carpetas: siempre se actualiza la base de datos; una casilla adicional (desactivada y bloqueada si el HDD no está conectado) permite aplicar el cambio también al archivo o carpeta real.
+- Al renombrar una carpeta, se actualizan en cascada las rutas de todo su contenido en la base de datos, con aviso previo del número de elementos afectados antes de confirmar.
+
+El catálogo, las miniaturas y las propiedades técnicas se guardan en el directorio local de datos de Electron; no se sincronizan ni se transmiten a ningún servicio externo.
+
 ## Requisitos
 
 - Node.js 26.9.0 o posterior.
 - npm 11.19.1 o posterior.
-- FFmpeg y FFprobe para utilizar el módulo Video a SD.
+- FFmpeg y FFprobe para utilizar el módulo Video a SD y para las miniaturas/ficha técnica de Inventario HDD.
+- Poppler (`pdftoppm`) opcional, para generar miniaturas reales de la primera página de archivos PDF en Inventario HDD; sin él se usa un marcador genérico.
 - Conexión a Internet para Descargas, el buscador de imágenes de Colección y las integraciones con hosts externos.
 
 HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente. `yt-dlp` se distribuye dentro de la aplicación (en `vendor/` al compilar) y, ante fallos de reconocimiento de videos, intenta actualizarse automáticamente y reintenta el análisis.
@@ -275,7 +307,8 @@ CHUCK's Tools Suite/
 │   ├── videoProvider.cjs    # Identificación y descarga de videos con yt-dlp
 │   ├── urlResolver.cjs      # Resolución y validación segura de URLs
 │   ├── clipboardWatcher.cjs # Detección de enlaces copiados
-│   └── downloadManager.cjs  # Cola persistente y extracción
+│   ├── downloadManager.cjs  # Cola persistente y extracción
+│   └── hddInventory.cjs    # Catálogo de discos, miniaturas y ficha técnica
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
 │   ├── MoverTool.tsx     # Herramienta para mover por tipo
@@ -286,12 +319,13 @@ CHUCK's Tools Suite/
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
+│   ├── HddInventoryTool.tsx # Inventario y explorador de discos duros
 │   ├── collapseState.ts  # Persistencia de grupos colapsados (localStorage)
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual, modo claro/oscuro y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes, renombrado y programación analog
+├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes, renombrado, inventario HDD y programación analog
 ├── vite.config.ts
 └── package.json
 ```
@@ -317,6 +351,8 @@ La aplicación separa el renderer de las operaciones privilegiadas:
 ### Datos locales sensibles
 
 El gestor persiste su estado en `downloads.json` dentro de `app.getPath('userData')`. Este archivo puede contener URLs, rutas locales, una API key de Google Drive y contraseñas de extracción. No se sincroniza ni se transmite deliberadamente, pero cualquier usuario o proceso con acceso al perfil local podría leerlo.
+
+Inventario HDD guarda su catálogo en `hdd-inventory.sqlite` y sus miniaturas en la carpeta `hdd-thumbnails/`, ambos dentro de `app.getPath('userData')`. Contienen rutas completas del disco, nombres de archivos y miniaturas de su contenido; se mantienen únicamente en el equipo local.
 
 ### Dependencias conocidas
 
@@ -355,6 +391,14 @@ Usa la acción de contraseña en la descarga pendiente. También puedes asignar 
 ### El buscador de imágenes no devuelve resultados en un motor
 
 Algunos motores limitan las consultas automatizadas (Google sirve resultados solo con JavaScript y DuckDuckGo puede bloquear ciertas redes). Prueba con otro motor de la modal, por ejemplo Bing, Wikimedia Commons u Openverse (imágenes libres de más de 800 millones de archivos; respeta sus licencias al reutilizarlas).
+
+### Un HDD registrado aparece como "Desconectado"
+
+La detección usa un identificador estable de volumen (no la letra de unidad), así que un mismo disco puede montarse en D:, E:, F:, etc. sin problema. Si de todos modos aparece desconectado, confirma que el disco esté realmente conectado y montado por Windows; en macOS/Linux la reconexión se valida por ruta de montaje, así que asegúrate de que el disco se monte en la misma ruta que en el registro original.
+
+### Analizar HDD no genera miniaturas ni ficha técnica
+
+Las miniaturas y las propiedades técnicas dependen de FFmpeg/FFprobe en el PATH del sistema. Los PDFs usan además `pdftoppm` (Poppler) si está disponible; sin él, los documentos reciben un marcador genérico con la extensión en vez de una vista previa real de la página.
 
 ## Licencia
 

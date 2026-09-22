@@ -236,7 +236,13 @@ export default function DownloadsTool({
   );
 }
 
-function LinksModal({ links, onClose }: { links: string[]; onClose: () => void }) {
+type LinksModalData = { title: string; description: string; links: string[] };
+function LinksModal({
+  title,
+  description,
+  links,
+  onClose,
+}: LinksModalData & { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const text = links.join('\n');
   const copyAll = async () => {
@@ -253,8 +259,8 @@ function LinksModal({ links, onClose }: { links: string[]; onClose: () => void }
       <div className="links-modal" onClick={(event) => event.stopPropagation()}>
         <header>
           <div>
-            <h2>Todos los enlaces</h2>
-            <p>{links.length} enlace{links.length === 1 ? '' : 's'} en la cola de descargas.</p>
+            <h2>{title}</h2>
+            <p>{description}</p>
           </div>
         </header>
         <textarea className="links-modal-text" readOnly value={text} />
@@ -283,7 +289,13 @@ function DownloadsTab({
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
 }) {
-  const [showLinks, setShowLinks] = useState(false);
+  const [linksModal, setLinksModal] = useState<LinksModalData | null>(null);
+  const showLinksFor = (title: string, groupTasks: DownloadTask[]) =>
+    setLinksModal({
+      title,
+      description: `${groupTasks.length} enlace${groupTasks.length === 1 ? '' : 's'} en la cola de descargas.`,
+      links: groupTasks.map((task) => task.originalUrl),
+    });
   const groups = Map.groupBy(tasks, (task) => task.destination);
   const setGroupPassword = async (groupTasks: DownloadTask[], label: string) => {
     const eligible = groupTasks.filter((task) => task.status !== 'completed');
@@ -318,18 +330,15 @@ function DownloadsTab({
     void window.tools.controlDownloads(ids, action);
   };
   const hasAnyDownloading = tasks.some((task) => task.status === 'downloading');
-  const hasAnyResumable = tasks.some((task) => ['paused', 'stopped', 'error'].includes(task.status));
+  const hasAnyResumable = tasks.some((task) =>
+    ['paused', 'stopped', 'error'].includes(task.status),
+  );
   const hasAnyStoppable = tasks.some((task) =>
     ['downloading', 'paused', 'pending'].includes(task.status),
   );
   return (
     <>
-      {showLinks && (
-        <LinksModal
-          links={tasks.map((task) => task.originalUrl)}
-          onClose={() => setShowLinks(false)}
-        />
-      )}
+      {linksModal && <LinksModal {...linksModal} onClose={() => setLinksModal(null)} />}
       <div className="downloads-toolbar">
         <span>
           {tasks.length} descargas · {tasks.filter((task) => task.status === 'downloading').length}{' '}
@@ -364,7 +373,7 @@ function DownloadsTab({
           >
             ■ Detener todo
           </button>
-          <button disabled={!tasks.length} onClick={() => setShowLinks(true)}>
+          <button disabled={!tasks.length} onClick={() => showLinksFor('Todos los enlaces', tasks)}>
             Listar enlaces
           </button>
           <button
@@ -461,6 +470,15 @@ function DownloadsTab({
                   <button
                     className="download-group-toggle"
                     type="button"
+                    onClick={() => showLinksFor(`Enlaces de "${directory}"`, items)}
+                    title="Listar enlaces del grupo"
+                    aria-label={`Listar enlaces de ${directory}`}
+                  >
+                    🔗
+                  </button>
+                  <button
+                    className="download-group-toggle"
+                    type="button"
                     onClick={() => void window.tools.showDownloadDirectory(directory)}
                     title="Mostrar carpeta en el explorador"
                     aria-label={`Mostrar carpeta ${directory}`}
@@ -525,6 +543,17 @@ function DownloadsTab({
                             aria-label={`Contraseña para ${collection}`}
                           >
                             ⌕
+                          </button>
+                          <button
+                            className="download-group-toggle"
+                            type="button"
+                            onClick={() =>
+                              showLinksFor(`Enlaces de "${collection}"`, collectionTasks)
+                            }
+                            title="Listar enlaces de la colección"
+                            aria-label={`Listar enlaces de ${collection}`}
+                          >
+                            🔗
                           </button>
                         </div>
                         {!isCollapsed(collectionKey) &&
