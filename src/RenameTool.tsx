@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Ops = {
   search: string;
@@ -98,6 +98,28 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
   const [message, setMessage] = useState('');
   const list = () =>
     isFiles ? window.tools.list(directories) : window.tools.listFolders(directories);
+  useEffect(() => {
+    if (!directories.length) return;
+    let cancelled = false;
+    const run = async () => {
+      setBusy(true);
+      try {
+        const found = await (isFiles
+          ? window.tools.list(directories)
+          : window.tools.listFolders(directories));
+        if (cancelled) return;
+        setEntries(found);
+        setSelected(new Set(found.map(key)));
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    };
+    const timer = setTimeout(() => void run(), 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [directories, isFiles]);
   const renames = useMemo(
     () => entries.map((entry) => ({ ...entry, newName: transform(entry.name, ops, isFiles) })),
     [entries, ops, isFiles],
@@ -121,13 +143,6 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
     setDirectories((current) => current.filter((item) => item !== folder));
     setEntries([]);
     setSelected(new Set());
-  };
-  const load = async () => {
-    setBusy(true);
-    const found = await list();
-    setEntries(found);
-    setSelected(new Set(found.map(key)));
-    setBusy(false);
   };
   const execute = async () => {
     setBusy(true);
@@ -156,7 +171,7 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
   return (
     <>
       <div className="step">
-        <span>01</span>
+        <span>1</span>
         <div>
           <h2>Selecciona las carpetas</h2>
           <p>
@@ -165,15 +180,12 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
           </p>
         </div>
       </div>
-      <div className="rename-toolbar">
+      <div className="rename-toolbar step-actions">
         <button disabled={busy} onClick={addFolders}>
           + Añadir carpetas
         </button>
         <button disabled={!directories.length || busy} onClick={clear}>
           Limpiar
-        </button>
-        <button className="primary" disabled={!directories.length || busy} onClick={load}>
-          Listar {noun}
         </button>
       </div>
       <div className="rename-folders">
@@ -191,8 +203,11 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
         )}
       </div>
       <div className="divider" />
-      <div className="step">
-        <span>02</span>
+      <div
+        className={`step${!directories.length ? ' locked' : ''}`}
+        title={!directories.length ? 'Completa el paso 1 para desbloquear.' : undefined}
+      >
+        <span>2</span>
         <div>
           <h2>Configura las transformaciones</h2>
           <p>
@@ -209,6 +224,7 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
           second={ops.replace}
           setFirst={update('search')}
           setSecond={update('replace')}
+          disabled={!directories.length || busy}
         />
         <Row
           label="Desde texto hacia atrás"
@@ -216,6 +232,7 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
           second={ops.backwardReplace}
           setFirst={update('backwardFind')}
           setSecond={update('backwardReplace')}
+          disabled={!directories.length || busy}
         />
         <Row
           label="Desde texto hacia adelante"
@@ -223,6 +240,7 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
           second={ops.forwardReplace}
           setFirst={update('forwardFind')}
           setSecond={update('forwardReplace')}
+          disabled={!directories.length || busy}
         />
         <Row
           label="Añadir al nombre"
@@ -231,9 +249,10 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
           setFirst={update('prefix')}
           setSecond={update('suffix')}
           prefix
+          disabled={!directories.length || busy}
         />
       </div>
-      <div className="results rename-results">
+      <div className="results rename-results normalize-results">
         <div>
           <label>
             <input
@@ -287,6 +306,7 @@ function Row({
   setFirst,
   setSecond,
   prefix,
+  disabled = false,
 }: {
   label: string;
   first: string;
@@ -294,6 +314,7 @@ function Row({
   setFirst: (x: string) => void;
   setSecond: (x: string) => void;
   prefix?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div>
@@ -303,6 +324,7 @@ function Row({
           value={first}
           onChange={(e) => setFirst(e.target.value)}
           placeholder={prefix ? 'Prefijo' : 'Texto a buscar'}
+          disabled={disabled}
         />
         {first && (
           <button
@@ -310,6 +332,7 @@ function Row({
             title="Limpiar"
             aria-label={`Limpiar ${label}`}
             onClick={() => setFirst('')}
+            disabled={disabled}
           >
             ×
           </button>
@@ -321,6 +344,7 @@ function Row({
           value={second}
           onChange={(e) => setSecond(e.target.value)}
           placeholder={prefix ? 'Sufijo' : 'Reemplazar por'}
+          disabled={disabled}
         />
         {second && (
           <button
@@ -328,6 +352,7 @@ function Row({
             title="Limpiar"
             aria-label={`Limpiar ${label}`}
             onClick={() => setSecond('')}
+            disabled={disabled}
           >
             ×
           </button>
@@ -385,13 +410,28 @@ function NameBuilderTab() {
     setDirectories((current) => current.filter((item) => item !== folder));
     resetList();
   };
-  const load = async () => {
-    setBusy(true);
-    const found = await list();
-    setEntries(found);
-    setSelected(new Set(found.map(key)));
-    setBusy(false);
-  };
+  useEffect(() => {
+    if (!directories.length) return;
+    let cancelled = false;
+    const run = async () => {
+      setBusy(true);
+      try {
+        const found = await (mode === 'files'
+          ? window.tools.list(directories)
+          : window.tools.listFolders(directories));
+        if (cancelled) return;
+        setEntries(found);
+        setSelected(new Set(found.map(key)));
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    };
+    const timer = setTimeout(() => void run(), 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [directories, mode]);
   const addColumn = () => {
     columnCounter.current += 1;
     const id = `col-${columnCounter.current}`;
@@ -459,7 +499,7 @@ function NameBuilderTab() {
   return (
     <>
       <div className="step">
-        <span>01</span>
+        <span>1</span>
         <div>
           <h2>Elige qué listar</h2>
           <p>Genera una tabla temporal para combinar nombres antes de renombrar.</p>
@@ -488,9 +528,6 @@ function NameBuilderTab() {
         <button disabled={!directories.length || busy} onClick={clearFolders}>
           Limpiar
         </button>
-        <button className="primary" disabled={!directories.length || busy} onClick={load}>
-          Listar {noun}
-        </button>
       </div>
       <div className="rename-folders">
         {directories.length ? (
@@ -507,8 +544,11 @@ function NameBuilderTab() {
         )}
       </div>
       <div className="divider" />
-      <div className="step">
-        <span>02</span>
+      <div
+        className={`step${!entries.length ? ' locked' : ''}`}
+        title={!entries.length ? 'Completa el paso 1 para desbloquear.' : undefined}
+      >
+        <span>2</span>
         <div>
           <h2>Agrega columnas de nombres</h2>
           <p>
@@ -517,7 +557,7 @@ function NameBuilderTab() {
         </div>
       </div>
       <div className="builder-toolbar">
-        <button type="button" onClick={addColumn}>
+        <button type="button" onClick={addColumn} disabled={!entries.length || busy}>
           + Agregar columna nombre
         </button>
         {columnCount > 0 && (
@@ -525,6 +565,7 @@ function NameBuilderTab() {
             <input
               type="checkbox"
               checked={combineEnabled}
+              disabled={!entries.length}
               onChange={(event) => setCombineEnabled(event.target.checked)}
             />{' '}
             Combinar nombres
@@ -535,6 +576,7 @@ function NameBuilderTab() {
             <input
               type="checkbox"
               checked={sameJoin}
+              disabled={!entries.length}
               onChange={(event) => setSameJoin(event.target.checked)}
             />{' '}
             Usar el mismo prefijo para todas las columnas
@@ -550,6 +592,7 @@ function NameBuilderTab() {
                 value={sharedJoin}
                 onChange={(event) => setSharedJoin(event.target.value)}
                 placeholder='Ej: " " o "-X-"'
+                disabled={!entries.length}
               />
             </label>
           ) : (
@@ -562,6 +605,7 @@ function NameBuilderTab() {
                     setJoinByColumn((current) => ({ ...current, [column.id]: event.target.value }))
                   }
                   placeholder='Ej: " " o "-X-"'
+                  disabled={!entries.length}
                 />
               </label>
             ))
@@ -592,12 +636,14 @@ function NameBuilderTab() {
                       className="builder-column-label"
                       value={column.label}
                       onChange={(event) => updateColumnLabel(column.id, event.target.value)}
+                      disabled={!entries.length}
                     />
                     <button
                       type="button"
                       title="Quitar columna"
                       aria-label={`Quitar ${column.label}`}
                       onClick={() => removeColumn(column.id)}
+                      disabled={!entries.length}
                     >
                       ×
                     </button>
@@ -607,6 +653,7 @@ function NameBuilderTab() {
                     value={column.raw}
                     onChange={(event) => updateColumnRaw(column.id, event.target.value)}
                     placeholder={'Pega un nombre por línea...'}
+                    disabled={!entries.length}
                   />
                 </th>
               ))}

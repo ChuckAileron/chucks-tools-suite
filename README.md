@@ -95,7 +95,9 @@ Normaliza la sonoridad percibida de archivos de audio o de las pistas de audio c
 - Video copiado sin recodificar para evitar pérdida visual y reducir el tiempo de proceso.
 - Resultado guardado en `normalized_output-audio` (archivos de audio) o `normalized_output-video` (videos) dentro de cada carpeta, con el sufijo `_normalized`.
 - Los archivos originales nunca se reemplazan.
-- El listado muestra el LUFS medido de cada archivo (se mide en segundo plano con FFmpeg tras explorar, sin bloquear la interfaz).
+- El listado muestra el LUFS medido de cada archivo (se mide en segundo plano con FFmpeg tras explorar, sin bloquear la interfaz), en lotes acotados en paralelo según los núcleos disponibles del equipo. En archivos de más de 45 segundos, la medición para el listado se hace sobre un extracto de 30 segundos (saltando el primer 10% para evitar intros o silencios) en lugar de todo el archivo, para que se calcule mucho más rápido; la corrección aplicada al normalizar de verdad sigue midiéndose sobre el archivo completo.
+- Mientras se calcula el LUFS aparece un indicador con cuántos archivos ya se midieron sobre el total y la duración de la muestra usada, con la opción de cancelar el análisis en cualquier momento.
+- El botón "Normalizar" permanece deshabilitado hasta que termine de calcularse el LUFS de todos los archivos listados (o se cancele el análisis), para asegurar que la decisión de omitir archivos ya en el objetivo se tome con datos completos.
 - Si el LUFS de un archivo ya está a 1 LU o menos del objetivo configurado, se marca como "en el objetivo" en el listado y su procesamiento se omite automáticamente al normalizar (no se reprocesa un archivo que ya cumple, dentro de una pequeña tolerancia por no ser mediciones exactas).
 
 La normalización utiliza el filtro `loudnorm` de FFmpeg. Los archivos ya terminados en `_normalized` se excluyen del siguiente escaneo para evitar procesarlos repetidamente.

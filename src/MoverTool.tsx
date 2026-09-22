@@ -101,25 +101,37 @@ export default function MoverTool() {
       else next.add(type);
       return next;
     });
-  const scan = async () => {
-    setBusy(true);
-    setMessage('');
-    try {
-      const result = await window.tools.scan({
-        source,
-        destination,
-        types: [...types],
-        customExtensions: custom.split(/[,;\s]+/).filter(Boolean),
-      });
-      setFiles(result);
-      setSelected(new Set(result.map((x) => x.path)));
-      setMessage(`${result.length} archivos encontrados.`);
-    } catch (error) {
-      setMessage(String(error));
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (!source || !destination) {
+      const timer = setTimeout(() => {
+        setFiles([]);
+        setSelected(new Set());
+        setMessage('');
+      }, 0);
+      return () => clearTimeout(timer);
     }
-  };
+    const run = async () => {
+      setBusy(true);
+      setMessage('Explorando archivos...');
+      try {
+        const result = await window.tools.scan({
+          source,
+          destination,
+          types: [...types],
+          customExtensions: custom.split(/[,;\s]+/).filter(Boolean),
+        });
+        setFiles(result);
+        setSelected(new Set(result.map((x) => x.path)));
+        setMessage(`${result.length} archivos encontrados.`);
+      } catch (error) {
+        setMessage(String(error));
+      } finally {
+        setBusy(false);
+      }
+    };
+    const timer = setTimeout(() => void run(), 350);
+    return () => clearTimeout(timer);
+  }, [source, destination, types, custom]);
   const move = async () => {
     if (
       remove &&
@@ -211,7 +223,7 @@ export default function MoverTool() {
       subtitle="Encuentra y mueve archivos por tipo, incluso dentro de subcarpetas."
     >
       <Step
-        number="01"
+        number="1"
         title="Define las carpetas"
         text="La búsqueda incluirá todas las subcarpetas del origen."
       />
@@ -250,15 +262,17 @@ export default function MoverTool() {
       </div>
       <Divider />
       <Step
-        number="02"
+        number="2"
         title="Elige los tipos de archivo"
         text="Puedes combinar categorías y extensiones personalizadas."
+        locked={!source || !destination}
       />
       <div className="type-grid">
         {OPTIONS.map((x) => (
           <button
             key={x.id}
             className={types.has(x.id) ? 'active' : ''}
+            disabled={busy || !source || !destination}
             onClick={() => toggleType(x.id)}
           >
             <i>{x.icon}</i>
@@ -274,30 +288,41 @@ export default function MoverTool() {
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           placeholder="Ej: epub, psd, blend"
+          disabled={busy || !source || !destination}
         />
       </label>
       <div className="scan-row">
-        <span>{message || 'Configura el origen y los tipos para comenzar.'}</span>
-        <button disabled={!source || (!types.size && !custom.trim()) || busy} onClick={scan}>
-          Explorar archivos
-        </button>
+        <span>
+          {message ||
+            (!source || !destination
+              ? source
+                ? 'Selecciona la carpeta de destino para explorar los archivos.'
+                : 'Configura la carpeta de origen y la de destino para comenzar.'
+              : 'Configura el origen y los tipos para comenzar.')}
+        </span>
       </div>
       {files.length > 0 && (
         <FileResults files={files} selected={selected} setSelected={setSelected} />
       )}
       <div className="tool-action">
         <div className="mover-options">
-          <label>
-            <input type="checkbox" checked={remove} onChange={(e) => setRemove(e.target.checked)} />
+          <label className={!source || !destination ? 'disabled' : ''}>
+            <input
+              type="checkbox"
+              checked={remove}
+              disabled={!source || !destination}
+              onChange={(e) => setRemove(e.target.checked)}
+            />
             <span>
               <strong>Eliminar carpetas hijas</strong>
               <small>Después de mover, excepto la carpeta de destino.</small>
             </span>
           </label>
-          <label>
+          <label className={!source || !destination ? 'disabled' : ''}>
             <input
               type="checkbox"
               checked={returnToSource}
+              disabled={!source || !destination}
               onChange={(e) => {
                 setReturnToSource(e.target.checked);
                 if (!e.target.checked) setDeleteCreatedDestination(false);
@@ -308,11 +333,13 @@ export default function MoverTool() {
               <small>Al final, devuelve el lote a la raíz de la carpeta fuente.</small>
             </span>
           </label>
-          <label className={canDeleteCreatedDestination ? '' : 'disabled'}>
+          <label
+            className={!source || !destination || !canDeleteCreatedDestination ? 'disabled' : ''}
+          >
             <input
               type="checkbox"
               checked={deleteCreatedDestination}
-              disabled={!canDeleteCreatedDestination}
+              disabled={!source || !destination || !canDeleteCreatedDestination}
               onChange={(e) => setDeleteCreatedDestination(e.target.checked)}
             />
             <span>
@@ -363,9 +390,24 @@ function ToolFrame({
     </section>
   );
 }
-function Step({ number, title, text }: { number: string; title: string; text: string }) {
+function Step({
+  number,
+  title,
+  text,
+  locked,
+}: {
+  number: string;
+  title: string;
+  text: string;
+  locked?: boolean;
+}) {
   return (
-    <div className="step">
+    <div
+      className={`step${locked ? ' locked' : ''}`}
+      title={
+        locked ? 'Selecciona la carpeta de origen y la de destino para desbloquear.' : undefined
+      }
+    >
       <span>{number}</span>
       <div>
         <h2>{title}</h2>
@@ -400,7 +442,7 @@ function FileResults({
 }) {
   const all = files.length === selected.size;
   return (
-    <div className="results">
+    <div className="results normalize-results">
       <div>
         <label>
           <input

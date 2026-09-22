@@ -3,12 +3,25 @@ import type { NormalizeFile, NormalizeState } from './types';
 type MediaType = 'audio' | 'video';
 const formatSize = (bytes: number) =>
   bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
-// Misma tolerancia (en LU) usada al procesar: si el LUFS medido de un
-// archivo ya está dentro de este margen del objetivo, se considera que no
-// necesita normalizarse y se omite su procesamiento.
-const LUFS_TOLERANCE = 1;
-const isAtTarget = (lufs: number | null | undefined, target: number) =>
-  typeof lufs === 'number' && Math.abs(lufs - target) <= LUFS_TOLERANCE;
+// Valores por defecto mientras se carga la configuración real desde el
+// proceso principal (misma tolerancia y duración de extracto que usa el
+// análisis de LUFS en el backend).
+const DEFAULT_CONFIG = { lufsTolerance: 1, excerptDuration: 30, excerptMinDuration: 45 };
+const isAtTarget = (lufs: number | null | undefined, target: number, tolerance: number) =>
+  typeof lufs === 'number' && Math.abs(lufs - target) <= tolerance;
+// Concurrencia para medir el LUFS de varios archivos en paralelo:
+// - Uno a uno es el más "seguro" pero desperdicia el resto de núcleos y es
+//   muy lento con muchos archivos.
+// - Todos a la vez puede disparar decenas/cientos de procesos de FFmpeg de
+//   golpe, saturando CPU y disco y volviendo la interfaz (y el propio
+//   análisis) más lenta en vez de más rápida.
+// - Un lote acotado de N en paralelo aprovecha varios núcleos sin saturar el
+//   equipo; como cada medición ahora analiza solo un extracto corto, N puede
+//   ser moderado sin arriesgar la respuesta del sistema.
+const LUFS_CONCURRENCY = Math.max(
+  2,
+  Math.min(4, Math.floor((navigator.hardwareConcurrency || 4) / 2)),
+);
 const LUFS_PRESETS = [
   { value: -14, label: '-14 Streaming' },
   { value: -16, label: '-16 General' },
@@ -40,6 +53,11 @@ export default function NormalizeTool() {
   const [message, setMessage] = useState('');
   const [processed, setProcessed] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [measuringCancelled, setMeasuringCancelled] = useState(false);
+  useEffect(() => {
+    window.tools.getNormalizeConfig().then(setConfig);
+  }, []);
   useEffect(() => {
     const hydrate = (state: NormalizeState) => {
       setNormalize(state);
@@ -54,26 +72,44 @@ export default function NormalizeTool() {
     window.tools.getNormalizeState().then(hydrate);
     return window.tools.onNormalizeState(hydrate);
   }, []);
-  // Mide el LUFS de cada archivo listado en segundo plano (de a pocos a la
-  // vez) para mostrarlo en la lista; se pausa mientras hay un proceso de
-  // normalización en curso para no competir por CPU con FFmpeg.
+  // Mide el LUFS de cada archivo listado en segundo plano, en lotes acotados
+  // de LUFS_CONCURRENCY a la vez, para mostrarlo en la lista; se pausa
+  // mientras hay un proceso de normalización en curso (para no competir por
+  // CPU con FFmpeg) o si el usuario canceló el análisis.
   const measuringRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (normalize.running) return;
+    if (normalize.running || measuringCancelled) return;
+    const available = LUFS_CONCURRENCY - measuringRef.current.size;
+    if (available <= 0) return;
     const pending = files.filter(
       (file) => file.lufs === undefined && !measuringRef.current.has(file.path),
     );
-    if (!pending.length) return;
-    for (const file of pending.slice(0, 2)) {
+    for (const file of pending.slice(0, available)) {
       measuringRef.current.add(file.path);
       window.tools
         .measureNormalizeLufs(file.path)
         .catch(() => null)
         .finally(() => measuringRef.current.delete(file.path));
     }
-  }, [files, normalize.running]);
+  }, [files, normalize.running, measuringCancelled]);
+  const pendingMeasureCount = files.filter((file) => file.lufs === undefined).length;
+  const failedMeasureCount = files.filter((file) => file.lufs === null).length;
+  const measuredCount = files.length - pendingMeasureCount;
+  const cancelMeasuring = async () => {
+    setMeasuringCancelled(true);
+    await window.tools.cancelLufsScan();
+  };
   const pushUi = (patch: Partial<NormalizeState>) => {
     void window.tools.setNormalizeUi(patch);
+  };
+  // Vuelve a poner en cola los archivos cuyo LUFS no se pudo calcular (p. ej.
+  // por un fallo transitorio de FFmpeg); el efecto de medición los retoma
+  // automáticamente al quedar de nuevo en estado "sin medir".
+  const retryFailedMeasurements = () => {
+    const next = files.map((file) => (file.lufs === null ? { ...file, lufs: undefined } : file));
+    setFiles(next);
+    pushUi({ files: next });
+    setMeasuringCancelled(false);
   };
   const addFolders = async () => {
     const paths = await window.tools.selectNormalizeFolders();
@@ -83,6 +119,7 @@ export default function NormalizeTool() {
     setSelected(new Set());
     setProcessed(new Set());
     setLogs([]);
+    setMeasuringCancelled(false);
     setNormalize(EMPTY_NORMALIZE);
     pushUi({
       folders: nextFolders,
@@ -98,6 +135,7 @@ export default function NormalizeTool() {
   const scan = async () => {
     setMessage('Explorando archivos...');
     setLogs([]);
+    setMeasuringCancelled(false);
     setNormalize(EMPTY_NORMALIZE);
     try {
       const result = await window.tools.scanNormalizeFiles({ folders, type });
@@ -140,6 +178,7 @@ export default function NormalizeTool() {
     setSelected(new Set());
     setProcessed(new Set());
     setLogs([]);
+    setMeasuringCancelled(false);
     setNormalize(EMPTY_NORMALIZE);
     pushUi({
       folders: [],
@@ -212,7 +251,7 @@ export default function NormalizeTool() {
       </header>
       <div className="workspace">
         <div className="step">
-          <span>01</span>
+          <span>1</span>
           <div>
             <h2>Selecciona el contenido</h2>
             <p>Puedes procesar varias carpetas en una ejecución.</p>
@@ -235,6 +274,7 @@ export default function NormalizeTool() {
               setSelected(new Set());
               setProcessed(new Set());
               setLogs([]);
+              setMeasuringCancelled(false);
               setNormalize(EMPTY_NORMALIZE);
               pushUi({
                 type: next,
@@ -279,8 +319,11 @@ export default function NormalizeTool() {
           )}
         </div>
         <div className="divider" />
-        <div className="step">
-          <span>02</span>
+        <div
+          className={`step${!folders.length ? ' locked' : ''}`}
+          title={!folders.length ? 'Completa el paso 1 para desbloquear.' : undefined}
+        >
+          <span>2</span>
           <div>
             <h2>Configura la normalización</h2>
             <p>El valor recomendado para contenido general es -16 LUFS.</p>
@@ -293,7 +336,7 @@ export default function NormalizeTool() {
             min="-50"
             max="-5"
             value={target}
-            disabled={normalize.running}
+            disabled={normalize.running || !folders.length}
             onChange={(event) => {
               const next = Number(event.target.value);
               setTarget(next);
@@ -307,7 +350,7 @@ export default function NormalizeTool() {
             <button
               key={value}
               type="button"
-              disabled={normalize.running}
+              disabled={normalize.running || !folders.length}
               className={target === value ? 'active' : ''}
               onClick={() => {
                 setTarget(value);
@@ -332,6 +375,60 @@ export default function NormalizeTool() {
               </label>
               <span>{selected.size} seleccionados</span>
             </div>
+            {pendingMeasureCount > 0 && !normalize.running && !measuringCancelled && (
+              <div className="lufs-scan-banner">
+                <i className="lufs-spinner" aria-hidden="true" />
+                <span>
+                  <strong>Calculando LUFS…</strong>
+                  <small>
+                    {measuredCount} de {files.length} archivos medidos
+                    {failedMeasureCount > 0 && ` (${failedMeasureCount} sin medir)`} · se analiza
+                    una muestra de {config.excerptDuration}s en archivos de más de{' '}
+                    {config.excerptMinDuration}s
+                  </small>
+                </span>
+                <button type="button" onClick={cancelMeasuring}>
+                  Cancelar análisis
+                </button>
+              </div>
+            )}
+            {measuringCancelled && pendingMeasureCount > 0 && !normalize.running && (
+              <div className="lufs-scan-banner lufs-scan-cancelled">
+                <i className="lufs-warning-icon" aria-hidden="true">
+                  ✕
+                </i>
+                <span>
+                  <strong>Análisis cancelado</strong>
+                  <small>
+                    {pendingMeasureCount} archivo{pendingMeasureCount === 1 ? '' : 's'} quedaron sin
+                    medir. Puedes reanudar el cálculo o continuar con la normalización.
+                  </small>
+                </span>
+                <button type="button" onClick={() => setMeasuringCancelled(false)}>
+                  Reanudar análisis
+                </button>
+              </div>
+            )}
+            {pendingMeasureCount === 0 && failedMeasureCount > 0 && !normalize.running && (
+              <div className="lufs-scan-banner lufs-scan-warning">
+                <i className="lufs-warning-icon" aria-hidden="true">
+                  !
+                </i>
+                <span>
+                  <strong>
+                    {failedMeasureCount} archivo{failedMeasureCount === 1 ? '' : 's'} sin medir
+                  </strong>
+                  <small>
+                    No se pudo calcular su LUFS (puede que no tengan pista de audio o el archivo
+                    esté dañado). Se normalizarán igual; solo no se pudo confirmar de antemano si ya
+                    estaban en el objetivo.
+                  </small>
+                </span>
+                <button type="button" onClick={retryFailedMeasurements}>
+                  Reintentar
+                </button>
+              </div>
+            )}
             <section>
               {files.map((file) => (
                 <label key={file.path}>
@@ -346,11 +443,11 @@ export default function NormalizeTool() {
                   </span>
                   <i>{formatSize(file.size)}</i>
                   <span
-                    className={`file-lufs ${isAtTarget(file.lufs, target) ? 'at-target' : ''}`}
+                    className={`file-lufs ${isAtTarget(file.lufs, target, config.lufsTolerance) ? 'at-target' : ''}`}
                     title={
-                      isAtTarget(file.lufs, target)
-                        ? `Ya está a ${LUFS_TOLERANCE} LU o menos del objetivo (${target} LUFS); se omitirá al normalizar`
-                        : 'Sonoridad integrada medida con FFmpeg'
+                      isAtTarget(file.lufs, target, config.lufsTolerance)
+                        ? `Ya está a ${config.lufsTolerance} LU o menos del objetivo (${target} LUFS); se omitirá al normalizar`
+                        : `Sonoridad integrada medida con FFmpeg (muestra de ${config.excerptDuration}s en archivos largos)`
                     }
                   >
                     {file.lufs === undefined
@@ -358,7 +455,9 @@ export default function NormalizeTool() {
                       : file.lufs === null
                         ? 'Sin medir'
                         : `${file.lufs.toFixed(1)} LUFS`}
-                    {isAtTarget(file.lufs, target) && <b> · en el objetivo</b>}
+                    {isAtTarget(file.lufs, target, config.lufsTolerance) && (
+                      <b> · en el objetivo</b>
+                    )}
                   </span>
                   {processed.has(file.path) && (
                     <em className="file-check" title="Archivo procesado" aria-hidden="true">
@@ -414,7 +513,15 @@ export default function NormalizeTool() {
               Cancelar proceso
             </button>
           ) : (
-            <button disabled={!selected.size} onClick={start}>
+            <button
+              disabled={!selected.size || (pendingMeasureCount > 0 && !measuringCancelled)}
+              title={
+                pendingMeasureCount > 0 && !measuringCancelled
+                  ? 'Espera a que termine de calcularse el LUFS de todos los archivos, o cancela el análisis'
+                  : undefined
+              }
+              onClick={start}
+            >
               Normalizar {selected.size || ''} archivos →
             </button>
           )}

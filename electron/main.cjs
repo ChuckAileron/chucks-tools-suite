@@ -4,7 +4,14 @@ const fsSync = require('node:fs');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
-const { scanMedia, normalizeMedia, measureLufs } = require('./audioNormalizer.cjs');
+const {
+  scanMedia,
+  normalizeMedia,
+  measureLufs,
+  LUFS_TOLERANCE,
+  EXCERPT_DURATION,
+  EXCERPT_MIN_SOURCE_DURATION,
+} = require('./audioNormalizer.cjs');
 const { validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
@@ -69,6 +76,17 @@ const parseVideoTarget = (value) => {
 let normalizeCancelled = false;
 let activeNormalizeProcess = null;
 let normalizeQueue = [];
+// Estado del análisis de LUFS en segundo plano (independiente de la
+// normalización en sí): permite cancelar las mediciones en curso y evita
+// reintentar archivos indefinidamente si el usuario cancela.
+let lufsCancelled = false;
+const activeLufsProcesses = new Set();
+function killLufsProcess(child) {
+  if (!child || child.killed) return;
+  if (process.platform === 'win32')
+    execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {});
+  else child.kill('SIGTERM');
+}
 let normalizeCompleted = 0;
 let activeNormalizeFilePath = '';
 let normalizeState = {
@@ -425,8 +443,8 @@ async function undoMove(data) {
 }
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 850,
+    width: 1440,
+    height: 960,
     minWidth: 820,
     minHeight: 620,
     autoHideMenuBar: true,
@@ -858,6 +876,9 @@ app.whenReady().then(async () => {
     return result.canceled ? [] : result.filePaths;
   });
   ipcMain.handle('normalizer:scan', async (_event, data) => {
+    // Un nuevo listado habilita de nuevo el cálculo de LUFS por si el
+    // usuario había cancelado el análisis de una exploración anterior.
+    lufsCancelled = false;
     const files = await scanMedia(data.folders, data.type);
     normalizeState = {
       ...normalizeState,
@@ -871,21 +892,64 @@ app.whenReady().then(async () => {
     return files;
   });
   ipcMain.handle('normalizer:measure-lufs', async (_event, filePath) => {
+    if (lufsCancelled) return null;
+    const attemptMeasure = () => {
+      let activeChild = null;
+      return measureLufs(
+        filePath,
+        () => lufsCancelled,
+        (child) => {
+          if (child) {
+            activeChild = child;
+            activeLufsProcesses.add(child);
+          } else if (activeChild) {
+            activeLufsProcesses.delete(activeChild);
+            activeChild = null;
+          }
+        },
+      );
+    };
+    let lufs = null;
     try {
-      const lufs = await measureLufs(filePath);
-      normalizeState = {
-        ...normalizeState,
-        files: normalizeState.files.map((file) =>
-          file.path === filePath ? { ...file, lufs } : file,
-        ),
-      };
-      for (const window of BrowserWindow.getAllWindows())
-        window.webContents.send('normalizer:state-changed', normalizeState);
-      return lufs;
-    } catch {
-      return null;
+      lufs = await attemptMeasure();
+    } catch (error) {
+      // Un solo reintento automático: con muchos archivos en paralelo, un
+      // spawn de FFmpeg puede fallar de forma transitoria (antivirus,
+      // saturación momentánea de procesos, etc.). Si el archivo realmente no
+      // tiene pista de audio o está dañado, el reintento también fallará y
+      // quedará marcado como "Sin medir".
+      if (error.code === 'CANCELLED' || lufsCancelled) lufs = null;
+      else {
+        try {
+          lufs = await attemptMeasure();
+        } catch {
+          lufs = null;
+        }
+      }
     }
+    // Se guarda el resultado (incluso null tras un fallo o cancelación) para
+    // no reintentar el mismo archivo en un bucle infinito.
+    normalizeState = {
+      ...normalizeState,
+      files: normalizeState.files.map((file) =>
+        file.path === filePath ? { ...file, lufs } : file,
+      ),
+    };
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('normalizer:state-changed', normalizeState);
+    return lufs;
   });
+  ipcMain.handle('normalizer:cancel-lufs-scan', () => {
+    lufsCancelled = true;
+    for (const child of activeLufsProcesses) killLufsProcess(child);
+    activeLufsProcesses.clear();
+    return true;
+  });
+  ipcMain.handle('normalizer:config', () => ({
+    lufsTolerance: LUFS_TOLERANCE,
+    excerptDuration: EXCERPT_DURATION,
+    excerptMinDuration: EXCERPT_MIN_SOURCE_DURATION,
+  }));
   ipcMain.handle('normalizer:state', () => normalizeState);
   ipcMain.handle('normalizer:set-target', (_event, targetDb) => {
     normalizeState = { ...normalizeState, targetDb: parseTargetDb(targetDb) };

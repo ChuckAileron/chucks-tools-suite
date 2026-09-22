@@ -469,6 +469,12 @@ declare global {
         type: 'audio' | 'video';
       }): Promise<NormalizeFile[]>;
       measureNormalizeLufs(filePath: string): Promise<number | null>;
+      cancelLufsScan(): Promise<boolean>;
+      getNormalizeConfig(): Promise<{
+        lufsTolerance: number;
+        excerptDuration: number;
+        excerptMinDuration: number;
+      }>;
       startNormalization(data: {
         files: NormalizeFile[];
         type: 'audio' | 'video';

@@ -54,19 +54,33 @@ const durationOf = (input) =>
 // cerca" del valor deseado.
 const LUFS_TOLERANCE = 1;
 const cancelledError = () => Object.assign(new Error('Cancelado'), { code: 'CANCELLED' });
-async function measureLoudness(input, targetDb, onProcess, isCancelled) {
+// Duración del extracto usado para estimar el LUFS rápidamente en archivos
+// largos, y umbral mínimo de duración a partir del cual vale la pena
+// recortar (en archivos cortos analizar todo es igual de rápido).
+const EXCERPT_DURATION = 30;
+const EXCERPT_MIN_SOURCE_DURATION = 45;
+// Calcula el punto de inicio y la duración del extracto a analizar. Se evita
+// el arranque del archivo (silencios, intros, cortinillas) tomando el
+// extracto a partir del 10% de la duración total (o de los 60s, lo que sea
+// menor). Devuelve null si el archivo es demasiado corto para que valga la
+// pena recortarlo o si no se pudo determinar su duración.
+function loudnessExcerpt(duration) {
+  if (!Number.isFinite(duration) || duration <= EXCERPT_MIN_SOURCE_DURATION) return null;
+  const start = Math.min(duration * 0.1, 60);
+  const clipDuration = Math.min(EXCERPT_DURATION, duration - start);
+  return clipDuration > 0 ? { start, duration: clipDuration } : null;
+}
+async function measureLoudness(input, targetDb, onProcess, isCancelled, excerpt) {
   const filter = `loudnorm=I=${targetDb}:TP=-1.5:LRA=11:print_format=json`;
   return new Promise((resolve, reject) => {
-    const command = spawn('ffmpeg', [
-      '-hide_banner',
-      '-i',
-      input,
-      '-af',
-      filter,
-      '-f',
-      'null',
-      '-',
-    ]);
+    const args = ['-hide_banner'];
+    // `-ss` antes de `-i` usa el seek rápido (por keyframes) de ffmpeg, ideal
+    // para saltar directo al extracto sin decodificar todo lo anterior.
+    if (excerpt?.start) args.push('-ss', String(excerpt.start));
+    args.push('-i', input);
+    if (excerpt?.duration) args.push('-t', String(excerpt.duration));
+    args.push('-af', filter, '-f', 'null', '-');
+    const command = spawn('ffmpeg', args);
     onProcess(command);
     let data = '';
     const done = (error, value) => {
@@ -102,8 +116,10 @@ async function measureLoudness(input, targetDb, onProcess, isCancelled) {
 // Mide únicamente la sonoridad integrada (LUFS) de un archivo, sin aplicar
 // ninguna corrección. Se usa para mostrar el valor actual en el listado
 // antes de normalizar; el valor de "I" del filtro no afecta la medición.
-async function measureLufs(input, isCancelled = () => false) {
-  const measured = await measureLoudness(input, -16, () => {}, isCancelled);
+async function measureLufs(input, isCancelled = () => false, onProcess = () => {}) {
+  const duration = await durationOf(input);
+  const excerpt = loudnessExcerpt(duration);
+  const measured = await measureLoudness(input, -16, onProcess, isCancelled, excerpt);
   return Number(measured.measured_i);
 }
 
@@ -193,4 +209,12 @@ async function normalizeMedia({
   });
   return { skipped: false, output, measuredLufs: measured ? Number(measured.measured_i) : null };
 }
-module.exports = { scanMedia, normalizeMedia, measureLufs, LUFS_TOLERANCE };
+module.exports = {
+  scanMedia,
+  normalizeMedia,
+  measureLufs,
+  LUFS_TOLERANCE,
+  loudnessExcerpt,
+  EXCERPT_DURATION,
+  EXCERPT_MIN_SOURCE_DURATION,
+};

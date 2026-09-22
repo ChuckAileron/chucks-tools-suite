@@ -196,6 +196,9 @@
   --c-text-fff: #fff;
 }
 :root[data-theme='dark'] {
+  --brand-ink: #d9f0ed;
+  --brand-soft: #1e312e;
+  --c-bg-eaf0ee: #242b28;
   --c-bg-5dc1b9: #2d4342;
   --c-bg-bfe3dd: #283936;
   --c-bg-e3d9b8: #3c3828;
@@ -331,6 +334,32 @@
   --c-text-ac7640: #ccc2b8;
   --c-text-b34535: #ccbab8;
 }
+:root[data-theme='dark'] .suite-brand > span,
+:root[data-theme='dark'] .tool > header > span,
+:root[data-theme='dark'] .destination-create > div button,
+:root[data-theme='dark'] .path.single button:last-child,
+:root[data-theme='dark'] .scan-row button,
+:root[data-theme='dark'] .tool-action button,
+:root[data-theme='dark'] .video-folder-actions button:first-child,
+:root[data-theme='dark'] .rename-toolbar button:first-child,
+:root[data-theme='dark'] .normalize-controls button:first-child,
+:root[data-theme='dark'] .lufs-presets button.active,
+:root[data-theme='dark'] .url-input button,
+:root[data-theme='dark'] .collector-input button,
+:root[data-theme='dark'] .collector-footer > button,
+:root[data-theme='dark'] .collection-settings-actions button:last-child,
+:root[data-theme='dark'] .analog-tool button.analog-primary {
+  color: #123b38;
+}
+:root[data-theme='dark'] .collection-settings-actions button:last-child {
+  color: #123b38 !important;
+}
+:root[data-theme='dark'] .wishlist-card > strong {
+  color: var(--brand-ink);
+}
+:root[data-theme='dark'] nav button .sidebar-progress-track > .sidebar-progress-fill {
+  background: #f1ca88;
+}
 
 * {
   box-sizing: border-box;
@@ -386,6 +415,25 @@ input {
 }
 nav {
   margin-top: 25px;
+  margin-bottom: 18px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+nav::-webkit-scrollbar {
+  width: 6px;
+}
+nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 99px;
+}
+nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 nav p {
   margin: 0 10px 10px;
@@ -632,6 +680,25 @@ nav button .sidebar-progress > small {
 .step h2 {
   font-size: 17px;
 }
+.step.locked {
+  opacity: 0.5;
+}
+.type-grid button:disabled,
+.codec-options button:disabled,
+.lufs-presets button:disabled,
+.builder-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.custom input:disabled,
+.rename-options input:disabled,
+.rename-input-clear button:disabled,
+.builder-join input:disabled,
+.builder-column-label:disabled,
+.builder-column-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .paths {
   display: flex;
   align-items: center;
@@ -763,6 +830,7 @@ nav button .sidebar-progress > small {
   border: 1px solid var(--c-border-d6d9d4);
   border-radius: 8px;
   background: var(--c-bg-fff);
+  color: var(--c-text-28352f);
   padding: 8px 10px;
   font-size: 11px;
   font-weight: 700;
@@ -845,6 +913,7 @@ nav button .sidebar-progress > small {
   flex: 1;
   border: 1px solid var(--c-border-dfe2dd);
   background: var(--c-bg-fafbf8);
+  color: var(--c-text-28352f);
   border-radius: 9px;
   padding: 9px 11px;
   outline: none;
@@ -1118,7 +1187,7 @@ nav button i {
   background: var(--c-bg-fff);
   padding: 8px 11px;
   color: var(--c-text-38443e);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1202,6 +1271,34 @@ nav button i {
 .video-folders article > header button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.vfs-results .video-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.vfs-results .video-folders article {
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--c-border-eff0ec);
+  background: var(--c-bg-fff);
+}
+.vfs-results .video-folders article:first-child {
+  border-top: 0;
+}
+.vfs-results .video-folders article > header,
+.vfs-results .video-folders article.processed > header {
+  background: var(--c-bg-fff);
+}
+.vfs-results .video-folders article.processed,
+.vfs-results .video-folders article.processed > header {
+  background: var(--c-bg-f3f9f5);
+}
+.vfs-results .video-folders details {
+  padding: 8px 13px;
+}
+.vfs-results > section {
+  max-height: 340px;
 }
 .video-folders details {
   padding: 8px 12px;
@@ -1395,6 +1492,7 @@ nav button i {
 .tool-action .cancel-button {
   border: 1px solid var(--c-border-c77b6c);
   background: var(--c-bg-a2483a);
+  color: var(--c-text-fff);
 }
 .tool-action .cancel-button:hover:not(:disabled) {
   border-color: var(--c-border-7f3025);
@@ -1422,8 +1520,9 @@ nav button i {
 }
 .normalize-controls {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  margin-bottom: 11px;
+  margin: -48px 0 17px;
 }
 .rename-toolbar {
   display: flex;
@@ -1454,8 +1553,15 @@ nav button i {
   background: var(--c-bg-eef2ee);
   border-color: var(--c-border-cdd3cd);
 }
+.rename-toolbar.step-actions {
+  justify-content: flex-end;
+  margin: -48px 0 17px;
+}
+.rename-toolbar.step-actions button.primary {
+  margin-left: 0;
+}
 .normalize-controls select {
-  margin-left: auto;
+  margin-left: 4px;
 }
 .rename-folders,
 .normalize-folders {
@@ -1568,6 +1674,7 @@ nav button i {
   min-width: 160px;
   border: 1px solid var(--c-border-dfe2dd);
   background: var(--c-bg-fafbf8);
+  color: var(--c-text-28352f);
   border-radius: 8px;
   padding: 7px 9px;
   font-size: 11px;
@@ -1643,6 +1750,7 @@ nav button i {
   resize: vertical;
   border: 1px solid var(--c-border-dfe2dd);
   background: var(--c-bg-fafbf8);
+  color: var(--c-text-28352f);
   border-radius: 8px;
   padding: 6px 8px;
   font-size: 10px;
@@ -1757,6 +1865,83 @@ nav button i {
 }
 .file-lufs b {
   font-weight: 700;
+}
+.lufs-scan-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  background: var(--c-bg-f6f7f3);
+  border-top: 1px solid var(--c-border-eff0ec);
+  font-size: 11px;
+}
+.lufs-scan-banner > span {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.lufs-scan-banner > span strong {
+  color: var(--c-text-38443e);
+}
+.lufs-scan-banner > span small {
+  color: var(--c-text-77807a);
+}
+.lufs-scan-banner > button {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border-d6d9d4);
+  border-radius: 7px;
+  background: var(--c-bg-fff);
+  color: var(--c-text-38443e);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lufs-scan-banner > button:hover {
+  border-color: var(--c-border-b8c7bd);
+}
+.lufs-spinner {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--c-border-d6d9d4);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: lufs-spin 0.8s linear infinite;
+}
+@keyframes lufs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.lufs-scan-banner.lufs-scan-warning {
+  background: var(--c-bg-fdecea);
+}
+.lufs-scan-banner.lufs-scan-warning > span small {
+  color: var(--c-text-a33);
+}
+.lufs-scan-banner.lufs-scan-cancelled {
+  background: var(--c-bg-eaf0ee);
+}
+.lufs-scan-banner.lufs-scan-cancelled > span small {
+  color: var(--c-text-5a675f);
+}
+.lufs-scan-banner.lufs-scan-cancelled .lufs-warning-icon {
+  background: var(--c-text-79827c);
+}
+.lufs-warning-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--c-bg-a2483a);
+  color: var(--c-text-fff);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
 }
 .url-input {
   display: flex;
@@ -2481,6 +2666,7 @@ nav button i {
   padding: 3px;
   border: 0;
   background: transparent;
+  color: var(--c-text-28352f);
   font-size: 11px;
   font-weight: 700;
   outline: none;
@@ -2549,6 +2735,7 @@ nav button i {
   border: 1px solid var(--c-border-d9ddd9);
   border-radius: 7px;
   background: var(--c-bg-fafbf8);
+  color: var(--c-text-28352f);
   font-size: 9px;
 }
 .candidate > button {
@@ -2608,6 +2795,7 @@ nav button i {
   border: 1px solid var(--c-border-d6d9d4);
   border-radius: 8px;
   background: var(--c-bg-fff);
+  color: var(--c-text-28352f);
   font-size: 10px;
 }
 .download-settings input[type='number'] {
@@ -2622,6 +2810,7 @@ nav button i {
   border: 1px solid var(--c-border-d6d9d4);
   border-radius: 7px;
   background: var(--c-bg-fff);
+  color: var(--c-text-28352f);
   font-size: 9px;
 }
 .download-settings section > label.check {
@@ -3999,6 +4188,7 @@ nav button i {
 .hdd-field input:not([type]) {
   border: 1px solid var(--c-border-dfe2dd);
   background: var(--c-bg-fff);
+  color: var(--c-text-28352f);
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 12px;
@@ -4233,6 +4423,8 @@ nav button i {
   }
   nav {
     margin: 0;
+    flex: none;
+    overflow: visible;
     display: flex;
   }
   nav button {
@@ -4307,6 +4499,10 @@ nav button i {
   }
   .normalize-controls {
     flex-wrap: wrap;
+    margin: 0 0 14px;
+  }
+  .rename-toolbar.step-actions {
+    margin: 0 0 14px;
   }
   .normalize-controls select {
     width: 100%;

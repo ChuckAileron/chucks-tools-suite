@@ -101,6 +101,8 @@ contextBridge.exposeInMainWorld('tools', {
   selectNormalizeFolders: () => ipcRenderer.invoke('normalizer:select-folders'),
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
   measureNormalizeLufs: (filePath) => ipcRenderer.invoke('normalizer:measure-lufs', filePath),
+  cancelLufsScan: () => ipcRenderer.invoke('normalizer:cancel-lufs-scan'),
+  getNormalizeConfig: () => ipcRenderer.invoke('normalizer:config'),
   startNormalization: (data) => ipcRenderer.invoke('normalizer:start', data),
   setNormalizeTarget: (targetDb) => ipcRenderer.invoke('normalizer:set-target', targetDb),
   setNormalizeUi: (data) => ipcRenderer.invoke('normalizer:set-ui', data),

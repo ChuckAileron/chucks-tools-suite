@@ -29,6 +29,9 @@ const {
   normalizeMedia,
   measureLufs,
   LUFS_TOLERANCE,
+  loudnessExcerpt,
+  EXCERPT_DURATION,
+  EXCERPT_MIN_SOURCE_DURATION,
 } = require('../electron/audioNormalizer.cjs');
 
 function reset() {
@@ -512,4 +515,82 @@ test('measureLufs devuelve el LUFS integrado sin convertir el archivo', async ()
   const lufs = await promise;
   assert.equal(lufs, -18.3);
   assert.equal(state.spawnCalls.length, 1);
+});
+
+// --- Análisis de LUFS sobre un extracto (archivos largos) ------------------
+
+test('loudnessExcerpt no recorta archivos cortos ni de duración desconocida', () => {
+  assert.equal(loudnessExcerpt(0), null);
+  assert.equal(loudnessExcerpt(NaN), null);
+  assert.equal(loudnessExcerpt(EXCERPT_MIN_SOURCE_DURATION), null);
+  assert.equal(loudnessExcerpt(10), null);
+});
+
+test('loudnessExcerpt recorta un extracto tras el 10% inicial en archivos largos', () => {
+  const excerpt = loudnessExcerpt(200);
+  assert.ok(excerpt);
+  assert.equal(excerpt.start, 20); // 10% de 200s
+  assert.equal(excerpt.duration, EXCERPT_DURATION);
+});
+
+test('loudnessExcerpt limita el inicio a 60s y el extracto a lo que quede del archivo', () => {
+  const long = loudnessExcerpt(10000);
+  assert.equal(long.start, 60); // 10% excedería 60s, se limita
+  assert.equal(long.duration, EXCERPT_DURATION);
+
+  const short = loudnessExcerpt(50); // apenas por encima del umbral mínimo
+  assert.equal(short.start, 5); // 10% de 50s
+  assert.equal(short.duration, EXCERPT_DURATION); // 45s restantes, recortado a 30s
+});
+
+test('measureLufs analiza solo un extracto cuando el archivo es largo', async () => {
+  reset();
+  ffprobeResult = '300.0';
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-measure-excerpt-'));
+  const file = path.join(dir, 'pelicula.mp3');
+  fs.writeFileSync(file, 'x');
+  const promise = measureLufs(file);
+  const [measure] = await spawned(1);
+  assert.equal(measure.args.includes('-ss'), true);
+  assert.equal(measure.args[measure.args.indexOf('-ss') + 1], '30'); // 10% de 300s
+  assert.equal(measure.args.includes('-t'), true);
+  assert.equal(measure.args[measure.args.indexOf('-t') + 1], String(EXCERPT_DURATION));
+  emitData(measure, JSON.stringify({ input_i: -20 }));
+  closeChild(measure, 0);
+  await promise;
+});
+
+test('measureLufs analiza el archivo completo cuando es corto', async () => {
+  reset();
+  ffprobeResult = '20.0';
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-measure-full-'));
+  const file = path.join(dir, 'nota.mp3');
+  fs.writeFileSync(file, 'x');
+  const promise = measureLufs(file);
+  const [measure] = await spawned(1);
+  assert.equal(measure.args.includes('-ss'), false);
+  assert.equal(measure.args.includes('-t'), false);
+  emitData(measure, JSON.stringify({ input_i: -20 }));
+  closeChild(measure, 0);
+  await promise;
+});
+
+test('normalizeMedia sigue midiendo el archivo completo antes de convertir', async () => {
+  reset();
+  ffprobeResult = '300.0';
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'norm-full-encode-'));
+  const file = path.join(dir, 'pista.mp3');
+  fs.writeFileSync(file, 'x');
+  const promise = normalize(file, { targetDb: -14 });
+  const [measure] = await spawned(1);
+  // La pasada de medición previa a la codificación final no debe recortarse:
+  // la corrección aplicada a todo el archivo depende de esta medición.
+  assert.equal(measure.args.includes('-ss'), false);
+  assert.equal(measure.args.includes('-t'), false);
+  emitData(measure, JSON.stringify({ input_i: -30 }));
+  closeChild(measure, 0);
+  const [, convert] = await spawned(2);
+  fs.writeFileSync(convert.args.at(-1), 'fake-media');
+  closeChild(convert, 0);
+  await promise;
 });

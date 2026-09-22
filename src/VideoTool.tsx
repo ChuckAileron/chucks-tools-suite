@@ -186,7 +186,7 @@ export default function VideoTool() {
       </header>
       <div className="workspace">
         <div className="step">
-          <span>01</span>
+          <span>1</span>
           <div>
             <h2>Selecciona las carpetas</h2>
             <p>Puedes procesar varias carpetas en una sola ejecución.</p>
@@ -198,29 +198,43 @@ export default function VideoTool() {
             Limpiar
           </button>
         </div>
-        <div className="video-folders">
-          {folders.length ? (
-            folders.map((folder) => (
-              <FolderCard
-                key={folder.folder}
-                folder={folder}
-                selections={selections}
-                controlsDisabled={running}
-                removeDisabled={running && activeFolder === folder.folder}
-                collapsed={collapsed.has(folder.folder)}
-                onCollapse={() => toggleFolder(folder.folder)}
-                onRemove={() => removeFolder(folder.folder)}
-                onToggle={toggleTrack}
-                onSelect={selectTracks}
-              />
-            ))
-          ) : (
-            <div className="video-empty">No hay carpetas seleccionadas.</div>
-          )}
-        </div>
+        {folders.length ? (
+          <div className="results vfs-results">
+            <div>
+              <label>
+                {videoCount} video{videoCount === 1 ? '' : 's'} en {folders.length} carpeta
+                {folders.length === 1 ? '' : 's'}
+              </label>
+              <span>
+                {processedCount} procesado{processedCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            <section className="video-folders">
+              {folders.map((folder) => (
+                <FolderCard
+                  key={folder.folder}
+                  folder={folder}
+                  selections={selections}
+                  controlsDisabled={running}
+                  removeDisabled={running && activeFolder === folder.folder}
+                  collapsed={collapsed.has(folder.folder)}
+                  onCollapse={() => toggleFolder(folder.folder)}
+                  onRemove={() => removeFolder(folder.folder)}
+                  onToggle={toggleTrack}
+                  onSelect={selectTracks}
+                />
+              ))}
+            </section>
+          </div>
+        ) : (
+          <div className="video-empty">No hay carpetas seleccionadas.</div>
+        )}
         <div className="divider" />
-        <div className="step">
-          <span>02</span>
+        <div
+          className={`step${!folders.length ? ' locked' : ''}`}
+          title={!folders.length ? 'Completa el paso 1 para desbloquear.' : undefined}
+        >
+          <span>2</span>
           <div>
             <h2>Configura la conversión</h2>
             <p>Los originales se conservan y la salida se guarda en una subcarpeta.</p>
@@ -229,7 +243,7 @@ export default function VideoTool() {
         <div className="codec-options">
           <button
             className={codec === 'h264' ? 'active' : ''}
-            disabled={running}
+            disabled={running || !folders.length}
             onClick={() => changeCodec('h264')}
           >
             <strong>H.264</strong>
@@ -237,7 +251,7 @@ export default function VideoTool() {
           </button>
           <button
             className={codec === 'h265' ? 'active' : ''}
-            disabled={running}
+            disabled={running || !folders.length}
             onClick={() => changeCodec('h265')}
           >
             <strong>H.265</strong>
@@ -248,7 +262,7 @@ export default function VideoTool() {
           <label>
             <input
               type="checkbox"
-              disabled={running}
+              disabled={running || !folders.length}
               checked={normalizeAudio}
               onChange={(event) => setNormalizeOptions({ normalizeAudio: event.target.checked })}
             />
@@ -261,7 +275,7 @@ export default function VideoTool() {
                 <button
                   key={value}
                   type="button"
-                  disabled={running}
+                  disabled={running || !folders.length}
                   className={normalizeTarget === value ? 'active' : ''}
                   onClick={() => setNormalizeOptions({ normalizeTarget: value })}
                 >
@@ -461,7 +475,11 @@ function TrackGroup({
         <strong>{title}</strong>
         {selectable.length > 0 && (
           <span>
-            <button type="button" disabled={disabled || allSelected} onClick={() => onSelect(indices)}>
+            <button
+              type="button"
+              disabled={disabled || allSelected}
+              onClick={() => onSelect(indices)}
+            >
               Todo
             </button>
             <button type="button" disabled={disabled || noneSelected} onClick={() => onSelect([])}>
