@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('tools', {
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),
   measureNormalizeLufs: (filePath) => ipcRenderer.invoke('normalizer:measure-lufs', filePath),
   cancelLufsScan: () => ipcRenderer.invoke('normalizer:cancel-lufs-scan'),
+  resumeLufsScan: () => ipcRenderer.invoke('normalizer:resume-lufs'),
   getNormalizeConfig: () => ipcRenderer.invoke('normalizer:config'),
   startNormalization: (data) => ipcRenderer.invoke('normalizer:start', data),
   setNormalizeTarget: (targetDb) => ipcRenderer.invoke('normalizer:set-target', targetDb),
@@ -118,6 +119,23 @@ contextBridge.exposeInMainWorld('tools', {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('normalizer:state-changed', listener);
     return () => ipcRenderer.removeListener('normalizer:state-changed', listener);
+  },
+  selectTrimFolders: () => ipcRenderer.invoke('trim:select-folders'),
+  scanTrimFiles: (data) => ipcRenderer.invoke('trim:scan', data),
+  getTrimState: () => ipcRenderer.invoke('trim:state'),
+  setTrimUi: (data) => ipcRenderer.invoke('trim:set-ui', data),
+  startTrim: (data) => ipcRenderer.invoke('trim:start', data),
+  skipTrimFolder: (folder) => ipcRenderer.invoke('trim:skip-folder', folder),
+  cancelTrim: () => ipcRenderer.invoke('trim:cancel'),
+  onTrimProgress: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('trim:progress', listener);
+    return () => ipcRenderer.removeListener('trim:progress', listener);
+  },
+  onTrimState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('trim:state-changed', listener);
+    return () => ipcRenderer.removeListener('trim:state-changed', listener);
   },
   hddSelectRoot: () => ipcRenderer.invoke('hdd:select-root'),
   hddListVolumes: () => ipcRenderer.invoke('hdd:list-volumes'),
@@ -142,4 +160,6 @@ contextBridge.exposeInMainWorld('tools', {
     ipcRenderer.on('hdd:scan-state', listener);
     return () => ipcRenderer.removeListener('hdd:scan-state', listener);
   },
+  mediaDocumentText: (driveId, entryId) =>
+    ipcRenderer.invoke('media:document-text', { driveId, entryId }),
 });

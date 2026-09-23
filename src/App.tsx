@@ -8,15 +8,31 @@ import AnalogReplayTool from './AnalogReplayTool';
 import DownloadsTool from './DownloadsTool';
 import CollectionTool from './CollectionTool';
 import HddInventoryTool from './HddInventoryTool';
+import MediaPlayerTool from './MediaPlayerTool';
+import TrimTool from './TrimTool';
 import type {
   DownloadCandidate,
   DownloadPriority,
   DownloadsState,
+  HddDrive,
+  HddEntry,
+  MediaOrigin,
   NormalizeState,
+  NowPlaying,
+  TrimState,
   VideoState,
 } from './types';
 type Tool =
-  'mover' | 'rename' | 'video' | 'normalize' | 'downloads' | 'collection' | 'replay' | 'hdd';
+  | 'mover'
+  | 'rename'
+  | 'video'
+  | 'normalize'
+  | 'downloads'
+  | 'collection'
+  | 'replay'
+  | 'hdd'
+  | 'media'
+  | 'trim';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -66,6 +82,20 @@ const EMPTY_NORMALIZE: NormalizeState = {
   processed: [],
   logs: [],
 };
+const EMPTY_TRIM: TrimState = {
+  running: false,
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Sin procesos activos',
+  message: '',
+  folders: [],
+  type: 'audio',
+  files: [],
+  selected: [],
+  processed: [],
+  settings: {},
+  logs: [],
+};
 export default function App() {
   const [tool, setTool] = useState<Tool>('collection');
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
@@ -81,8 +111,24 @@ export default function App() {
   const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
   const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
   const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
+  const [trim, setTrim] = useState<TrimState>(EMPTY_TRIM);
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [downloadNotice, setDownloadNotice] = useState(0);
+  // Estado del Inventario HDD elevado a App para poder recordar la
+  // navegación del usuario (disco/carpeta) al volver desde el reproductor.
+  const [hddActiveDriveId, setHddActiveDriveId] = useState<number | null>(null);
+  const [hddParentPath, setHddParentPath] = useState('');
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const [mediaOrigin, setMediaOrigin] = useState<MediaOrigin>(null);
+  const playFromHdd = (drive: HddDrive, entry: HddEntry) => {
+    setNowPlaying({ drive, entry });
+    setMediaOrigin('hdd');
+    setTool('media');
+  };
+  const backFromMediaToHdd = () => {
+    setMediaOrigin(null);
+    setTool('hdd');
+  };
   const mergeCandidates = (found: DownloadCandidate[]) =>
     setCandidates((current) => {
       const key = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
@@ -113,14 +159,17 @@ export default function App() {
     window.tools.getDownloads().then(setDownloads);
     window.tools.getVideoState().then(setVideo);
     window.tools.getNormalizeState().then(setNormalize);
+    window.tools.getTrimState().then(setTrim);
     const stopDownloads = window.tools.onDownloadsState(setDownloads);
     const stopVideo = window.tools.onVideoState(setVideo);
     const stopNormalize = window.tools.onNormalizeState(setNormalize);
+    const stopTrim = window.tools.onTrimState(setTrim);
     const stopClipboard = window.tools.onClipboardLinks(captureClipboard);
     return () => {
       stopDownloads();
       stopVideo();
       stopNormalize();
+      stopTrim();
       stopClipboard();
     };
   }, []);
@@ -195,6 +244,20 @@ export default function App() {
               <small>Edición en lote</small>
             </span>
           </button>
+          <button className={tool === 'trim' ? 'active' : ''} onClick={() => setTool('trim')}>
+            <i>
+              <ScissorsIcon />
+            </i>
+            <span>
+              <strong>Cortar audio/video</strong>
+              <small>Recortar archivos</small>
+              <SidebarProgress
+                value={trim.globalProgress}
+                label={trim.running ? `${trim.globalProgress}% global` : 'Sin tareas'}
+                active={trim.running}
+              />
+            </span>
+          </button>
           <button className={tool === 'video' ? 'active' : ''} onClick={() => setTool('video')}>
             <i>
               <img src="icons/sd-card.png" alt="" aria-hidden="true" />
@@ -244,6 +307,15 @@ export default function App() {
               <small>Catálogo de discos</small>
             </span>
           </button>
+          <button className={tool === 'media' ? 'active' : ''} onClick={() => setTool('media')}>
+            <i>
+              <PlayIcon />
+            </i>
+            <span>
+              <strong>Reproductor</strong>
+              <small>Video, audio e imágenes</small>
+            </span>
+          </button>
         </nav>
         <button
           className="theme-toggle"
@@ -260,7 +332,7 @@ export default function App() {
           <small>Tus archivos nunca salen de este equipo.</small>
         </div>
         <footer>
-          CHUCK's Tools Suite <span>v1.9</span>
+          CHUCK's Tools Suite <span>v1.10</span>
         </footer>
       </aside>
       <main className="content">
@@ -273,12 +345,26 @@ export default function App() {
           <VideoTool />
         ) : tool === 'normalize' ? (
           <NormalizeTool />
+        ) : tool === 'trim' ? (
+          <TrimTool />
         ) : tool === 'replay' ? (
           <AnalogReplayTool />
         ) : tool === 'collection' ? (
           <CollectionTool />
         ) : tool === 'hdd' ? (
-          <HddInventoryTool />
+          <HddInventoryTool
+            activeDriveId={hddActiveDriveId}
+            onActiveDriveIdChange={setHddActiveDriveId}
+            parentPath={hddParentPath}
+            onParentPathChange={setHddParentPath}
+            onPlay={playFromHdd}
+          />
+        ) : tool === 'media' ? (
+          <MediaPlayerTool
+            nowPlaying={nowPlaying}
+            origin={mediaOrigin}
+            onBackToHdd={backFromMediaToHdd}
+          />
         ) : (
           <DownloadsTool candidates={candidates} setCandidates={setCandidates} />
         )}
@@ -348,6 +434,26 @@ function HddIcon() {
       <line x1="2.5" y1="14" x2="21.5" y2="14" />
       <circle cx="8" cy="17" r="1" fill="currentColor" stroke="none" />
       <line x1="11.5" y1="17" x2="17" y2="17" />
+    </SidebarIcon>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <SidebarIcon>
+      <polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none" />
+    </SidebarIcon>
+  );
+}
+
+function ScissorsIcon() {
+  return (
+    <SidebarIcon>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <line x1="20" y1="4" x2="8.12" y2="15.88" />
+      <line x1="14.47" y1="14.48" x2="20" y2="20" />
+      <line x1="8.12" y1="8.12" x2="12" y2="12" />
     </SidebarIcon>
   );
 }

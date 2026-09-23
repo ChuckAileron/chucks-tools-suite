@@ -404,7 +404,7 @@ test('convertFolder continúa sin escalar si ffprobe falla', async () => {
   assert.ok(events.some((e) => e.type === 'file-done'));
 });
 
-test('convertFolder respeta selecciones vacías y no mapea pistas', async () => {
+test('convertFolder usa la pista predeterminada si la selección quedó vacía', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vc-selnone-'));
   fs.writeFileSync(path.join(dir, 'show.mp4'), 'x');
   const selections = { [path.join(dir, 'show.mp4')]: {} };
@@ -417,8 +417,36 @@ test('convertFolder respeta selecciones vacías y no mapea pistas', async () => 
   closeChild(child, 0);
   await promise;
   assert.ok(child.args.includes('0:v:0'));
-  assert.equal(child.args.includes('0:1'), false);
-  assert.equal(child.args.includes('0:3'), false);
+  assert.ok(child.args.includes('0:1'), 'se usa el primer audio como predeterminado');
+  assert.equal(child.args.includes('0:2'), false, 'no se duplica el segundo audio');
+  assert.ok(child.args.includes('0:3'), 'se usa el subtítulo predeterminado');
+});
+
+test('convertFolder usa la pista marcada como predeterminada en la selección vacía', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vc-seldef-'));
+  fs.writeFileSync(path.join(dir, 'show.mkv'), 'x');
+  const source = {
+    format: { duration: 10 },
+    streams: [
+      { index: 0, codec_type: 'video', codec_name: 'h264', height: 1080 },
+      { index: 1, codec_type: 'audio', codec_name: 'aac', disposition: { default: 0 } },
+      { index: 2, codec_type: 'audio', codec_name: 'eac3', disposition: { default: 1 } },
+      { index: 3, codec_type: 'subtitle', codec_name: 'subrip', disposition: { default: 0 } },
+    ],
+  };
+  const selections = { [path.join(dir, 'show.mkv')]: { audio: [], subtitles: [] } };
+  reset();
+  execFileHandler = (command, args, callback) => callback(null, JSON.stringify(source), '');
+  const promise = convertFolder(dir, 'h264', selections, silentProgress, makeControls());
+  const [child] = await waitChildren(1);
+  fs.writeFileSync(child.temporary, 'data');
+  closeChild(child, 0);
+  await promise;
+  const args = child.args;
+  assert.ok(args.includes('0:v:0'));
+  assert.equal(args.includes('0:1'), false, 'no se usa la pista sin disposition.default');
+  assert.ok(args.includes('0:2'), 'se usa la pista predeterminada real del archivo');
+  assert.ok(args.includes('0:3'), 'subtítulo: sin default marcado, se usa la primera');
 });
 
 test('convertFolder no mutea si la selección de audio quedó obsoleta', async () => {

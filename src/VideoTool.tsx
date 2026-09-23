@@ -5,6 +5,10 @@ import { loadCollapsed, saveCollapsed } from './collapseState';
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
 const MP4_SUBTITLE_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
+const extensionLabel = (name: string) => {
+  const index = name.lastIndexOf('.');
+  return index > 0 && index < name.length - 1 ? name.slice(index + 1, index + 4).toUpperCase() : '';
+};
 const LUFS_PRESETS = [
   { value: -14, label: '-14 Streaming' },
   { value: -16, label: '-16 General' },
@@ -72,11 +76,15 @@ export default function VideoTool() {
       for (const folder of results)
         for (const video of folder.videos) {
           if (!video.audio.length && !video.subtitles.length) continue;
+          const pickDefaults = (tracks: { index: number; default?: boolean }[]) => {
+            const flagged = tracks.filter((track) => track.default);
+            return (flagged.length ? flagged : tracks.slice(0, 1)).map((track) => track.index);
+          };
           next[video.path] ||= {
-            audio: video.audio.map((track) => track.index),
-            subtitles: video.subtitles
-              .filter((track) => MP4_SUBTITLE_CODECS.has(track.codec))
-              .map((track) => track.index),
+            audio: pickDefaults(video.audio),
+            subtitles: pickDefaults(
+              video.subtitles.filter((track) => MP4_SUBTITLE_CODECS.has(track.codec)),
+            ),
           };
         }
       return next;
@@ -399,6 +407,7 @@ function FolderCard({
         folder.videos.map((video) => (
           <details key={video.path}>
             <summary>
+              <b className="video-ext">{extensionLabel(video.file)}</b>
               <span className="summary-info">
                 {video.file}
                 {!!(video.audio.length || video.subtitles.length) && (

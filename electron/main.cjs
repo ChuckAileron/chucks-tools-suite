@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, shell } = require('electron');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
@@ -20,6 +20,18 @@ const { searchImages } = require('./imageSearch.cjs');
 const analogReplay = require('./analogReplay.cjs');
 const { listFiles, listFolders, renameFile } = require('./renameManager.cjs');
 const hddInventory = require('./hddInventory.cjs');
+const mediaPlayer = require('./mediaPlayer.cjs');
+const trimTool = require('./trim.cjs');
+// Esquema privilegiado usado para transmitir video/audio/imágenes desde un
+// HDD catalogado directamente al reproductor, con soporte de rango (Range)
+// para permitir búsqueda (seek). Debe registrarse antes de que la app esté
+// lista.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'hddmedia',
+    privileges: { standard: true, stream: true, supportFetchAPI: true, corsEnabled: true },
+  },
+]);
 let downloadManager;
 let collectionManager;
 let hddManager;
@@ -42,7 +54,7 @@ function looksLikeDownloadText(text) {
   return (
     !!text &&
     (/https?:\/\//i.test(text) ||
-      /(?:mediafire\.com\/(?:file|folder)|download\d*\.mediafire\.com|drive\.google\.com|mega\.(?:nz|io))/i.test(
+      /(?:mediafire\.com\/(?:file|folder)|download\d*\.mediafire\.com|drive\.google\.com|mega\.(?:nz|io)|terabox\.(?:com|app)|1024terabox\.com)/i.test(
         text,
       ))
   );
@@ -109,6 +121,26 @@ const parseTargetDb = (value) => {
   return Number.isFinite(parsed) && parsed >= -50 && parsed <= -5
     ? parsed
     : (normalizeState.targetDb ?? -16);
+};
+let trimCancelled = false;
+let activeTrimProcess = null;
+let trimQueue = [];
+let trimCompleted = 0;
+let activeTrimFilePath = '';
+let trimState = {
+  running: false,
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Sin procesos activos',
+  message: '',
+  folders: [],
+  type: 'audio',
+  files: [],
+  selected: [],
+  processed: [],
+  settings: {},
+  logs: [],
+  activeFolder: '',
 };
 function emitVideoProgress(data) {
   const addLog = (text, tone) => {
@@ -242,6 +274,64 @@ function emitNormalizeProgress(data) {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('normalizer:progress', data);
     window.webContents.send('normalizer:state-changed', normalizeState);
+  }
+}
+function emitTrimProgress(data) {
+  const addLog = (text, tone) => {
+    trimState = { ...trimState, logs: [...(trimState.logs || []).slice(-99), { text, tone }] };
+  };
+  if (data.type === 'file-start') {
+    trimState = {
+      ...trimState,
+      running: true,
+      fileProgress: 0,
+      activeFile: data.file || 'Archivo',
+      activeFolder: data.folder || '',
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      message: `Procesando ${data.file}`,
+    };
+    addLog(`Cortando ${data.file}`);
+  } else if (data.type === 'file-progress') {
+    trimState = { ...trimState, fileProgress: data.percent || 0 };
+  } else if (data.type === 'file-done') {
+    trimState = {
+      ...trimState,
+      fileProgress: 100,
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      message: `${data.file} completado`,
+      processed: data.path
+        ? [...new Set([...(trimState.processed || []), data.path])]
+        : trimState.processed || [],
+    };
+    const outputNames = (data.outputs || []).map((output) => path.basename(output)).join(', ');
+    addLog(`✓ ${data.file} completado → ${outputNames}`, 'success');
+  } else if (data.type === 'error') {
+    trimState = { ...trimState, message: `Error en ${data.file}: ${data.message}` };
+    addLog(`Error en ${data.file || 'archivo'}: ${data.message || ''}`, 'error');
+  } else if (data.type === 'done') {
+    trimState = {
+      ...trimState,
+      running: false,
+      fileProgress: 100,
+      globalProgress: 100,
+      activeFolder: '',
+      message: `${data.completed} archivos recortados`,
+    };
+    addLog(`${data.completed} archivos recortados.`, 'success');
+  } else if (data.type === 'cancelled') {
+    trimState = {
+      ...trimState,
+      running: false,
+      fileProgress: 0,
+      globalProgress: 0,
+      activeFolder: '',
+      message: 'Proceso cancelado',
+    };
+    addLog('Proceso cancelado.', 'error');
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('trim:progress', data);
+    window.webContents.send('trim:state-changed', trimState);
   }
 }
 const TYPES = {
@@ -945,6 +1035,10 @@ app.whenReady().then(async () => {
     activeLufsProcesses.clear();
     return true;
   });
+  ipcMain.handle('normalizer:resume-lufs', () => {
+    lufsCancelled = false;
+    return true;
+  });
   ipcMain.handle('normalizer:config', () => ({
     lufsTolerance: LUFS_TOLERANCE,
     excerptDuration: EXCERPT_DURATION,
@@ -1094,6 +1188,159 @@ app.whenReady().then(async () => {
     }
     return true;
   });
+  // --- Cortar audio/video --------------------------------------------------
+  ipcMain.handle('trim:select-folders', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+  ipcMain.handle('trim:scan', async (_event, data) => {
+    const files = await trimTool.scanMedia(data.folders, data.type);
+    trimState = {
+      ...trimState,
+      running: false,
+      folders: data.folders,
+      type: data.type,
+      files,
+      selected: files.map((file) => file.path),
+      processed: [],
+    };
+    return files;
+  });
+  ipcMain.handle('trim:state', () => trimState);
+  ipcMain.handle('trim:set-ui', (_event, data) => {
+    const next = { ...trimState };
+    if (Array.isArray(data?.folders)) next.folders = data.folders;
+    if (data?.type === 'audio' || data?.type === 'video') next.type = data.type;
+    if (Array.isArray(data?.files)) next.files = data.files;
+    if (Array.isArray(data?.selected)) next.selected = data.selected;
+    if (Array.isArray(data?.processed)) next.processed = data.processed;
+    if (data?.settings && typeof data.settings === 'object') next.settings = data.settings;
+    if (Array.isArray(data?.logs)) next.logs = data.logs;
+    if (typeof data?.running === 'boolean') next.running = data.running;
+    if (typeof data?.globalProgress === 'number') next.globalProgress = data.globalProgress;
+    if (typeof data?.fileProgress === 'number') next.fileProgress = data.fileProgress;
+    if (typeof data?.message === 'string') next.message = data.message;
+    if (typeof data?.activeFile === 'string') next.activeFile = data.activeFile;
+    if (typeof data?.activeFolder === 'string') next.activeFolder = data.activeFolder;
+    trimState = next;
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('trim:state-changed', trimState);
+    return true;
+  });
+  ipcMain.handle('trim:start', async (_event, { jobs, type }) => {
+    trimCancelled = false;
+    activeTrimFilePath = '';
+    trimQueue = [...jobs];
+    trimCompleted = 0;
+    trimState = {
+      ...trimState,
+      running: true,
+      globalProgress: 0,
+      fileProgress: 0,
+      activeFile: 'Iniciando recorte',
+      activeFolder: '',
+      message: 'Iniciando recorte',
+      logs: [],
+    };
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('trim:state-changed', trimState);
+    while (trimQueue.length) {
+      if (trimCancelled) break;
+      const job = trimQueue.shift();
+      activeTrimFilePath = job.path;
+      const total = trimCompleted + trimQueue.length + 1;
+      const fileRecord = trimState.files.find((file) => file.path === job.path);
+      const duration = fileRecord ? fileRecord.duration : 0;
+      emitTrimProgress({
+        type: 'file-start',
+        file: job.name,
+        path: job.path,
+        folder: job.folder,
+        current: trimCompleted,
+        total,
+      });
+      try {
+        const result = await trimTool.trimMedia({
+          input: job.path,
+          type,
+          mode: job.mode,
+          start: job.start,
+          end: job.end,
+          duration,
+          split: job.split,
+          isCancelled: () => trimCancelled,
+          onProcess: (childProcess) => {
+            activeTrimProcess = childProcess;
+          },
+          onProgress: (percent) =>
+            emitTrimProgress({
+              type: 'file-progress',
+              file: job.name,
+              path: job.path,
+              percent,
+            }),
+        });
+        trimCompleted += 1;
+        emitTrimProgress({
+          type: 'file-done',
+          file: job.name,
+          path: job.path,
+          current: trimCompleted,
+          total: trimCompleted + trimQueue.length,
+          outputs: result.outputs,
+        });
+      } catch (error) {
+        if (error.code !== 'CANCELLED')
+          emitTrimProgress({ type: 'error', file: job.name, message: error.message });
+      }
+      activeTrimFilePath = '';
+    }
+    trimQueue = [];
+    activeTrimProcess = null;
+    emitTrimProgress({
+      type: trimCancelled ? 'cancelled' : 'done',
+      completed: trimCompleted,
+      total: trimCompleted,
+    });
+  });
+  ipcMain.handle('trim:skip-folder', (_event, folder) => {
+    const activeFile = trimState.files.find((file) => file.path === activeTrimFilePath);
+    if (trimState.running && activeFile && activeFile.folder === folder) return false;
+    trimQueue = trimQueue.filter((job) => job.folder !== folder);
+    const removed = new Set(
+      trimState.files.filter((file) => file.folder === folder).map((file) => file.path),
+    );
+    const nextSettings = { ...trimState.settings };
+    for (const filePath of removed) delete nextSettings[filePath];
+    trimState = {
+      ...trimState,
+      folders: trimState.folders.filter((item) => item !== folder),
+      files: trimState.files.filter((file) => file.folder !== folder),
+      selected: trimState.selected.filter((filePath) => !removed.has(filePath)),
+      processed: trimState.processed.filter((filePath) => !removed.has(filePath)),
+      settings: nextSettings,
+    };
+    const remaining = trimCompleted + trimQueue.length;
+    trimState = {
+      ...trimState,
+      globalProgress: remaining ? Math.floor((trimCompleted / remaining) * 100) : 100,
+    };
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('trim:state-changed', trimState);
+    return true;
+  });
+  ipcMain.handle('trim:cancel', () => {
+    trimCancelled = true;
+    trimQueue = [];
+    if (activeTrimProcess && !activeTrimProcess.killed) {
+      if (process.platform === 'win32')
+        execFile('taskkill', ['/pid', String(activeTrimProcess.pid), '/T', '/F'], () => {});
+      else activeTrimProcess.kill('SIGTERM');
+    }
+    return true;
+  });
   // --- Inventario HDD -----------------------------------------------------
   const decorateDrive = (drive, volumes) => {
     const connection = hddInventory.resolveConnection(drive, volumes);
@@ -1231,6 +1478,29 @@ app.whenReady().then(async () => {
       }
     })();
     return true;
+  });
+  // --- Reproductor de media --------------------------------------------
+  protocol.handle(
+    'hddmedia',
+    mediaPlayer.createStreamHandler({
+      getEntry: (id) => hddManager.getEntry(id),
+      getDrive: (id) => hddManager.getDrive(id),
+      resolveConnection: async (drive) => {
+        const volumes = await hddInventory.listSystemVolumes();
+        return hddInventory.resolveConnection(drive, volumes);
+      },
+    }),
+  );
+  ipcMain.handle('media:document-text', async (_event, { driveId, entryId }) => {
+    const entry = hddManager.getEntry(entryId);
+    if (!entry || entry.driveId !== driveId) throw new Error('El elemento no existe en este HDD.');
+    const drive = hddManager.getDrive(driveId);
+    const volumes = await hddInventory.listSystemVolumes();
+    const connection = hddInventory.resolveConnection(drive, volumes);
+    if (!connection.connected) throw new Error('El HDD no está conectado.');
+    const absolute = path.join(connection.mountPoint, entry.relativePath);
+    const text = await mediaPlayer.extractDocumentText(absolute, entry.extension);
+    return { text: String(text || '') };
   });
   createWindow();
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());

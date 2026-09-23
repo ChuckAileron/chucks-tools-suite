@@ -27,6 +27,16 @@ export type DownloadCandidate = {
   folderLink?: boolean;
   videoUrl?: string;
   videoFormat?: string;
+  providerData?: DownloadProviderData;
+};
+export type DownloadProviderData = {
+  terabox?: {
+    host: string;
+    surl: string;
+    uk: string;
+    shareid: string;
+    fsId: string;
+  };
 };
 export type VideoQualityOption = { label: string; videoFormat: string };
 export type DownloadTask = {
@@ -51,6 +61,7 @@ export type DownloadTask = {
   error?: string;
   videoUrl?: string;
   videoFormat?: string;
+  providerData?: DownloadProviderData;
 };
 export type DownloadSettings = {
   defaultDirectory: string;
@@ -131,6 +142,50 @@ export type NormalizeState = {
   files: NormalizeFile[];
   selected: string[];
   processed: string[];
+  logs: { text: string; tone?: string }[];
+  activeFolder?: string;
+};
+export type TrimMode = 'keep' | 'remove';
+export type TrimFile = {
+  path: string;
+  name: string;
+  folder: string;
+  size: number;
+  duration: number;
+};
+export type TrimSettings = { mode: TrimMode; start: number; end: number; split: boolean };
+export type TrimJob = {
+  path: string;
+  name: string;
+  folder: string;
+  mode: TrimMode;
+  start: number;
+  end: number;
+  split: boolean;
+};
+export type TrimProgress = {
+  type: string;
+  file?: string;
+  path?: string;
+  message?: string;
+  current?: number;
+  total?: number;
+  completed?: number;
+  percent?: number;
+  outputs?: string[];
+};
+export type TrimState = {
+  running: boolean;
+  globalProgress: number;
+  fileProgress: number;
+  activeFile: string;
+  message: string;
+  folders: string[];
+  type: 'audio' | 'video';
+  files: TrimFile[];
+  selected: string[];
+  processed: string[];
+  settings: Record<string, TrimSettings>;
   logs: { text: string; tone?: string }[];
   activeFolder?: string;
 };
@@ -309,6 +364,8 @@ export type HddScanState = {
   current: string;
   error: string;
 };
+export type MediaOrigin = 'hdd' | null;
+export type NowPlaying = { drive: HddDrive; entry: HddEntry };
 declare global {
   interface Window {
     tools: {
@@ -470,6 +527,7 @@ declare global {
       }): Promise<NormalizeFile[]>;
       measureNormalizeLufs(filePath: string): Promise<number | null>;
       cancelLufsScan(): Promise<boolean>;
+      resumeLufsScan(): Promise<boolean>;
       getNormalizeConfig(): Promise<{
         lufsTolerance: number;
         excerptDuration: number;
@@ -487,6 +545,15 @@ declare global {
       getNormalizeState(): Promise<NormalizeState>;
       onNormalizeProgress(callback: (data: NormalizeProgress) => void): () => void;
       onNormalizeState(callback: (state: NormalizeState) => void): () => void;
+      selectTrimFolders(): Promise<string[]>;
+      scanTrimFiles(data: { folders: string[]; type: 'audio' | 'video' }): Promise<TrimFile[]>;
+      getTrimState(): Promise<TrimState>;
+      setTrimUi(data: Partial<TrimState>): Promise<boolean>;
+      startTrim(data: { jobs: TrimJob[]; type: 'audio' | 'video' }): Promise<void>;
+      skipTrimFolder(folder: string): Promise<boolean>;
+      cancelTrim(): Promise<boolean>;
+      onTrimProgress(callback: (data: TrimProgress) => void): () => void;
+      onTrimState(callback: (state: TrimState) => void): () => void;
       hddSelectRoot(): Promise<string | null>;
       hddListVolumes(): Promise<HddVolume[]>;
       hddList(): Promise<HddDrive[]>;
@@ -509,6 +576,7 @@ declare global {
       hddStartScan(driveId: number): Promise<boolean>;
       hddCancelScan(): Promise<boolean>;
       onHddScanState(callback: (state: HddScanState) => void): () => void;
+      mediaDocumentText(driveId: number, entryId: number): Promise<{ text: string }>;
     };
   }
 }

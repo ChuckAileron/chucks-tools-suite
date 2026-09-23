@@ -9,6 +9,10 @@ const formatSize = (bytes: number) =>
 const DEFAULT_CONFIG = { lufsTolerance: 1, excerptDuration: 30, excerptMinDuration: 45 };
 const isAtTarget = (lufs: number | null | undefined, target: number, tolerance: number) =>
   typeof lufs === 'number' && Math.abs(lufs - target) <= tolerance;
+const extensionLabel = (name: string) => {
+  const index = name.lastIndexOf('.');
+  return index > 0 && index < name.length - 1 ? name.slice(index + 1, index + 4).toUpperCase() : '';
+};
 // Concurrencia para medir el LUFS de varios archivos en paralelo:
 // - Uno a uno es el más "seguro" pero desperdicia el resto de núcleos y es
 //   muy lento con muchos archivos.
@@ -110,6 +114,7 @@ export default function NormalizeTool() {
     setFiles(next);
     pushUi({ files: next });
     setMeasuringCancelled(false);
+    void window.tools.resumeLufsScan();
   };
   const addFolders = async () => {
     const paths = await window.tools.selectNormalizeFolders();
@@ -404,7 +409,7 @@ export default function NormalizeTool() {
                     medir. Puedes reanudar el cálculo o continuar con la normalización.
                   </small>
                 </span>
-                <button type="button" onClick={() => setMeasuringCancelled(false)}>
+                <button type="button" onClick={retryFailedMeasurements}>
                   Reanudar análisis
                 </button>
               </div>
@@ -437,6 +442,7 @@ export default function NormalizeTool() {
                     checked={selected.has(file.path)}
                     onChange={() => toggleSelected(file.path)}
                   />
+                  <b>{extensionLabel(file.name)}</b>
                   <span>
                     <strong>{file.name}</strong>
                     <small>{file.folder}</small>
@@ -451,7 +457,9 @@ export default function NormalizeTool() {
                     }
                   >
                     {file.lufs === undefined
-                      ? 'Midiendo…'
+                      ? measuringCancelled
+                        ? 'Medición cancelada'
+                        : 'Midiendo…'
                       : file.lufs === null
                         ? 'Sin medir'
                         : `${file.lufs.toFixed(1)} LUFS`}

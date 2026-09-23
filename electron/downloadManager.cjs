@@ -6,6 +6,8 @@ const { DownloaderHelper } = require('node-downloader-helper');
 const sevenZip = require('7zip-min');
 const { resolveUrl } = require('./urlResolver.cjs');
 const videoProvider = require('./videoProvider.cjs');
+const megaProvider = require('./megaProvider.cjs');
+const teraboxProvider = require('./teraboxProvider.cjs');
 
 function resolveSevenZa() {
   const resourcesPath = process.resourcesPath || '';
@@ -111,6 +113,7 @@ function diskInfoFor(target) {
   }
   return { drive, total: 0, free: 0 };
 }
+const BROWSER_UA = 'Mozilla/5.0 Chrome/140 Safari/537.36';
 const LINKS = /https?:\/\/[^\s<>"']+/gi;
 const NAKED_LINKS = [
   /(?:www\.|m\.)?download\d*\.mediafire\.com\/[^\s<>"']*/gi,
@@ -274,10 +277,63 @@ class DownloadManager {
             ];
           }
         }
-        if (/mega\.(?:nz|io)\/folder\//i.test(originalUrl))
-          return [this.unsupportedFolder(originalUrl, 'MEGA')];
+        const fireloadKey = this.fireloadFolderKey(originalUrl);
+        if (fireloadKey) {
+          try {
+            return await this.expandFireloadFolder(fireloadKey, originalUrl);
+          } catch (error) {
+            return [{ ...this.unsupportedFolder(originalUrl, 'Fireload'), error: error.message }];
+          }
+        }
+        const megaFile = megaProvider.megaFileParts(originalUrl);
+        if (megaFile) {
+          try {
+            return [await this.expandMegaFile(megaFile, originalUrl)];
+          } catch (error) {
+            const candidate = this.unsupportedFolder(originalUrl, 'MEGA');
+            return [{ ...candidate, folderLink: false, error: error.message }];
+          }
+        }
+        const megaFolder = megaProvider.megaFolderParts(originalUrl);
+        if (megaFolder) {
+          try {
+            return await this.expandMegaFolder(megaFolder, originalUrl);
+          } catch (error) {
+            return [{ ...this.unsupportedFolder(originalUrl, 'MEGA'), error: error.message }];
+          }
+        }
+        // Un enlace de MEGA sin clave (#...) no se puede descifrar: se reporta
+        // con un mensaje claro en vez de intentar resolver la página como HTML.
+        if (megaProvider.isMegaUrl(originalUrl))
+          return [
+            {
+              ...this.unsupportedFolder(originalUrl, 'MEGA'),
+              name: 'Enlace de MEGA',
+              folderLink: false,
+              error: 'A este enlace de MEGA le falta la clave de cifrado (#...).',
+            },
+          ];
+        const teraboxShare = teraboxProvider.teraboxShareParts(originalUrl);
+        if (teraboxShare) {
+          try {
+            return await this.expandTeraboxShare(originalUrl);
+          } catch (error) {
+            return [
+              {
+                ...this.unsupportedFolder(originalUrl, 'Terabox'),
+                folderLink: false,
+                error: error.message,
+              },
+            ];
+          }
+        }
         try {
-          const result = await resolveUrl(originalUrl);
+          let result = await resolveUrl(originalUrl);
+          if (
+            result.mode === 'fireload-page' &&
+            /(^|\.)fireload\.com$/i.test(new URL(result.finalUrl).hostname)
+          )
+            result = await resolveUrl(originalUrl);
           const parsed = new URL(result.finalUrl);
           const basename = decodeURIComponent(path.basename(parsed.pathname));
           const extension = path.extname(basename);
@@ -330,6 +386,15 @@ class DownloadManager {
       return '';
     }
   }
+  fireloadFolderKey(value) {
+    try {
+      const url = new URL(value);
+      if (!/(^|\.)fireload\.com$/i.test(url.hostname)) return '';
+      return url.pathname.match(/\/folder\/([^/]+)/i)?.[1] || '';
+    } catch {
+      return '';
+    }
+  }
   googleDriveFolderId(value) {
     try {
       const url = new URL(value);
@@ -357,7 +422,7 @@ class DownloadManager {
       host: provider,
       collection: `${provider} · carpeta`,
       online: false,
-      error: `${provider} requiere un adaptador autenticado para enumerar esta carpeta de forma estable.`,
+      error: `${provider} no permitió leer esta carpeta (¿está compartida públicamente?).`,
       selected: false,
       folderLink: true,
     };
@@ -424,6 +489,207 @@ class DownloadManager {
     if (!results.length) return [this.unsupportedFolder(originalUrl, 'MediaFire')];
     return results;
   }
+  async fireloadListing(folderKey, pageStart, perPage) {
+    const response = await fetch(
+      'https://www.fireload.com/ajax/_view_folder_v2_file_listing.ajax.php',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        body: new URLSearchParams({
+          url_hash: folderKey,
+          nodeId: '-1',
+          pageStart: String(pageStart),
+          perPage: String(perPage),
+        }),
+        signal: AbortSignal.timeout(20000),
+      },
+    );
+    if (!response.ok) throw new Error(`Fireload respondió ${response.status}.`);
+    return response.text();
+  }
+  async expandFireloadFolder(folderKey, originalUrl) {
+    const results = [];
+    let rootName = '';
+    let pageStart = 0;
+    let total = Infinity;
+    while (pageStart < total) {
+      const html = await this.fireloadListing(folderKey, pageStart, 1000);
+      if (!html.includes('dtfullurl')) {
+        if (!results.length)
+          throw new Error('La carpeta no permitió leer su contenido o está vacía.');
+        break;
+      }
+      const totalMatch = html.match(/id="rspTotalResults" value="(\d+)"/);
+      if (total === Infinity && totalMatch) total = Number(totalMatch[1]);
+      if (!rootName) {
+        const titleMatch = html.match(/id="rspPageTitle" value="([^"]*)"/);
+        if (titleMatch?.[1]) rootName = this.sanitize(titleMatch[1]);
+      }
+      const fileUrls = [...html.matchAll(/dtfullurl="([^"]+)"/g)].map((match) =>
+        match[1].replaceAll('&amp;', '&'),
+      );
+      const names = [...html.matchAll(/dtfilename="([^"]+)"/g)].map((match) => match[1]);
+      if (!fileUrls.length) break;
+      const fallbackName =
+        rootName ||
+        this.sanitize(originalUrl.replace(/\/$/, '').split('/').findLast?.() || 'Fireload');
+      for (let index = 0; index < fileUrls.length; index += 1) {
+        const filePage = fileUrls[index];
+        const name = this.sanitize(names[index] || path.basename(new URL(filePage).pathname));
+        let resolved;
+        try {
+          resolved = await resolveUrl(filePage);
+          if (resolved.mode === 'fireload-page') resolved = await resolveUrl(filePage);
+        } catch (error) {
+          results.push({
+            id: randomUUID(),
+            originalUrl: filePage,
+            url: filePage,
+            name,
+            host: 'fireload.com',
+            online: false,
+            error: error.message,
+            collection: fallbackName,
+            selected: false,
+          });
+          continue;
+        }
+        if (resolved.mode === 'fireload-page') {
+          results.push({
+            id: randomUUID(),
+            originalUrl: filePage,
+            url: filePage,
+            name,
+            host: 'fireload.com',
+            online: false,
+            error: 'Fireload no entregó el enlace directo del archivo.',
+            collection: fallbackName,
+            selected: false,
+          });
+          continue;
+        }
+        results.push({
+          id: randomUUID(),
+          originalUrl: filePage,
+          url: resolved.finalUrl,
+          name,
+          host: 'fireload.com',
+          online: true,
+          mode: 'fireload-folder',
+          collection: fallbackName,
+          selected: true,
+        });
+      }
+      pageStart += fileUrls.length;
+      if (fileUrls.length < 1000) break;
+    }
+    if (!results.length) return [this.unsupportedFolder(originalUrl, 'Fireload')];
+    return results;
+  }
+  async expandMegaFile(megaFile, originalUrl) {
+    const info = await megaProvider.resolveMegaFile(megaFile.handle, megaFile.key);
+    return {
+      id: randomUUID(),
+      originalUrl,
+      url: info.url,
+      name: this.sanitize(info.name),
+      host: 'mega.nz',
+      online: true,
+      mode: 'mega-file',
+      collection: 'MEGA',
+      selected: true,
+    };
+  }
+  async expandMegaFolder(megaFolder, originalUrl) {
+    const tree = await megaProvider.resolveMegaFolderTree(megaFolder.handle, megaFolder.key);
+    const byParent = new Map();
+    for (const entry of tree.entries) {
+      const siblings = byParent.get(entry.p) || [];
+      siblings.push(entry);
+      byParent.set(entry.p, siblings);
+    }
+    const results = [];
+    const push = (entry, trail) => {
+      // Descargar un archivo de una carpeta exige el contexto de la carpeta
+      // (parámetro "n" de la API MEGA), así que el enlace canónico incluye el
+      // handle+clave de la carpeta además del handle del archivo; con eso
+      // basta para volver a resolverlo (y su clave) en cada reanudación.
+      const url = `https://mega.nz/folder/${megaFolder.handle}#${megaFolder.key}/file/${entry.h}`;
+      results.push({
+        id: randomUUID(),
+        originalUrl: url,
+        url,
+        name: this.sanitize(entry.name),
+        host: 'mega.nz',
+        online: true,
+        mode: 'mega-folder',
+        collection: [tree.name, ...trail].filter(Boolean).join(' / ') || 'MEGA',
+        selected: true,
+      });
+    };
+    const walk = async (parentId, trail) => {
+      for (const entry of byParent.get(parentId) || []) {
+        if (results.length >= 500) return;
+        if (entry.t === 'folder') {
+          // El nodo que coincide con el handle de la carpeta abierta ya está
+          // representado por "tree.name" (el nombre inicial de la colección);
+          // si además se agregara su propio nombre al trail quedaría
+          // duplicado ("Fotos / Fotos"), así que solo se agregan los nombres
+          // de las subcarpetas reales debajo de ella.
+          const nextTrail = entry.h === megaFolder.handle ? trail : [...trail, entry.name];
+          await walk(entry.h, nextTrail);
+          continue;
+        }
+        push(entry, trail);
+      }
+    };
+    // El nivel superior queda con padre '' (ver resolveMegaFolderTree): MEGA no
+    // siempre expone un nodo para el handle público de la carpeta.
+    await walk('', []);
+    if (!results.length)
+      return [
+        {
+          ...this.unsupportedFolder(originalUrl, 'MEGA'),
+          error: 'La carpeta está vacía, no es pública o no tiene archivos descifrables.',
+        },
+      ];
+    return results;
+  }
+  async expandTeraboxShare(originalUrl) {
+    const share = await teraboxProvider.expandTeraboxShare(originalUrl);
+    const collection = this.sanitize(share.name) || 'Terabox';
+    return share.files.map((file) => ({
+      id: randomUUID(),
+      originalUrl,
+      url:
+        file.dlink ||
+        teraboxProvider.teraboxDownloadUrl({
+          host: share.host,
+          surl: share.surl,
+          uk: share.uk,
+          shareid: share.shareid,
+          fsId: file.fs_id,
+        }),
+      name: this.sanitize(file.name),
+      host: 'terabox.com',
+      online: true,
+      mode: file.fromFolder ? 'terabox-folder' : 'terabox-file',
+      collection,
+      selected: true,
+      providerData: {
+        terabox: {
+          host: share.host,
+          surl: share.surl,
+          uk: share.uk,
+          shareid: share.shareid,
+          fsId: file.fs_id,
+        },
+      },
+    }));
+  }
   async googleDriveRequest(pathname, parameters = {}) {
     if (!this.settings.googleDriveApiKey)
       throw new Error('Configura una API key de Google Drive para enumerar carpetas públicas.');
@@ -462,7 +728,227 @@ class DownloadManager {
     else url.searchParams.set('alt', 'media');
     return { url: url.href, extension: exportInfo?.extension || '' };
   }
+  // Enlace de descarga directo de un archivo público de Drive sin API key. El
+  // flujo imita a gdown: la URL "uc" redirige a drive.usercontent.google.com o
+  // devuelve una página de aviso con un formulario del que se sacan los
+  // parámetros confirm/uuid; los archivos grandes cerrados por cuota anónima
+  // devuelven una página HTML de error que se detecta aquí para no descargar
+  // el HTML como si fuera el archivo.
+  // Acumula las cookies Set-Cookie de una respuesta (la primera ocurrencia de
+  // cada nombre gana, para no sobrescribir la download_warning_<id> con la de
+  // una página posterior) y las devuelve como encabezado válido.
+  driveCookieHeader(cookieJar) {
+    return [...cookieJar.entries()].map(([name, value]) => `${name}=${value}`).join('; ');
+  }
+  // Cookie de confirmación (download_warning_<id>) que Google fija al mostrar
+  // el aviso de escaneo de archivos grandes; es la única que el descargador
+  // final debe reenviar. Las demás (NID, etc.) solo acompañan durante la
+  // resolución y no se exponen en el encabezado final.
+  driveDownloadCookie(cookieJar) {
+    return [...cookieJar.entries()]
+      .filter(([name]) => name.startsWith('download_warning'))
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ');
+  }
+  collectDriveCookies(response, cookieJar) {
+    for (const raw of response.headers.getSetCookie?.() || []) {
+      const [pair] = raw.split(';');
+      const eq = pair.indexOf('=');
+      if (eq <= 0) continue;
+      const name = pair.slice(0, eq).trim();
+      const value = pair.slice(eq + 1).trim();
+      if (!cookieJar.has(name)) cookieJar.set(name, value);
+    }
+  }
+  // Analiza la página de aviso de escaneo de archivos pesados que Google
+  // devuelve como HTML en vez del contenido. Devuelve undefined si la página no
+  // es de aviso; si lo es, la URL de descarga definitiva:
+  //   - Flujo actual: se arma desde el `action` del formulario
+  //     (#download-form) con sus campos ocultos confirm/uuid, apuntando a
+  //     drive.usercontent.google.com. Al descargar se debe reenviar la cookie
+  //     download_warning_<id> que esta página fijó.
+  //   - Flujo clásico (form a la propia "uc" sin uuid): devuelve
+  //     { legacy: true, url } con la "uc" ya confirmada, que hay que volver a
+  //     pedir para que redirija al archivo definitivo.
+  parseDriveConfirmation(html, pageUrl, fileId) {
+    const form = /<form[^>]*id="download-form"[\s\S]*?<\/form>/i.exec(html)?.[0];
+    if (!form) return undefined;
+    const fields = new Map();
+    for (const input of form.matchAll(/<(?:input|button)[^>]*>/gi)) {
+      const tag = input[0];
+      const name = /(?:name|data-name)=["']([^"']+)["']/i.exec(tag)?.[1];
+      if (name && !fields.has(name)) {
+        const value = /value=(["'])(.*?)\1/i.exec(tag)?.[2] ?? '';
+        fields.set(name, value);
+      }
+    }
+    const confirm = fields.get('confirm') || '';
+    if (!confirm) return undefined;
+    const uuid = fields.get('uuid') || '';
+    const id = fields.get('id') || fileId;
+    const action = /<form[^>]*\baction=(["'])(.*?)\1/i.exec(form)?.[2] || '';
+    if (uuid || /usercontent\.google\.com\/download/i.test(action)) {
+      const base = action
+        ? new URL(action, pageUrl).href
+        : 'https://drive.usercontent.google.com/download';
+      const params = new URLSearchParams();
+      params.set('id', id);
+      params.set('export', fields.get('export') || 'download');
+      params.set('confirm', confirm);
+      if (uuid) params.set('uuid', uuid);
+      return { url: `${base}?${params.toString()}` };
+    }
+    return {
+      legacy: true,
+      url: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}&confirm=${encodeURIComponent(confirm)}`,
+    };
+  }
+  async resolveGoogleDriveUrl(fileId) {
+    const cookieJar = new Map();
+    const ucBase = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+    let url = ucBase;
+    for (let step = 0; step < 8; step += 1) {
+      const headers = { 'User-Agent': BROWSER_UA };
+      // Las cookies ya vistas (p. ej. download_warning_<id>) acompañan los
+      // pasos siguientes de la resolución, como haría una sesión real.
+      const cookie = this.driveCookieHeader(cookieJar);
+      if (cookie) headers.Cookie = cookie;
+      const response = await fetch(url, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(20000),
+        headers,
+      });
+      this.collectDriveCookies(response, cookieJar);
+      const type = String(response.headers.get('content-type') || '').toLowerCase();
+      const location = response.headers.get('location');
+      if ([301, 302, 303, 307, 308].includes(response.status) && location) {
+        // Archivo pequeño: uc redirige a la URL definitiva de descarga.
+        url = new URL(location, url).href;
+        continue;
+      }
+      if (type && !type.startsWith('text/html'))
+        return { url, cookie: this.driveDownloadCookie(cookieJar) };
+      const html = await response.text();
+      // Página de aviso ("no se puede escanear el archivo", común en archivos
+      // pesados): el formulario de confirmación trae la URL final y la página
+      // fija la cookie de confirmación que algunos archivos grandes exigen al
+      // descargar. En el flujo clásico se re-pide la "uc" con el token para
+      // seguir la redirección.
+      const confirmation = this.parseDriveConfirmation(html, url, fileId);
+      if (confirmation) {
+        if (confirmation.legacy) {
+          url = confirmation.url;
+          continue;
+        }
+        return {
+          url: confirmation.url,
+          cookie: this.driveDownloadCookie(cookieJar),
+        };
+      }
+      if (/quota|too many user/i.test(html))
+        return {
+          error:
+            'Google Drive está momentáneamente saturado (demasiados usuarios descargando este archivo). Espera un rato y reintenta; el límite puede tardar hasta 24 h en liberarse.',
+        };
+      if (/we[’'‘]re sorry|no longer|not found|access denied|permission/i.test(html))
+        return { error: 'Google Drive no permite descargar este archivo.' };
+      return { url, cookie: this.driveDownloadCookie(cookieJar) };
+    }
+    return { url, cookie: this.driveDownloadCookie(cookieJar) };
+  }
+  // Nombre de un archivo individual de Drive sin API key: se lee del <title>
+  // de la página de vista del archivo ("Nombre.ext - Google Drive").
+  async googleDriveFileName(fileId) {
+    const response = await fetch(
+      `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`,
+      { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': BROWSER_UA } },
+    );
+    if (!response.ok) throw new Error('Google Drive no respondió la página del archivo.');
+    const html = await response.text();
+    const title = /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] || '';
+    return title.replace(/\s*-\s*Google Drive\s*$/i, '').trim();
+  }
+  // Vista embebida pública de una carpeta (sin API key): listado HTML con el
+  // nombre de la carpeta y una entrada por archivo/subcarpeta.
+  async googleDriveEmbeddedView(folderId) {
+    const response = await fetch(
+      `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}#list`,
+      { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': BROWSER_UA } },
+    );
+    if (!response.ok) throw new Error(`Google Drive respondió ${response.status}.`);
+    const html = await response.text();
+    const name =
+      /<title>([\s\S]*?)<\/title>/i
+        .exec(html)?.[1]
+        ?.replace(/\s*-\s*Google Drive\s*$/i, '')
+        .trim() || `Carpeta ${folderId}`;
+    const entries = [];
+    for (const raw of html.split(/<div class="flip-entry" id="entry-/i).slice(1)) {
+      const block = raw.slice(
+        0,
+        raw.indexOf('class="flip-entry"') > 0 ? raw.indexOf('class="flip-entry"') : raw.length,
+      );
+      const title = /class="flip-entry-title[^>]*">([\s\S]*?)<\/div>/.exec(block)?.[1];
+      if (!title) continue;
+      const fileId = /\/file\/d\/([^/"?]+)/.exec(block)?.[1] || '';
+      const folderId = /\/drive\/folders\/([^/"?]+)/.exec(block)?.[1] || '';
+      const icon = /class="flip-entry-list-icon"><img src="([^"]*)"/.exec(block)?.[1] || '';
+      entries.push({
+        kind: folderId ? 'folder' : 'file',
+        id: folderId || fileId,
+        name: title.replaceAll('&amp;', '&').trim(),
+        mime: /\/type\/([^"\s]+)/.exec(icon)?.[1] || '',
+      });
+    }
+    return { name, entries };
+  }
+  // Indica si una tarea descarga desde Google Drive (host o URL de Drive).
+  isGoogleDriveTask(task) {
+    return (
+      task.host === 'drive.google.com' ||
+      /googleapis\.com\/drive|usercontent\.google\.com\/download/i.test(task.url || '')
+    );
+  }
+  // Analiza el archivo descargado en busca de páginas HTML de error de Google
+  // (cuota, aviso de escaneo, etc.) descargadas en lugar del archivo real.
+  // Devuelve '' si el archivo parece legítimo, o un mensaje de error en español.
+  googleDriveErrorInFile(filePath) {
+    try {
+      const stats = fs.statSync(filePath);
+      // Un archivo real grande nunca va a ser una página de error (pocos KB).
+      if (!stats.isFile() || stats.size > 1024 * 1024) return '';
+      const head = fs.readFileSync(filePath, 'utf8');
+      if (!/<html|<!doctype/i.test(head)) return '';
+      if (
+        /quota exceeded|too many users have viewed|too many users are currently viewing/i.test(head)
+      )
+        return 'Google Drive: cuota temporalmente superada (demasiados usuarios descargando). Reintenta más tarde; puede tardar hasta 24 h.';
+      if (/virus scan|can't scan this file|too large for google to scan/i.test(head))
+        return 'Google Drive devolvió un aviso de escaneo en vez del archivo. Reintenta más tarde.';
+      return 'Google Drive no entregó el archivo (respuesta HTML en vez del contenido).';
+    } catch {
+      return '';
+    }
+  }
   async expandGoogleDriveFile(fileId, originalUrl) {
+    if (this.settings.googleDriveApiKey) {
+      let apiError;
+      try {
+        return await this.expandGoogleDriveFileApi(fileId, originalUrl);
+      } catch (error) {
+        apiError = error;
+        // Un enlace de archivo que en realidad es una carpeta se reporta tal cual.
+        if (/carpeta, no a un archivo/.test(error.message)) throw error;
+      }
+      try {
+        return await this.expandGoogleDriveFileKeyless(fileId, originalUrl);
+      } catch {
+        throw apiError;
+      }
+    }
+    return this.expandGoogleDriveFileKeyless(fileId, originalUrl);
+  }
+  async expandGoogleDriveFileApi(fileId, originalUrl) {
     const file = await this.googleDriveRequest(`files/${encodeURIComponent(fileId)}`, {
       fields: 'id,name,mimeType,size',
     });
@@ -481,7 +967,47 @@ class DownloadManager {
       selected: true,
     };
   }
+  async expandGoogleDriveFileKeyless(fileId, originalUrl) {
+    const download = await this.resolveGoogleDriveUrl(fileId);
+    if (download.error)
+      throw new Error('Google Drive no entregó el enlace de descarga: ' + download.error);
+    let name;
+    try {
+      name = await this.googleDriveFileName(fileId);
+    } catch {
+      name = '';
+    }
+    return {
+      id: randomUUID(),
+      originalUrl,
+      url: download.url,
+      name: this.sanitize(name || 'Archivo de Google Drive'),
+      host: 'drive.google.com',
+      online: true,
+      mode: 'google-drive-file',
+      collection: 'Google Drive',
+      selected: true,
+    };
+  }
   async expandGoogleDriveFolder(folderId, originalUrl) {
+    if (this.settings.googleDriveApiKey) {
+      let apiError;
+      try {
+        return await this.expandGoogleDriveFolderApi(folderId, originalUrl);
+      } catch (error) {
+        apiError = error;
+        // Algunas carpetas compartidas "por enlace" no se dejan enumerar con la
+        // API pero sí por la vista web; se cae a la enumeración sin clave.
+      }
+      try {
+        return await this.expandGoogleDriveFolderKeyless(folderId, originalUrl);
+      } catch {
+        throw apiError;
+      }
+    }
+    return this.expandGoogleDriveFolderKeyless(folderId, originalUrl);
+  }
+  async expandGoogleDriveFolderApi(folderId, originalUrl) {
     const info = await this.googleDriveRequest(`files/${encodeURIComponent(folderId)}`, {
       fields: 'id,name,mimeType',
     });
@@ -529,6 +1055,53 @@ class DownloadManager {
       ];
     return results;
   }
+  async expandGoogleDriveFolderKeyless(folderId, originalUrl) {
+    const root = await this.googleDriveEmbeddedView(folderId);
+    const results = [];
+    const push = (id, name, trail) =>
+      results.push({
+        id: randomUUID(),
+        originalUrl: `https://drive.google.com/file/d/${id}/view`,
+        url: `https://drive.google.com/uc?export=download&id=${id}`,
+        name: this.sanitize(name),
+        host: 'drive.google.com',
+        online: true,
+        mode: 'google-drive-folder',
+        collection: [root.name, ...trail].filter(Boolean).join(' / '),
+        selected: true,
+      });
+    const walk = async (id, trail) => {
+      if (results.length >= 500) return;
+      const { entries } = await this.googleDriveEmbeddedView(id);
+      for (const entry of entries) {
+        if (results.length >= 500) return;
+        if (entry.kind === 'folder') {
+          await walk(entry.id, [...trail, entry.name]);
+          continue;
+        }
+        // Los tipos de Google (docs, sheets, etc.) no se exportan sin API key.
+        if (/application\/vnd\.google-apps\./i.test(entry.mime)) continue;
+        push(entry.id, entry.name, trail);
+      }
+    };
+    for (const entry of root.entries) {
+      if (results.length >= 500) break;
+      if (entry.kind === 'folder') {
+        await walk(entry.id, [entry.name]);
+        continue;
+      }
+      if (/application\/vnd\.google-apps\./i.test(entry.mime)) continue;
+      push(entry.id, entry.name, []);
+    }
+    if (!results.length)
+      return [
+        {
+          ...this.unsupportedFolder(originalUrl, 'Google Drive'),
+          error: 'La carpeta está vacía, no es pública o no contiene archivos descargables.',
+        },
+      ];
+    return results;
+  }
   add(items) {
     for (const item of items) {
       if (!item.destination) throw new Error('Selecciona una carpeta de descarga.');
@@ -546,6 +1119,7 @@ class DownloadManager {
         collection: item.collection || item.host || 'Sin colección',
         videoUrl: item.videoUrl || '',
         videoFormat: item.videoFormat || '',
+        providerData: item.providerData || undefined,
         status: 'pending',
         progress: 0,
         speed: 0,
@@ -687,7 +1261,13 @@ class DownloadManager {
         )[0];
       if (!task) break;
       this.starting.add(task.id);
-      this.start(task).finally(() => this.starting.delete(task.id));
+      this.start(task).finally(() => {
+        this.starting.delete(task.id);
+        // Los inicios que terminan sin lanzar un descargador (por ejemplo un
+        // refresco de Drive bloqueado por cuota) necesitan re-trigger de la
+        // cola para no dejar pendientes atascados.
+        this.process();
+      });
     }
   }
   async start(task) {
@@ -696,15 +1276,65 @@ class DownloadManager {
       return;
     }
     // Los enlaces directos (MediaFire, etc.) expiran; al reanudar una tarea
-    // ya iniciada previamente, se vuelve a resolver antes de reintentar.
-    // Google Drive usa una URL firmada con la API key que no se resuelve
-    // igual, así que se excluye de este refresco.
-    if (task.startedOnce && task.originalUrl && task.host !== 'drive.google.com') {
-      try {
-        const resolved = await resolveUrl(task.originalUrl);
-        task.url = resolved.finalUrl;
-      } catch {
-        // Si falla la resolución, se reintenta con la URL almacenada.
+    // ya iniciada previamente, se vuelve a resolver antes de reintentar. Las
+    // URLs de Google Drive sin API key vencen y además la "uc" redirige, así
+    // que se resuelven frescas en cada inicio; las URLs firmadas con API key
+    // (googleapis.com) no necesitan refresco. MEGA y TeraBox usan descargadores
+    // propios o direcciones siempre frescas según el caso.
+    if (task.originalUrl) {
+      // MEGA: el archivo viaja cifrado y el enlace directo expira, así que se
+      // vuelve a resolver (datos + claves) en cada inicio y se descifra al bajar.
+      const megaFile = megaProvider.megaFileParts(task.originalUrl);
+      if (megaFile) {
+        // Importante: hay que ESPERAR a que termine (no solo lanzarlo), porque
+        // "start()" no marca la tarea como "downloading" hasta que resuelve la
+        // API de MEGA. Si "start()" resolviera antes, process() volvería a
+        // recoger esta misma tarea (sigue "pending") en el siguiente tick y
+        // lanzaría descargas duplicadas en bucle.
+        return this.startMegaFile(task, megaFile);
+      }
+      const megaFolderFile = megaProvider.megaFolderFileParts(task.originalUrl);
+      if (megaFolderFile) {
+        return this.startMegaFolderFile(task, megaFolderFile);
+      }
+      const driveFileId = this.googleDriveFileId(task.originalUrl);
+      if (driveFileId) {
+        if (!/googleapis\.com\/drive/i.test(task.url)) {
+          try {
+            const resolved = await this.resolveGoogleDriveUrl(driveFileId);
+            if (resolved.error) {
+              task.status = 'error';
+              task.error = resolved.error;
+              this.emit();
+              return;
+            }
+            task.url = resolved.url;
+            // Cookie de confirmación (download_warning_<id> y similares) que
+            // Google fija en la página de aviso de escaneo de archivos grandes;
+            // algunos de esos archivos la exigen al descargar.
+            task.driveCookie = resolved.cookie || '';
+          } catch {
+            // Si falla el refresco, se reintenta con la URL almacenada.
+          }
+        }
+      } else if (task.providerData?.terabox?.fsId) {
+        // TeraBox: el dlink firmado caduca; se vuelve a generar para el archivo.
+        try {
+          const fresh = await teraboxProvider.refreshTeraboxFile(
+            task.originalUrl,
+            task.providerData.terabox.fsId,
+          );
+          if (fresh) task.url = fresh;
+        } catch {
+          // Si falla el refresco, se reintenta con la URL almacenada.
+        }
+      } else if (task.startedOnce && task.host !== 'drive.google.com') {
+        try {
+          const resolved = await resolveUrl(task.originalUrl);
+          task.url = resolved.finalUrl;
+        } catch {
+          // Si falla la resolución, se reintenta con la URL almacenada.
+        }
       }
     }
     task.startedOnce = true;
@@ -719,7 +1349,10 @@ class DownloadManager {
       maxRedirects: 0,
       progressThrottle: 500,
       override: false,
-      headers: { 'User-Agent': 'Mozilla/5.0 Chrome/140 Safari/537.36' },
+      headers: {
+        'User-Agent': BROWSER_UA,
+        ...(task.driveCookie ? { Cookie: task.driveCookie } : {}),
+      },
     });
     task.status = 'downloading';
     this.active.set(task.id, downloader);
@@ -736,41 +1369,134 @@ class DownloadManager {
     downloader.on('pause', () => this.release(task, 'paused'));
     downloader.on('stop', () => this.release(task, 'stopped'));
     downloader.on('error', (error) => this.fail(task, error));
-    downloader.on('end', async (info) => {
-      this.active.delete(task.id);
+    downloader.on('end', async ({ filePath }) => {
       task.progress = 100;
-      task.filePath = info.filePath;
-      const volume = archiveVolume(info.filePath);
-      if (this.settings.autoExtract && task.extract && ARCHIVE.test(info.filePath)) {
-        if (volume) {
-          // Multiparte: 7-Zip necesita TODAS las partes presentes para poder
-          // extraer el comprimido. Esta parte aún no es suficiente, así que se
-          // marca como lista y la extracción real se difiere hasta que el
-          // volumen completo esté descargado (ver maybeExtractVolume).
-          task.status = 'completed';
-          this.emit();
-          this.maybeExtractVolume(volume);
-          this.process();
-          return;
-        }
-        task.status = 'extracting';
-        this.emit();
-        try {
-          await this.extract(task);
-        } catch (error) {
-          task.status = extractionFailureStatus(error);
-          task.error = extractionErrorMessage(error);
-          this.emit();
-          this.process();
-          return;
-        }
-        this.removeArchive(task);
-      }
-      task.status = 'completed';
-      this.emit();
-      this.process();
+      task.filePath = filePath;
+      await this.finish(task);
     });
     downloader.start().catch((error) => this.fail(task, error));
+  }
+  // Descarga de un archivo de MEGA con descifrado propio (MegaDownloader).
+  async startMegaFile(task, megaFile) {
+    let info;
+    try {
+      info = await megaProvider.resolveMegaFile(megaFile.handle, megaFile.key);
+    } catch (error) {
+      task.status = 'error';
+      task.error = error.message;
+      this.emit();
+      return;
+    }
+    this.runMegaDownload(task, info);
+  }
+  // Descarga de un archivo que vive dentro de una carpeta compartida de MEGA
+  // (enlace mega.nz/folder/<fh>#<fk>/file/<h>): necesita re-listar la carpeta
+  // con su contexto para obtener la clave del archivo en cada inicio.
+  async startMegaFolderFile(task, megaFolderFile) {
+    let info;
+    try {
+      info = await megaProvider.resolveMegaFolderFile(
+        megaFolderFile.folderHandle,
+        megaFolderFile.folderKey,
+        megaFolderFile.fileHandle,
+      );
+    } catch (error) {
+      task.status = 'error';
+      task.error = error.message;
+      this.emit();
+      return;
+    }
+    this.runMegaDownload(task, info);
+  }
+  // Construye el MegaDownloader y conecta sus eventos a la tarea; lo comparten
+  // startMegaFile y startMegaFolderFile una vez que ambos ya resolvieron la
+  // URL de descarga y la clave de descifrado.
+  runMegaDownload(task, info) {
+    task.url = info.url;
+    task.startedOnce = true;
+    fs.mkdirSync(task.destination, { recursive: true });
+    const downloader = new megaProvider.MegaDownloader({
+      downloadUrl: info.url,
+      key: info.key,
+      size: info.size,
+      destination: task.destination,
+      fileName: task.name,
+    });
+    task.status = 'downloading';
+    this.active.set(task.id, downloader);
+    this.emit();
+    downloader.on('progress.throttled', (stats) => {
+      Object.assign(task, {
+        progress: Math.floor(stats.progress || 0),
+        speed: stats.speed || 0,
+        downloaded: stats.downloaded || 0,
+        total: stats.total || 0,
+      });
+      this.send(this.snapshot());
+    });
+    downloader.on('stop', () => this.release(task, 'stopped'));
+    downloader.on('error', (error) => this.fail(task, error));
+    downloader.on('end', async ({ filePath }) => {
+      task.progress = 100;
+      task.filePath = filePath;
+      await this.finish(task);
+    });
+    downloader.start();
+  }
+  // Post-descarga común a todos los descargadores (node-downloader-helper,
+  // video, MEGA): revisa que el archivo sea real, extrae comprimidos (incluyendo
+  // volúmenes multiparte) y marca la tarea como completada.
+  async finish(task) {
+    this.active.delete(task.id);
+    // Google Drive a veces responde 200 con una página HTML de error (cuota
+    // superada, aviso de escaneo) en vez del archivo. Si pasó esto, se borra
+    // el archivo y se falla con un mensaje claro en vez de "completar" un
+    // archivo de unos KB que en realidad es HTML.
+    if (this.isGoogleDriveTask(task)) {
+      const driveError = this.googleDriveErrorInFile(task.filePath);
+      if (driveError) {
+        try {
+          fs.unlinkSync(task.filePath);
+        } catch {
+          // Si no se puede borrar, la descarga queda marcada como error igual.
+        }
+        task.filePath = '';
+        task.status = 'error';
+        task.error = driveError;
+        this.emit();
+        this.process();
+        return;
+      }
+    }
+    const volume = archiveVolume(task.filePath);
+    if (this.settings.autoExtract && task.extract && ARCHIVE.test(task.filePath)) {
+      if (volume) {
+        // Multiparte: 7-Zip necesita TODAS las partes presentes para poder
+        // extraer el comprimido. Esta parte aún no es suficiente, así que se
+        // marca como lista y la extracción real se difiere hasta que el
+        // volumen completo esté descargado (ver maybeExtractVolume).
+        task.status = 'completed';
+        this.emit();
+        this.maybeExtractVolume(volume);
+        this.process();
+        return;
+      }
+      task.status = 'extracting';
+      this.emit();
+      try {
+        await this.extract(task);
+      } catch (error) {
+        task.status = extractionFailureStatus(error);
+        task.error = extractionErrorMessage(error);
+        this.emit();
+        this.process();
+        return;
+      }
+      this.removeArchive(task);
+    }
+    task.status = 'completed';
+    this.emit();
+    this.process();
   }
   startVideo(task) {
     fs.mkdirSync(task.destination, { recursive: true });

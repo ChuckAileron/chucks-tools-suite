@@ -64,6 +64,14 @@ async function validatePublicUrl(value) {
   return url;
 }
 
+function extractCookies(response) {
+  const values = response.headers['set-cookie'];
+  if (!values) return '';
+  return (Array.isArray(values) ? values : [values])
+    .map((cookie) => cookie.split(';')[0])
+    .join('; ');
+}
+
 function isTextualContentType(contentType) {
   return /text\/(?:html|css|plain)|application\/(?:xhtml\+xml|json|xml|javascript|x-javascript)/i.test(
     contentType,
@@ -106,6 +114,7 @@ function requestPage(url, maxBytes = 1024 * 1024, options = {}) {
             body: '',
             binary: true,
             headers: response.headers,
+            cookies: extractCookies(response),
           });
         }
         const chunks = [];
@@ -123,6 +132,7 @@ function requestPage(url, maxBytes = 1024 * 1024, options = {}) {
             contentType,
             body: Buffer.concat(chunks).toString('utf8'),
             headers: response.headers,
+            cookies: extractCookies(response),
           }),
         );
       },
@@ -189,7 +199,38 @@ function extractFireloadTitle(body) {
   if (!body) return '';
   const $ = load(body);
   const title = $('meta[property="og:title"]').attr('content') || $('title').first().text();
-  return (title || '').replace(/\s+/g, ' ').trim();
+  return (title || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\s*(?:-\s+)?shared via Fireload$/i, '')
+    .replace(/\s*\|\s*Fireload$/i, '')
+    .trim();
+}
+
+function extractFireloadDlink(body) {
+  if (!body) return null;
+  const match = body.match(/window\.Fl\s*=\s*\{[^}]*"dlink"\s*:\s*"([^"]+)"/);
+  return match?.[1] || null;
+}
+
+async function resolveFireloadSession(base, body, cookies) {
+  if (!cookies) return null;
+  const dlink = extractFireloadDlink(body);
+  if (!dlink) return null;
+  const target = urlCandidate(dlink.replaceAll('\\/', '/'), base);
+  if (!target || !FIRELOAD_HOST.test(new URL(target).hostname)) return null;
+  try {
+    const response = await requestPage(new URL(target), 64 * 1024, {
+      headers: { cookie: cookies },
+    });
+    if (response.status >= 300 && response.status < 400 && response.location) {
+      const cdn = urlCandidate(response.location, base);
+      if (cdn && FIRELOAD_DIRECT.test(new URL(cdn).hostname)) return cdn;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 // Fireload sirve la descarga real detrás de un botón/formulario en la página
@@ -295,6 +336,18 @@ async function resolveUrl(input) {
           title,
         };
       }
+      const session = await resolveFireloadSession(current, html, response.cookies);
+      if (session) {
+        chain[chain.length - 1].method = 'fireload-direct';
+        return {
+          input,
+          finalUrl: session,
+          domain: getDomain(current.hostname),
+          chain,
+          mode: 'fireload-direct',
+          title,
+        };
+      }
       return {
         input,
         finalUrl: current.href,
@@ -350,6 +403,8 @@ module.exports = {
   extractMediafireTitle,
   extractFireloadDirect,
   extractFireloadTitle,
+  extractFireloadDlink,
+  resolveFireloadSession,
   // Helpers puros expuestos para pruebas unitarias.
   urlCandidate,
   extractDestination,

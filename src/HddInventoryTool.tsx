@@ -35,11 +35,25 @@ const formatSize = (bytes: number) =>
         : `${(bytes / 1073741824).toFixed(2)} GB`;
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString('es') : '—');
 
-export default function HddInventoryTool() {
+export default function HddInventoryTool({
+  activeDriveId,
+  onActiveDriveIdChange,
+  parentPath,
+  onParentPathChange,
+  onPlay,
+}: {
+  activeDriveId?: number | null;
+  onActiveDriveIdChange?: (id: number | null) => void;
+  parentPath?: string;
+  onParentPathChange?: (value: string) => void;
+  onPlay?: (drive: HddDrive, entry: HddEntry) => void;
+}) {
   const [drives, setDrives] = useState<HddDrive[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanState, setScanState] = useState<HddScanState>(EMPTY_SCAN);
-  const [activeDriveId, setActiveDriveId] = useState<number | null>(null);
+  const [internalActiveDriveId, setInternalActiveDriveId] = useState<number | null>(null);
+  const effectiveActiveDriveId = activeDriveId !== undefined ? activeDriveId : internalActiveDriveId;
+  const setActiveDriveId = onActiveDriveIdChange || setInternalActiveDriveId;
   const [registerRoot, setRegisterRoot] = useState<string | null>(null);
   const [editingDrive, setEditingDrive] = useState<HddDrive | null>(null);
   const [message, setMessage] = useState('');
@@ -62,7 +76,7 @@ export default function HddInventoryTool() {
     return stop;
   }, []);
 
-  const activeDrive = drives.find((d) => d.id === activeDriveId) || null;
+  const activeDrive = drives.find((d) => d.id === effectiveActiveDriveId) || null;
 
   const startRegister = async () => {
     const rootPath = await window.tools.hddSelectRoot();
@@ -84,7 +98,7 @@ export default function HddInventoryTool() {
     )
       return;
     await window.tools.hddRemove(drive.id);
-    if (activeDriveId === drive.id) setActiveDriveId(null);
+    if (effectiveActiveDriveId === drive.id) setActiveDriveId(null);
     load();
   };
 
@@ -93,8 +107,11 @@ export default function HddInventoryTool() {
       <HddExplorer
         drive={activeDrive}
         scanState={scanState}
+        parentPath={parentPath}
+        onParentPathChange={onParentPathChange}
         onBack={() => setActiveDriveId(null)}
         onRefresh={load}
+        onPlay={onPlay}
       />
     );
 
@@ -336,15 +353,23 @@ function EditDriveModal({
 function HddExplorer({
   drive,
   scanState,
+  parentPath: parentPathProp,
+  onParentPathChange,
   onBack,
   onRefresh,
+  onPlay,
 }: {
   drive: HddDrive;
   scanState: HddScanState;
+  parentPath?: string;
+  onParentPathChange?: (value: string) => void;
   onBack: () => void;
   onRefresh: () => void;
+  onPlay?: (drive: HddDrive, entry: HddEntry) => void;
 }) {
-  const [parentPath, setParentPath] = useState('');
+  const [internalParentPath, setInternalParentPath] = useState('');
+  const parentPath = parentPathProp !== undefined ? parentPathProp : internalParentPath;
+  const setParentPath = onParentPathChange || setInternalParentPath;
   const [entries, setEntries] = useState<HddEntry[]>([]);
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [renaming, setRenaming] = useState<HddEntry | null>(null);
@@ -508,6 +533,19 @@ function HddExplorer({
                     <td>{entry.isDirectory ? '—' : formatSize(entry.size)}</td>
                     <td>{formatDate(entry.modifiedAt)}</td>
                     <td className="hdd-entry-actions">
+                      {!entry.isDirectory && entry.category !== 'other' && onPlay && (
+                        <button
+                          disabled={!drive.connected}
+                          title={
+                            drive.connected
+                              ? 'Abrir en el reproductor'
+                              : 'Conecta el HDD para reproducir el archivo'
+                          }
+                          onClick={() => onPlay(drive, entry)}
+                        >
+                          ▶ Reproducir
+                        </button>
+                      )}
                       <button onClick={() => startRename(entry)}>Renombrar</button>
                       <button
                         disabled={!drive.connected}

@@ -237,6 +237,80 @@ export default function DownloadsTool({
 }
 
 type LinksModalData = { title: string; description: string; links: string[] };
+type PromptResult = string | null;
+function PromptModal({
+  title,
+  description,
+  secret,
+  placeholder,
+  onClose,
+}: {
+  title: string;
+  description?: string;
+  secret?: boolean;
+  placeholder?: string;
+  onClose: (value: PromptResult) => void;
+}) {
+  const [value, setValue] = useState('');
+  const accept = () => onClose(value);
+  return (
+    <div
+      className="image-search-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose(null);
+      }}
+    >
+      <div className="prompt-modal" onClick={(event) => event.stopPropagation()}>
+        <h2>{title}</h2>
+        {description && <p>{description}</p>}
+        <input
+          type={secret ? 'password' : 'text'}
+          value={value}
+          placeholder={placeholder}
+          autoFocus
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') accept();
+            if (event.key === 'Escape') onClose(null);
+          }}
+        />
+        <footer>
+          <span />
+          <div>
+            <button type="button" onClick={() => onClose(null)}>
+              Cancelar
+            </button>
+            <button className="prompt-confirm" type="button" onClick={accept}>
+              Aceptar
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+const usePrompt = () => {
+  const [request, setRequest] = useState<
+    | (Omit<React.ComponentProps<typeof PromptModal>, 'onClose'> & {
+        onClose: (value: PromptResult) => void;
+      })
+    | null
+  >(null);
+  const ask = (options: Omit<React.ComponentProps<typeof PromptModal>, 'onClose'>) =>
+    new Promise<PromptResult>((resolve) => {
+      setRequest({
+        ...options,
+        onClose: (value) => {
+          setRequest(null);
+          resolve(value);
+        },
+      });
+    });
+  return { ask, dialog: request ? <PromptModal {...request} /> : null };
+};
 function LinksModal({
   title,
   description,
@@ -290,6 +364,7 @@ function DownloadsTab({
   toggleCollapsed: (key: string) => void;
 }) {
   const [linksModal, setLinksModal] = useState<LinksModalData | null>(null);
+  const { ask, dialog } = usePrompt();
   const showLinksFor = (title: string, groupTasks: DownloadTask[]) =>
     setLinksModal({
       title,
@@ -300,9 +375,11 @@ function DownloadsTab({
   const setGroupPassword = async (groupTasks: DownloadTask[], label: string) => {
     const eligible = groupTasks.filter((task) => task.status !== 'completed');
     if (!eligible.length) return;
-    const value = prompt(
-      `Contraseña para ${label} (${eligible.length} archivo${eligible.length === 1 ? '' : 's'}):`,
-    );
+    const value = await ask({
+      title: `Contraseña para ${label}`,
+      description: `${eligible.length} archivo${eligible.length === 1 ? '' : 's'} en el grupo.`,
+      secret: true,
+    });
     if (value === null) return;
     for (const task of eligible) {
       // Si el archivo ya se descargó (tiene filePath), la contraseña se usa
@@ -336,9 +413,17 @@ function DownloadsTab({
   const hasAnyStoppable = tasks.some((task) =>
     ['downloading', 'paused', 'pending'].includes(task.status),
   );
+  const totalSpeed = tasks
+    .filter((task) => task.status === 'downloading')
+    .reduce((total, task) => total + (task.speed || 0), 0);
   return (
     <>
       {linksModal && <LinksModal {...linksModal} onClose={() => setLinksModal(null)} />}
+      {dialog}
+      <div className="downloads-total-speed">
+        <span>Velocidad total</span>
+        <strong>{totalSpeed > 0 ? `${formatSize(totalSpeed)}/s` : '—'}</strong>
+      </div>
       <div className="downloads-toolbar">
         <span>
           {tasks.length} descargas · {tasks.filter((task) => task.status === 'downloading').length}{' '}
@@ -577,9 +662,11 @@ function DownloadsTab({
 }
 
 function DownloadRow({ task }: { task: DownloadTask }) {
+  const { ask, dialog } = usePrompt();
   const askPassword = async () => {
-    const value = prompt('Contraseña del archivo comprimido:');
-    if (value !== null) await window.tools.retryExtraction(task.id, value);
+    const value = await ask({ title: 'Contraseña del archivo comprimido', secret: true });
+    if (value === null) return;
+    await window.tools.retryExtraction(task.id, value);
   };
   const idle = !['downloading', 'extracting', 'completed'].includes(task.status);
   // Cualquier tarea puede borrarse en cualquier estado; si está descargando
@@ -594,68 +681,74 @@ function DownloadRow({ task }: { task: DownloadTask }) {
     void window.tools.controlDownload(task.id, 'remove');
   };
   return (
-    <article className={`download-row status-${task.status}`}>
-      <div className="download-file">
-        <input
-          defaultValue={task.name}
-          disabled={!idle}
-          onBlur={(event) => window.tools.updateDownload(task.id, { name: event.target.value })}
-        />
-        <span>
-          {task.host} · {PRIORITY_LABEL[task.priority]} · {formatSize(task.total)}
-        </span>
-      </div>
-      <div className="download-meter">
-        <span>
-          <i style={{ width: `${task.progress}%` }} />
-        </span>
-        <small>
-          {task.progress}% ·{' '}
-          {task.status === 'downloading'
-            ? `${formatSize(task.speed)}/s`
-            : STATUS[task.status] || task.status}
-        </small>
-      </div>
-      <div className="download-actions">
-        {task.status === 'downloading' && (
-          <button title="Pausar" onClick={() => window.tools.controlDownload(task.id, 'pause')}>
-            Ⅱ
+    <>
+      {dialog}
+      <article className={`download-row status-${task.status}`}>
+        <div className="download-file">
+          <input
+            defaultValue={task.name}
+            disabled={!idle}
+            onBlur={(event) => window.tools.updateDownload(task.id, { name: event.target.value })}
+          />
+          <span>
+            {task.host} · {PRIORITY_LABEL[task.priority]} · {formatSize(task.total)}
+          </span>
+        </div>
+        <div className="download-meter">
+          <span>
+            <i style={{ width: `${task.progress}%` }} />
+          </span>
+          <small>
+            {task.progress}% ·{' '}
+            {task.status === 'downloading'
+              ? `${formatSize(task.speed)}/s`
+              : STATUS[task.status] || task.status}
+          </small>
+        </div>
+        <div className="download-actions">
+          {task.status === 'downloading' && (
+            <button title="Pausar" onClick={() => window.tools.controlDownload(task.id, 'pause')}>
+              Ⅱ
+            </button>
+          )}
+          {['paused', 'stopped', 'error'].includes(task.status) && (
+            <button
+              title="Continuar"
+              onClick={() => window.tools.controlDownload(task.id, 'resume')}
+            >
+              ▶
+            </button>
+          )}
+          {['downloading', 'paused'].includes(task.status) && (
+            <button title="Detener" onClick={() => window.tools.controlDownload(task.id, 'stop')}>
+              ■
+            </button>
+          )}
+          {task.status === 'password-required' && (
+            <button title="Ingresar contraseña" onClick={askPassword}>
+              ⌕
+            </button>
+          )}
+          {task.filePath && (
+            <button
+              title="Mostrar archivo"
+              onClick={() => window.tools.showDownloadedFile(task.filePath!)}
+            >
+              ⌑
+            </button>
+          )}
+          <button title="Abrir enlace" onClick={() => window.tools.openUrl(task.originalUrl)}>
+            ↗
           </button>
-        )}
-        {['paused', 'stopped', 'error'].includes(task.status) && (
-          <button title="Continuar" onClick={() => window.tools.controlDownload(task.id, 'resume')}>
-            ▶
-          </button>
-        )}
-        {['downloading', 'paused'].includes(task.status) && (
-          <button title="Detener" onClick={() => window.tools.controlDownload(task.id, 'stop')}>
-            ■
-          </button>
-        )}
-        {task.status === 'password-required' && (
-          <button title="Ingresar contraseña" onClick={askPassword}>
-            ⌕
-          </button>
-        )}
-        {task.filePath && (
-          <button
-            title="Mostrar archivo"
-            onClick={() => window.tools.showDownloadedFile(task.filePath!)}
-          >
-            ⌑
-          </button>
-        )}
-        <button title="Abrir enlace" onClick={() => window.tools.openUrl(task.originalUrl)}>
-          ↗
-        </button>
-        {removable && (
-          <button title="Quitar" onClick={remove}>
-            ×
-          </button>
-        )}
-      </div>
-      {task.error && <p>{task.error}</p>}
-    </article>
+          {removable && (
+            <button title="Quitar" onClick={remove}>
+              ×
+            </button>
+          )}
+        </div>
+        {task.error && <p>{task.error}</p>}
+      </article>
+    </>
   );
 }
 
@@ -742,13 +835,20 @@ function CollectorTab({
   deleteCandidates,
   deleteCollection,
 }: CollectorProps) {
-  const setSharedPassword = () => {
-    const password = prompt('Contraseña para los enlaces seleccionados:');
-    if (password !== null)
-      candidates.forEach((item) => item.selected && update(item.id, { password }));
+  const { ask, dialog } = usePrompt();
+  const setSharedPassword = async () => {
+    const password = await ask({
+      title: 'Contraseña para los enlaces seleccionados',
+      description: 'La contraseña se guardará en cada enlace seleccionado.',
+      secret: true,
+    });
+    if (password === null) return;
+    candidates.forEach((item) => item.selected && update(item.id, { password }));
   };
-  const setSharedCollection = () => {
-    const collection = prompt('Nombre de la colección para los enlaces seleccionados:');
+  const setSharedCollection = async () => {
+    const collection = await ask({
+      title: 'Nombre de la colección para los enlaces seleccionados',
+    });
     if (collection?.trim())
       candidates.forEach(
         (item) => item.selected && update(item.id, { collection: collection.trim() }),
@@ -759,6 +859,7 @@ function CollectorTab({
   const noneSelected = online.every((item) => !item.selected);
   return (
     <>
+      {dialog}
       <div className="collector-input">
         <textarea
           value={text}
@@ -826,6 +927,7 @@ function CollectorTab({
           Añadir a descargas →
         </button>
       </div>
+      <br />
       {candidates.length ? (
         [...Map.groupBy(candidates, (item) => item.collection || 'Sin colección')].map(
           ([collection, items]) => {
@@ -1048,7 +1150,9 @@ function SettingsTab({
           />
         </label>
         <small>
-          Necesaria para enumerar carpetas públicas. Restringe la clave a Google Drive API.
+          Opcional: las carpetas y archivos públicos se enumeran sin clave. La API key permite
+          exportar documentos de Google (Docs, Sheets...) y evita el límite de descarga anónimo.
+          Restringe la clave a Google Drive API.
         </small>
       </section>
       <aside>Las contraseñas se almacenan localmente y no se envían a servicios externos.</aside>

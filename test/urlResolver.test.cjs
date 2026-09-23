@@ -8,6 +8,7 @@ const {
   extractMediafireTitle,
   extractFireloadDirect,
   extractFireloadTitle,
+  extractFireloadDlink,
   urlCandidate,
   extractDestination,
 } = require('../electron/urlResolver.cjs');
@@ -184,11 +185,36 @@ test('ignora Fireload sin enlace de descarga', () => {
   assert.equal(extractFireloadDirect('', base), null);
 });
 
+test('extrae el enlace de descarga real de Fireload desde window.Fl.dlink', () => {
+  const body = `<script>
+    window.Fl = {"dlink": "https://www.fireload.com/abc12345/foo.zip?pt=UVhvU2s\rxR0ZEdVZEdVZEdV", "dwait": "0", "dtext": "Download File"}
+  </script>`;
+  assert.equal(
+    extractFireloadDlink(body),
+    'https://www.fireload.com/abc12345/foo.zip?pt=UVhvU2s\rxR0ZEdVZEdVZEdV',
+  );
+  assert.equal(extractFireloadDlink('<html></html>'), null);
+  assert.equal(extractFireloadDlink(''), null);
+});
+
 test('extrae el nombre real del archivo desde el titulo de Fireload', () => {
   const body = `<html><head>
-    <meta property="og:title" content="Documento importante" />
+    <meta property="og:title" content="Documento importante - shared via Fireload" />
     <title>Documento importante</title>
   </head></html>`;
   assert.equal(extractFireloadTitle(body), 'Documento importante');
+  assert.equal(
+    extractFireloadTitle(
+      '<html><head><meta property="og:title" content="Foo | Fireload" /></head></html>',
+    ),
+    'Foo',
+  );
+  assert.equal(
+    extractFireloadTitle(
+      '<html><head><title>   Foo Bar shared via Fireload </title></head></html>',
+    ),
+    'Foo Bar',
+  );
+  assert.equal(extractFireloadTitle('<html></html>'), '');
   assert.equal(extractFireloadTitle(''), '');
 });

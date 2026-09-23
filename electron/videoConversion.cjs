@@ -125,7 +125,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
           '-v',
           'error',
           '-show_entries',
-          'format=duration:stream=index,codec_type,codec_name,height',
+          'format=duration:stream=index,codec_type,codec_name,height:stream_disposition=default',
           '-of',
           'json',
           input,
@@ -135,6 +135,16 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
     const height = metadata.streams?.find((stream) => stream.codec_type === 'video')?.height || 0;
     const chosen = selections[input];
     const audioStreams = (metadata.streams || []).filter((stream) => stream.codec_type === 'audio');
+    const subtitleStreams = (metadata.streams || []).filter(
+      (stream) => stream.codec_type === 'subtitle' && MP4_SUBTITLE_CODECS.has(stream.codec_name),
+    );
+    const defaultIndices = (list) => {
+      const flagged = list.filter(
+        (stream) => stream.disposition && stream.disposition.default === 1,
+      );
+      if (flagged.length) return flagged.map((stream) => stream.index);
+      return list.length ? [list[0].index] : [];
+    };
     let audioIndices;
     let subtitleIndices;
     if (chosen) {
@@ -152,18 +162,15 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
         picked.length && audioStreams.length && !valid.length
           ? audioStreams.map((stream) => stream.index)
           : valid;
-      subtitleIndices = (chosen.subtitles || []).filter((track) => {
-        const stream = metadata.streams?.find((item) => item.index === track);
-        return stream && MP4_SUBTITLE_CODECS.has(stream.codec_name);
-      });
+      if (!audioIndices.length && audioStreams.length) audioIndices = defaultIndices(audioStreams);
+      subtitleIndices = (chosen.subtitles || []).filter((track) =>
+        subtitleStreams.some((stream) => stream.index === track),
+      );
+      if (!subtitleIndices.length && subtitleStreams.length)
+        subtitleIndices = defaultIndices(subtitleStreams);
     } else {
       audioIndices = audioStreams.map((stream) => stream.index);
-      subtitleIndices = (metadata.streams || [])
-        .filter(
-          (stream) =>
-            stream.codec_type === 'subtitle' && MP4_SUBTITLE_CODECS.has(stream.codec_name),
-        )
-        .map((stream) => stream.index);
+      subtitleIndices = subtitleStreams.map((stream) => stream.index);
     }
     const args = ['-y', '-i', input, '-map', '0:v:0'];
     if (normalizeAudio && audioIndices.length) {

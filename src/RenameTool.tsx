@@ -281,6 +281,7 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
                   setSelected(next);
                 }}
               />
+              <b>{splitExtension(x.name, true).ext.slice(1, 4).toUpperCase()}</b>
               <span>
                 <strong>{x.name}</strong>
                 <small>{x.name === x.newName ? 'Sin cambios' : `→ ${x.newName}`}</small>

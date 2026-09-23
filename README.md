@@ -138,12 +138,15 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Listado de enlaces identificados reubicado debajo del botón "Añadir a descargas →" para que el footer de envío sea visible junto a la selección actual.
 - Expansión recursiva de carpetas públicas de MediaFire (conservando subcolecciones) y resolución de páginas de archivo al enlace directo de su CDN, sin sesión.
 - Soporte de **Fireload** mediante detección por dominio y extracción del enlace directo desde el botón de descarga o atributos `data-download-url`/`data-url` de la página, sin sesión.
+- Soporte de **MEGA** (archivos y carpetas) sin cuenta ni dependencias externas: el archivo se descarga cifrado y se descifra en el equipo (AES-CTR por chunks) usando la clave incluida en el enlace; las carpetas se recorren enumerando y descifrando cada nodo con la clave de la carpeta.
+- Soporte de **TeraBox** (enlaces compartidos de archivo o carpeta) mediante el flujo anónimo de verificación y listado de la web; TeraBox puede requerir reintentos o dejar de responder si cambia su protección anti-scraping.
 - Botón **Mostrar carpeta** en el encabezado de cada grupo para abrir la carpeta destino en el explorador.
 - Botones globales **Pausar todo**, **Continuar todo** y **Detener todo** en la barra de descargas, que actúan sobre todas las tareas de la lista con la lógica de selección por estado ya existente.
 - Modal **Listar enlaces** desde la barra de descargas: muestra todas las URLs en cola, una por línea, con "Copiar todos" al portapapeles y "Cerrar".
 - Indicador en vivo del espacio del disco predeterminado (C: en Windows, raíz en macOS/Linux) con tamaño total y libre, refrescado cada 30 segundos.
 - En **Configuración > Automatización** aparece la casilla **Eliminar comprimidos tras extraer** (activada por defecto), que se aplica a cada nuevo candidato identificado y puede ajustarse individualmente por enlace.
-- Expansión recursiva de carpetas públicas de Google Drive con API key, detección de enlaces individuales y exportación automática de documentos de Google.
+- Expansión recursiva de carpetas públicas de Google Drive. Las carpetas y archivos públicos se enumeran sin clave mediante la vista web; con API key además se exportan los documentos de Google (Docs, Sheets...) y se evita el límite de descarga anónimo.
+- Detección de páginas de error de Google Drive (cuota superada o aviso de escaneo): en vez de guardar el HTML como si fuera el archivo, la tarea se marca como fallida con un mensaje claro y se eliminan los descartados de carga.
 - Identificación y descarga de videos de YouTube (incluidos los atajos `youtu.be`), Vimeo, Dailymotion, TikTok, Twitch, X/Twitter, Facebook, Instagram, SoundCloud, VK, OK y Rutube mediante `yt-dlp`, sin necesidad de sesión.
 - Al analizar un enlace de video, el **Identificador** muestra el título y genera un candidato por resolución disponible (de 144p a 2160p) más una opción de solo audio, todos seleccionados para añadir a la cola.
 - La descarga de video selecciona el mejor formato con video y audio y lo fusiona en un único MP4; la opción de solo audio descarga el formato de mayor calidad de sonido.
@@ -156,9 +159,9 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Detección automática de enlaces copiados (sin sondeo): los enlaces válidos se añaden a la sección **Identificador** con estado "En línea" o "No encontrado"; copiar una URL no inicia una descarga por sí mismo.
 - Captura global desde cualquier sección: el botón **Descargas** del menú muestra el número de enlaces capturados recientemente y el indicador se reinicia al entrar.
 
-Google Drive requiere una API key con Drive API habilitada; se configura en Descargas > Configuración. Solo pueden enumerarse carpetas compartidas públicamente: no se solicitan permisos sobre la cuenta personal del usuario.
+Google Drive es opcional: las carpetas y archivos compartidos públicamente se enumeran sin necesidad de configuración. La API key con Drive API habilitada (Descargas > Configuración) sirve para exportar documentos de Google y para evitar el límite de descargas anónimo de archivos grandes. No se solicitan permisos sobre la cuenta personal del usuario.
 
-Para configurar Google Drive:
+Para configurar Google Drive (opcional, solo si se quiere exportar documentos o elevar el límite de descargas):
 
 1. Crea o selecciona un proyecto en Google Cloud Console.
 2. Habilita **Google Drive API** desde la biblioteca de APIs.
@@ -376,7 +379,7 @@ Verifica que no esté abierto en otra aplicación, que el usuario tenga permisos
 
 ### Google Drive no detecta un archivo o carpeta
 
-Comprueba que Google Drive API esté habilitada, que la API key esté configurada y restringida a esa API, y que el recurso esté compartido públicamente. Se reconocen enlaces `/file/d/{id}`, `open?id={id}` y `/folders/{id}`.
+Comprueba que el archivo o carpeta esté compartido públicamente (para descargas anónimas) o que la API key esté configurada y restringida a Google Drive API. Si el recurso está dentro del límite de cuota anónima de Google, aparecerá el mensaje de "cuota superada": reintenta más tarde (el límite puede tardar hasta 24 h en liberarse). Se reconocen enlaces `/file/d/{id}`, `open?id={id}` y `/folders/{id}`.
 
 ### Un video de YouTube no se reconoce
 

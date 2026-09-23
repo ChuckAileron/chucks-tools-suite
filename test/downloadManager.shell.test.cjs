@@ -27,7 +27,65 @@ const state = {
       chain: [{ status: 200 }],
     }),
   },
+  mega: {
+    megaFileParts: () => '',
+    megaFolderParts: () => '',
+    megaFolderFileParts: () => '',
+    isMegaUrl: () => false,
+    resolveMegaFile: async () => ({
+      url: 'https://dl.mega.nz/file',
+      name: 'archivo.rar',
+      size: 10,
+      key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+    }),
+    resolveMegaFolderTree: async () => ({ name: 'MEGA root', entries: [] }),
+    resolveMegaFolderFile: async () => ({
+      url: 'https://dl.mega.nz/file',
+      name: 'archivo.rar',
+      size: 10,
+      key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+    }),
+    MegaDownloader: null,
+    instances: [],
+  },
+  terabox: {
+    teraboxShareParts: () => '',
+    teraboxDownloadUrl: (options) => `https://dl.terabox.com/api?fs_id=${options.fsId}`,
+    expandTeraboxShare: async () => ({
+      host: 'h',
+      surl: 's',
+      uk: 'u',
+      shareid: 'i',
+      name: 'T',
+      files: [],
+    }),
+    refreshTeraboxFile: async () => '',
+  },
 };
+
+class FakeMegaDownloader {
+  constructor(options) {
+    this.options = options;
+    this.handlers = new Map();
+    this.stopped = false;
+    state.mega.instances.push(this);
+  }
+  on(event, fn) {
+    this.handlers.set(event, fn);
+    return this;
+  }
+  emit(event, payload) {
+    const fn = this.handlers.get(event);
+    if (fn) fn(payload);
+  }
+  start() {
+    return Promise.resolve();
+  }
+  stop() {
+    this.stopped = true;
+    return Promise.resolve();
+  }
+}
 
 function resetStubs() {
   state.fetchResponder = null;
@@ -46,6 +104,37 @@ function resetStubs() {
     mode: 'direct',
     chain: [{ status: 200 }],
   });
+  state.mega.megaFileParts = () => '';
+  state.mega.megaFolderParts = () => '';
+  state.mega.megaFolderFileParts = () => '';
+  state.mega.isMegaUrl = () => false;
+  state.mega.resolveMegaFile = async () => ({
+    url: 'https://dl.mega.nz/file',
+    name: 'archivo.rar',
+    size: 10,
+    key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+  });
+  state.mega.resolveMegaFolderTree = async () => ({ name: 'MEGA root', entries: [] });
+  state.mega.resolveMegaFolderFile = async () => ({
+    url: 'https://dl.mega.nz/file',
+    name: 'archivo.rar',
+    size: 10,
+    key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+  });
+  state.mega.MegaDownloader = FakeMegaDownloader;
+  state.mega.instances.length = 0;
+  state.terabox.teraboxShareParts = () => '';
+  state.terabox.teraboxDownloadUrl = (options) =>
+    `https://dl.terabox.com/api?fs_id=${options.fsId}`;
+  state.terabox.expandTeraboxShare = async () => ({
+    host: 'h',
+    surl: 's',
+    uk: 'u',
+    shareid: 'i',
+    name: 'T',
+    files: [],
+  });
+  state.terabox.refreshTeraboxFile = async () => '';
 }
 
 class FakeDownloaderHelper {
@@ -87,6 +176,24 @@ installHooks({
   './urlResolver.cjs': {
     resolveUrl: (url) => state.urlResolver.resolveUrl(url),
   },
+  './megaProvider.cjs': {
+    megaFileParts: (url) => state.mega.megaFileParts(url),
+    megaFolderParts: (url) => state.mega.megaFolderParts(url),
+    megaFolderFileParts: (url) => state.mega.megaFolderFileParts(url),
+    isMegaUrl: (url) => state.mega.isMegaUrl(url),
+    resolveMegaFile: (...args) => state.mega.resolveMegaFile(...args),
+    resolveMegaFolderTree: (...args) => state.mega.resolveMegaFolderTree(...args),
+    resolveMegaFolderFile: (...args) => state.mega.resolveMegaFolderFile(...args),
+    MegaDownloader: function MegaDownloader(options) {
+      return new state.mega.MegaDownloader(options);
+    },
+  },
+  './teraboxProvider.cjs': {
+    teraboxShareParts: (url) => state.terabox.teraboxShareParts(url),
+    teraboxDownloadUrl: (...args) => state.terabox.teraboxDownloadUrl(...args),
+    expandTeraboxShare: (...args) => state.terabox.expandTeraboxShare(...args),
+    refreshTeraboxFile: (...args) => state.terabox.refreshTeraboxFile(...args),
+  },
   './videoProvider.cjs': {
     isVideoLink: (url) => state.video.isVideoLink(url),
     isPlaylistUrl: (url) => state.video.isPlaylistUrl(url),
@@ -108,6 +215,39 @@ async function installFetch(responder) {
     state.fetchCalls.push(href);
     const data = await responder(href);
     return { ok: true, status: 200, json: async () => data };
+  };
+}
+
+async function installWebFetch(responder) {
+  state.fetchCalls.length = 0;
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    state.fetchCalls.push(href);
+    const data = await responder(href, options);
+    const body = typeof data === 'string' ? data : (data?.body ?? '');
+    const status =
+      data && typeof data === 'object' && typeof data.status === 'number' ? data.status : 200;
+    const headers = data && typeof data === 'object' && data.headers ? data.headers : {};
+    const contentType =
+      headers['content-type'] ||
+      (typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json');
+    return {
+      ok: status >= 200 && status < 400,
+      status,
+      headers: {
+        get: (name) => {
+          const key = String(name).toLowerCase();
+          if (key === 'content-type') return contentType;
+          return headers[key] ?? headers[String(name)] ?? null;
+        },
+        getSetCookie: () => {
+          const cookies = headers['set-cookie'] ?? headers['Set-Cookie'] ?? [];
+          return Array.isArray(cookies) ? cookies : [cookies];
+        },
+      },
+      json: async () => (typeof body === 'string' ? {} : body),
+      text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+    };
   };
 }
 
@@ -288,13 +428,227 @@ test('analyze resuelve un archivo de Google Drive', async () => {
   assert.equal(results[0].name, 'guia.pdf');
 });
 
-test('analyze marca carpetas MEGA como no soportadas', async () => {
+test('analyze reporta un enlace de MEGA sin clave de cifrado', async () => {
   resetStubs();
   const { manager } = makeManager();
+  state.mega.isMegaUrl = (url) => String(url).includes('mega.nz');
   const results = await manager.analyze('https://mega.nz/folder/abc');
   assert.equal(results[0].online, false);
-  assert.equal(results[0].folderLink, true);
   assert.match(results[0].host, /MEGA/);
+  assert.match(results[0].error, /clave de cifrado/);
+});
+
+test('analyze expande un archivo de MEGA con su clave', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  state.mega.megaFileParts = (url) =>
+    String(url).includes('/file/') ? { handle: 'H1', key: 'K1' } : '';
+  state.mega.resolveMegaFile = async () => ({
+    url: 'https://dl.mega.nz/file?x=1',
+    name: 'capsula.rar',
+    size: 42,
+    key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+  });
+  const results = await manager.analyze('https://mega.nz/file/H1#K1');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].mode, 'mega-file');
+  assert.equal(results[0].name, 'capsula.rar');
+  assert.equal(results[0].url, 'https://dl.mega.nz/file?x=1');
+  assert.equal(results[0].host, 'mega.nz');
+});
+
+test('analyze marca offline un archivo MEGA que no se puede resolver', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  state.mega.megaFileParts = (url) =>
+    String(url).includes('/file/') ? { handle: 'H1', key: 'K1' } : '';
+  state.mega.resolveMegaFile = async () => {
+    throw new Error('El enlace de MEGA expiró');
+  };
+  const results = await manager.analyze('https://mega.nz/file/H1#K1');
+  assert.equal(results[0].online, false);
+  assert.match(results[0].error, /expiró/);
+});
+
+test('analyze expande una carpeta de MEGA recorriendo subcarpetas', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  state.mega.megaFolderParts = (url) =>
+    String(url).includes('/folder/') ? { handle: 'F1', key: 'FK1' } : '';
+  state.mega.resolveMegaFolderTree = async () => ({
+    name: 'Fotos',
+    entries: [
+      { h: 'F1', p: '', t: 'folder', s: 0, key: 'FK1', name: 'Fotos' },
+      { h: 'c1', p: 'F1', t: 'file', s: 5, key: 'CF1', name: 'foto 1.jpg' },
+      { h: 'sub', p: 'F1', t: 'folder', s: 0, key: 'SUB', name: 'Album' },
+      { h: 'c2', p: 'sub', t: 'file', s: 3, key: 'CF2', name: 'nested.txt' },
+    ],
+  });
+  const results = await manager.analyze('https://mega.nz/folder/F1#FK1');
+  assert.equal(results.length, 2);
+  assert.equal(results[0].mode, 'mega-folder');
+  assert.equal(results[0].originalUrl, 'https://mega.nz/folder/F1#FK1/file/c1');
+  assert.equal(results[0].collection, 'Fotos');
+  assert.equal(results[1].originalUrl, 'https://mega.nz/folder/F1#FK1/file/c2');
+  assert.equal(results[1].collection, 'Fotos / Album');
+});
+
+test('start descarga un archivo dentro de una carpeta de MEGA (enlace carpeta+archivo)', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  manager.settings.autoExtract = false;
+  manager.settings.concurrency = 1;
+  state.mega.megaFolderFileParts = (url) =>
+    String(url).includes('/file/')
+      ? { folderHandle: 'F1', folderKey: 'FK1', fileHandle: 'c1' }
+      : '';
+  state.mega.resolveMegaFolderFile = async (folderHandle, folderKey, fileHandle) => ({
+    url: `https://dl.mega.nz/file?h=${fileHandle}`,
+    name: 'foto 1.jpg',
+    size: 5,
+    key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+  });
+  manager.add([
+    {
+      originalUrl: 'https://mega.nz/folder/F1#FK1/file/c1',
+      url: 'https://mega.nz/folder/F1#FK1/file/c1',
+      name: 'foto 1.jpg',
+      destination: dir,
+      host: 'mega.nz',
+    },
+  ]);
+  await waitUntil(() => manager.active.size === 1);
+  const downloader = state.mega.instances[0];
+  assert.equal(downloader.options.downloadUrl, 'https://dl.mega.nz/file?h=c1');
+  const task = [...manager.tasks.values()][0];
+  downloader.emit('end', { filePath: path.join(dir, 'foto 1.jpg') });
+  await waitUntil(() => manager.active.size === 0 && task.status === 'completed');
+});
+
+test('analyze expande un enlace compartido de TeraBox con archivos', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  state.terabox.teraboxShareParts = (url) =>
+    String(url).includes('terabox.com') ? { host: 'https://www.1024terabox.com', surl: 's1' } : '';
+  state.terabox.expandTeraboxShare = async () => ({
+    host: 'https://www.1024terabox.com',
+    surl: 's1',
+    uk: 'UK',
+    shareid: 'SID',
+    name: 'Fotos de la boda',
+    files: [
+      { fs_id: '11', name: 'boda.rar', size: 10, dlink: '', fromFolder: false },
+      {
+        fs_id: '22',
+        name: 'carpeta/logo.png',
+        size: 5,
+        dlink: 'https://dl.terabox.com/x',
+        fromFolder: true,
+      },
+    ],
+  });
+  const results = await manager.analyze('https://www.1024terabox.com/s/1abc');
+  assert.equal(results.length, 2);
+  assert.equal(results[0].mode, 'terabox-file');
+  assert.equal(results[1].mode, 'terabox-folder');
+  assert.equal(results[1].name, 'carpeta/logo.png'.split('/').pop());
+  assert.equal(results[0].providerData.terabox.fsId, '11');
+  assert.match(results[0].url, /^https:\/\/dl\.terabox\.com\/api\?/);
+  assert.equal(results[1].url, 'https://dl.terabox.com/x');
+  assert.equal(results[0].collection, 'Fotos de la boda');
+});
+
+test('analyze marca offline un enlace de TeraBox que no se puede leer', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  state.terabox.teraboxShareParts = (url) =>
+    String(url).includes('terabox.com') ? { host: 'https://www.1024terabox.com', surl: 's1' } : '';
+  state.terabox.expandTeraboxShare = async () => {
+    throw new Error('El enlace caducó');
+  };
+  const results = await manager.analyze('https://www.1024terabox.com/s/1abc');
+  assert.equal(results[0].online, false);
+  assert.match(results[0].error, /caducó/);
+});
+
+test('start descarga un archivo MEGA re-resolviendo el enlace y usando MegaDownloader', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  manager.settings.autoExtract = false;
+  manager.settings.concurrency = 1;
+  state.mega.megaFileParts = (url) =>
+    String(url).includes('/file/') ? { handle: 'H1', key: 'K1' } : '';
+  state.mega.resolveMegaFile = async () => ({
+    url: 'https://dl.mega.nz/file?ref=1',
+    name: 'capsula.rar',
+    size: 42,
+    key: { k: Buffer.alloc(16), iv: Buffer.alloc(8), metaMac: Buffer.alloc(8) },
+  });
+  manager.add([
+    {
+      originalUrl: 'https://mega.nz/file/H1#K1',
+      url: 'https://mega.nz/file/H1#K1',
+      name: 'capsula.rar',
+      destination: dir,
+      host: 'mega.nz',
+    },
+  ]);
+  await waitUntil(() => manager.active.size === 1);
+  const downloader = state.mega.instances[0];
+  assert.ok(downloader.options.downloadUrl.includes('ref=1'));
+  const task = [...manager.tasks.values()][0];
+  downloader.emit('end', { filePath: path.join(dir, 'capsula.rar') });
+  await waitUntil(() => manager.active.size === 0 && task.status === 'completed');
+  assert.equal(task.progress, 100);
+});
+
+test('start refresca el enlace directo de un archivo de TeraBox al reanudar', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  manager.settings.autoExtract = false;
+  manager.settings.concurrency = 1;
+  const task = {
+    id: 't1',
+    originalUrl: 'https://www.1024terabox.com/s/1abc',
+    url: 'https://dl.terabox.com/old',
+    name: 'boda.rar',
+    destination: dir,
+    host: 'terabox.com',
+    providerData: { terabox: { host: 'h', surl: 's', uk: 'u', shareid: 'i', fsId: '11' } },
+    status: 'pending',
+    startedOnce: true,
+    priority: 'medium',
+    extract: false,
+  };
+  state.terabox.refreshTeraboxFile = async (url, fsId) => 'https://dl.terabox.com/new?fs=' + fsId;
+  manager.tasks.set(task.id, task);
+  manager.start(task);
+  await waitUntil(() => manager.active.size === 1);
+  assert.equal(task.url, 'https://dl.terabox.com/new?fs=11');
+  const downloader = state.dlInstances[0];
+  assert.ok(String(downloader.url).includes('dl.terabox.com/new'));
+});
+
+test('start marca error si re-resolver el archivo MEGA falla', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  state.mega.megaFileParts = (url) =>
+    String(url).includes('/file/') ? { handle: 'H1', key: 'K1' } : '';
+  state.mega.resolveMegaFile = async () => {
+    throw new Error('MEGA no encontró el archivo');
+  };
+  manager.add([
+    {
+      originalUrl: 'https://mega.nz/file/H1#K1',
+      url: 'https://mega.nz/file/H1#K1',
+      name: 'capsula.rar',
+      destination: dir,
+      host: 'mega.nz',
+    },
+  ]);
+  const task = [...manager.tasks.values()][0];
+  await waitUntil(() => task.status === 'error');
+  assert.match(task.error, /no encontró/);
 });
 
 test('analyze propaga el error de resolución de un enlace directo', async () => {
@@ -694,23 +1048,364 @@ test('maybeExtractVolume marca error cuando 7-Zip rechaza el volumen', async () 
   assert.match(manager.tasks.get('p1').error, /Wrong password/);
 });
 
-test('analyze reporta errores de carpeta de Google Drive sin API key', async () => {
+const embedHtml = (title, entries) => `<html><head><title>${title}</title></head><body>
+${entries
+  .map(
+    ([id, kind, name, mime]) =>
+      `<div class="flip-entry" id="entry-${id}" tabindex="0" role="link"><div class="flip-entry-info"><a href="https://drive.google.com/${kind === 'folder' ? `drive/folders/${id}` : `file/d/${id}/view`}?usp=drive_web" target="_blank"><div class="flip-entry-visual"><div class="flip-entry-visual-card"><div class="flip-entry-thumb"><img src="https://lh3.googleusercontent.com/x=s190" alt=""/></div></div></div><div class="flip-entry-list-icon"><img src="https://drive-thirdparty.googleusercontent.com/16/type/${mime}" alt=""/></div><div class="flip-entry-title">${name}</div></a></div><div class="flip-entry-last-modified"><div>May 28</div></div></div>`,
+  )
+  .join('\n')}
+</body></html>`;
+
+test('analyze expande una carpeta pública de Google Drive sin API key', async () => {
   resetStubs();
   const { manager } = makeManager();
-  const results = await manager.analyze('https://drive.google.com/drive/folders/FOLDER');
-  assert.equal(results[0].online, false);
-  assert.equal(results[0].folderLink, true);
-  assert.match(results[0].error, /API key/);
+  await installWebFetch((url) => {
+    if (url.includes('embeddedfolderview?id=ROOT'))
+      return embedHtml('S1', [
+        ['f1', 'file', 'Cap 1.mkv', 'video/x-matroska'],
+        ['f2', 'file', 'Cap 2.mp4', 'video/mp4'],
+        ['sub', 'folder', 'Subtítulos', 'application/vnd.google-apps.folder'],
+      ]);
+    if (url.includes('embeddedfolderview?id=sub'))
+      return embedHtml('Subtítulos', [['f3', 'file', 'Ep 3.avi', 'video/x-msvideo']]);
+    return embedHtml('Root', []);
+  });
+  const results = await manager.analyze('https://drive.google.com/drive/folders/ROOT');
+  assert.equal(results.length, 3);
+  assert.equal(results[0].name, 'Cap 1.mkv');
+  assert.equal(results[0].mode, 'google-drive-folder');
+  assert.equal(results[0].online, true);
+  assert.equal(results[0].collection, 'S1');
+  assert.ok(results[0].url.includes('/uc?export=download&id=f1'));
+  assert.ok(results[0].originalUrl.includes('/file/d/f1/view'));
+  assert.equal(results[2].name, 'Ep 3.avi');
+  assert.equal(results[2].collection, 'S1 / Subtítulos');
 });
 
-test('analyze reporta errores de archivo de Google Drive sin API key', async () => {
+test('analyze omite carpetas sin archivos descargables sin API key', async () => {
   resetStubs();
   const { manager } = makeManager();
-  const results = await manager.analyze('https://drive.google.com/file/d/F1/view');
+  await installWebFetch(() => embedHtml('Vacia', []));
+  const results = await manager.analyze('https://drive.google.com/drive/folders/ROOT');
+  assert.equal(results[0].online, false);
+  assert.equal(results[0].folderLink, true);
+  assert.match(results[0].error, /vacía|no es pública/);
+});
+
+const warningForm = (
+  fileId,
+) => `<html><head><title>Google Drive - Virus scan warning</title></head><body>
+<form id="download-form" action="https://drive.usercontent.google.com/download" method="get"><input type="submit" id="uc-download-link" value="Download anyway"/><input type="hidden" name="id" value="${fileId}"><input type="hidden" name="export" value="download"><input type="hidden" name="confirm" value="t"><input type="hidden" name="uuid" value="abc-123"></form></body></html>`;
+
+test('analyze resuelve un archivo de Google Drive sin API key', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  await installWebFetch((url) => {
+    if (url.includes('/uc?export=download&id=f1')) return warningForm('f1');
+    return '<html><head><title>guia.pdf - Google Drive</title></head><body>x</body></html>';
+  });
+  const results = await manager.analyze('https://drive.google.com/file/d/f1/view');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].mode, 'google-drive-file');
+  assert.equal(results[0].online, true);
+  assert.equal(results[0].name, 'guia.pdf');
+  assert.ok(results[0].url.includes('drive.usercontent.google.com/download?id=f1'));
+  assert.ok(results[0].url.includes('confirm=t'));
+  assert.ok(results[0].url.includes('uuid=abc-123'));
+});
+
+test('analyze marca offline un archivo de Drive con cuota superada sin API key', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  await installWebFetch(
+    () =>
+      '<html><head><title>Google Drive - Quota exceeded</title></head><body>Sorry, you can\u2019t view or download this file at this time. Too many users have viewed or downloaded this file recently.</body></html>',
+  );
+  const results = await manager.analyze('https://drive.google.com/file/d/f1/view');
   assert.equal(results[0].online, false);
   assert.equal(results[0].folderLink, false);
   assert.equal(results[0].name, 'Archivo de Google Drive');
-  assert.match(results[0].error, /API key/);
+  assert.match(results[0].error, /cuota|saturado|demasiados/);
+});
+
+test('resolveGoogleDriveUrl sigue la redirección de archivos pequeños', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  await installWebFetch((url) => {
+    if (url.includes('/uc?export=download'))
+      return {
+        status: 302,
+        headers: {
+          location:
+            'https://drive.usercontent.google.com/download?id=f1&export=download&authuser=0&confirm=t&uuid=x',
+        },
+      };
+    return { body: 'BINARY', headers: { 'content-type': 'video/mp4' } };
+  });
+  const resolved = await manager.resolveGoogleDriveUrl('f1');
+  assert.equal(
+    resolved.url,
+    'https://drive.usercontent.google.com/download?id=f1&export=download&authuser=0&confirm=t&uuid=x',
+  );
+  assert.equal(resolved.error, undefined);
+});
+
+test('googleDriveErrorInFile detecta páginas HTML de error de Google', () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  const html = path.join(dir, 'cap.mkv');
+  fs.writeFileSync(
+    html,
+    '<html><head><title>Google Drive - Quota exceeded</title></head><body>Too many users have viewed or downloaded this file recently</body></html>',
+  );
+  assert.match(manager.googleDriveErrorInFile(html), /cuota/);
+  fs.writeFileSync(
+    html,
+    '<html><head><title>Google Drive - Virus scan warning</title></head><body>x</body></html>',
+  );
+  assert.match(manager.googleDriveErrorInFile(html), /escaneo/);
+  fs.writeFileSync(html, 'MZ\x90\x00 binary fake');
+  assert.equal(manager.googleDriveErrorInFile(html), '');
+  fs.writeFileSync(html, Buffer.alloc(2 * 1024 * 1024, 65));
+  assert.equal(manager.googleDriveErrorInFile(html), '');
+});
+
+test('start falla temprano por cuota al refrescar la URL de Drive', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  await installWebFetch(
+    () =>
+      '<html><head><title>Google Drive - Quota exceeded</title></head><body>Too many users are currently viewing this file</body></html>',
+  );
+  manager.settings.concurrency = 0;
+  const task = {
+    id: 'd1',
+    originalUrl: 'https://drive.google.com/file/d/f1/view',
+    url: 'https://drive.google.com/uc?export=download&id=f1',
+    name: 'cap.mkv',
+    destination: dir,
+    host: 'drive.google.com',
+    status: 'pending',
+  };
+  manager.tasks.set(task.id, task);
+  await manager.start(task);
+  assert.equal(task.status, 'error');
+  assert.match(task.error, /saturado|cuota/);
+  assert.equal(state.dlInstances.length, 0);
+});
+
+test('la cola continúa tras un refresco de Drive bloqueado por cuota', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  await installWebFetch(
+    () =>
+      '<html><head><title>Google Drive - Quota exceeded</title></head><body>Too many users are currently viewing this file</body></html>',
+  );
+  manager.settings.concurrency = 1;
+  const driveTask = {
+    id: 'fd1',
+    originalUrl: 'https://drive.google.com/file/d/f1/view',
+    url: 'https://drive.google.com/uc?export=download&id=f1',
+    name: 'cap.mkv',
+    destination: dir,
+    host: 'drive.google.com',
+    status: 'pending',
+    createdAt: 1,
+  };
+  const nextTask = {
+    id: 'fd2',
+    originalUrl: 'https://ejemplo.com/archivo.zip',
+    url: 'https://ejemplo.com/archivo.zip',
+    name: 'archivo.zip',
+    destination: dir,
+    host: 'ejemplo.com',
+    status: 'pending',
+    createdAt: 2,
+  };
+  manager.tasks.set(driveTask.id, driveTask);
+  manager.tasks.set(nextTask.id, nextTask);
+  manager.process();
+  await waitUntil(() => state.dlInstances.length === 1);
+  assert.equal(driveTask.status, 'error');
+  assert.equal(nextTask.status, 'downloading');
+  assert.equal(state.dlInstances[0].url, 'https://ejemplo.com/archivo.zip');
+});
+
+test('start descarta un archivo de Drive que bajó como página HTML de cuota', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  manager.settings.autoExtract = false;
+  manager.settings.concurrency = 0;
+  const taskFile = path.join(dir, 'cap.mkv');
+  fs.writeFileSync(
+    taskFile,
+    '<html><head><title>Google Drive - Quota exceeded</title></head><body>Too many users have viewed this file</body></html>',
+  );
+  const task = {
+    id: 'd2',
+    originalUrl: 'https://drive.google.com/a',
+    url: 'https://drive.usercontent.google.com/download?id=f1&export=download',
+    name: 'cap.mkv',
+    destination: dir,
+    host: 'drive.google.com',
+    status: 'pending',
+  };
+  manager.tasks.set(task.id, task);
+  manager.start(task);
+  await waitUntil(() => state.dlInstances.length === 1);
+  state.dlInstances[0].emit('end', { filePath: taskFile });
+  await waitUntil(() => task.status === 'error');
+  assert.match(task.error, /cuota/);
+  assert.equal(fs.existsSync(taskFile), false);
+  assert.equal(task.filePath, '');
+});
+
+test('resolveGoogleDriveUrl captura la cookie de confirmación de archivos grandes', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  await installWebFetch((url) => {
+    if (url.includes('/uc?export=download'))
+      return {
+        body: warningForm('f1'),
+        headers: {
+          'set-cookie': [
+            'download_warning_1r-Itj=DLTNvUx; expires=Thu, 01-Jan-2037 00:00:00 GMT; path=/; HttpOnly',
+            'NID=xyz123; expires=Thu, 01-Jan-2037 00:00:00 GMT; path=/; HttpOnly',
+          ],
+        },
+      };
+    return '<html><head><title>x</title></head></html>';
+  });
+  const resolved = await manager.resolveGoogleDriveUrl('f1');
+  assert.ok(resolved.url.includes('confirm=t'));
+  assert.ok(resolved.url.includes('uuid=abc-123'));
+  assert.match(resolved.cookie, /download_warning_1r-Itj=DLTNvUx/);
+  assert.ok(!resolved.cookie.includes('NID=xyz123'));
+});
+
+test('resolveGoogleDriveUrl resuelve el flujo clásico solo con confirm', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  await installWebFetch((url) => {
+    if (url.includes('/uc?export=download&id=legacy&confirm=t'))
+      return {
+        status: 302,
+        headers: {
+          location:
+            'https://drive.usercontent.google.com/download?id=legacy&export=download&authuser=0&confirm=t&uuid=x',
+        },
+      };
+    if (url.includes('/uc?export=download'))
+      return {
+        body:
+          '<html><body><form id="download-form" action="/uc?export=download" method="get">' +
+          '<input type="hidden" name="id" value="legacy">' +
+          '<input type="hidden" name="confirm" value="t"></form></body></html>',
+        headers: { 'set-cookie': ['download_warning_legacy=ABC; path=/'] },
+      };
+    return { body: 'BINARY', headers: { 'content-type': 'video/mp4' } };
+  });
+  const resolved = await manager.resolveGoogleDriveUrl('legacy');
+  assert.ok(resolved.url.includes('drive.usercontent.google.com/download?id=legacy'));
+  assert.match(resolved.cookie, /download_warning_legacy=ABC/);
+});
+
+test('resolveGoogleDriveUrl reenvía las cookies capturadas durante la resolución', async () => {
+  resetStubs();
+  const { manager } = makeManager();
+  let confirmCookieSeen = false;
+  await installWebFetch((url, options) => {
+    if (url.includes('confirm=t'))
+      confirmCookieSeen = String(options?.headers?.Cookie || '').includes('download_warning_c2=42');
+    if (url.includes('/uc?export=download&id=c2&confirm=t'))
+      return {
+        status: 302,
+        headers: { location: 'https://drive.usercontent.google.com/download?id=c2' },
+      };
+    if (url.includes('/uc?export=download'))
+      return {
+        body: '<html><body><form id="download-form" action="/uc?export=download"><input type="hidden" name="id" value="c2"><input type="hidden" name="confirm" value="t"></form></body></html>',
+        headers: { 'set-cookie': ['download_warning_c2=42; path=/'] },
+      };
+    return { body: 'BINARY', headers: { 'content-type': 'video/mp4' } };
+  });
+  await manager.resolveGoogleDriveUrl('c2');
+  assert.equal(confirmCookieSeen, true);
+});
+
+test('parseDriveConfirmation tolera comillas simples y orden de atributos', () => {
+  resetStubs();
+  const { manager } = makeManager();
+  const html =
+    '<html><body><form id="download-form" action=\'https://drive.usercontent.google.com/download\' method="get">' +
+    '<input type="hidden" value="v1" name="id">' +
+    '<input name="confirm" value="tok">' +
+    '<input type="hidden" name="uuid" value="u-7"></form></body></html>';
+  const parsed = manager.parseDriveConfirmation(
+    html,
+    'https://drive.google.com/uc?export=download&id=v1',
+    'v1',
+  );
+  assert.ok(parsed.url.includes('?id=v1'));
+  assert.ok(parsed.url.includes('confirm=tok'));
+  assert.ok(parsed.url.includes('uuid=u-7'));
+});
+
+test('start envía la cookie de confirmación al descargador de Drive', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  await installWebFetch((url) => {
+    if (url.includes('/uc?export=download'))
+      return {
+        body: warningForm('f1'),
+        headers: { 'set-cookie': ['download_warning_1r-Itj=DLTNvUx; path=/; HttpOnly'] },
+      };
+    return '<html><head><title>guia.pdf - Google Drive</title></head></html>';
+  });
+  manager.settings.autoExtract = false;
+  manager.settings.concurrency = 0;
+  const task = {
+    id: 'd4',
+    originalUrl: 'https://drive.google.com/file/d/f1/view',
+    url: 'https://drive.google.com/uc?export=download&id=f1',
+    name: 'guia.pdf',
+    destination: dir,
+    host: 'drive.google.com',
+    status: 'pending',
+  };
+  manager.tasks.set(task.id, task);
+  manager.start(task);
+  await waitUntil(() => state.dlInstances.length === 1);
+  assert.equal(state.dlInstances[0].options.headers.Cookie, 'download_warning_1r-Itj=DLTNvUx');
+  assert.equal(
+    state.dlInstances[0].options.headers['User-Agent'],
+    'Mozilla/5.0 Chrome/140 Safari/537.36',
+  );
+});
+
+test('start completa un archivo de Drive que no es HTML', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  manager.settings.autoExtract = false;
+  manager.settings.concurrency = 0;
+  const taskFile = path.join(dir, 'cap.mkv');
+  fs.writeFileSync(taskFile, 'MZ binary content');
+  const task = {
+    id: 'd3',
+    originalUrl: 'https://drive.google.com/a',
+    url: 'https://drive.usercontent.google.com/download?id=f1&export=download',
+    name: 'cap.mkv',
+    destination: dir,
+    host: 'drive.google.com',
+    status: 'pending',
+  };
+  manager.tasks.set(task.id, task);
+  manager.start(task);
+  await waitUntil(() => state.dlInstances.length === 1);
+  state.dlInstances[0].emit('end', { filePath: taskFile });
+  await waitUntil(() => task.status === 'completed');
+  assert.equal(task.filePath, taskFile);
 });
 
 test('analyze compone el nombre de enlaces directos a partir del título', async () => {
