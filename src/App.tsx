@@ -10,6 +10,7 @@ import CollectionTool from './CollectionTool';
 import HddInventoryTool from './HddInventoryTool';
 import MediaPlayerTool from './MediaPlayerTool';
 import TrimTool from './TrimTool';
+import BinderTrackTool from './BinderTrackTool';
 import type {
   DownloadCandidate,
   DownloadPriority,
@@ -32,7 +33,8 @@ type Tool =
   | 'replay'
   | 'hdd'
   | 'media'
-  | 'trim';
+  | 'trim'
+  | 'bindertrack';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -206,6 +208,18 @@ export default function App() {
             </span>
           </button>
           <button
+            className={tool === 'bindertrack' ? 'active' : ''}
+            onClick={() => setTool('bindertrack')}
+          >
+            <i>
+              <BinderTrackIcon />
+            </i>
+            <span>
+              <strong>BinderTrack</strong>
+              <small>Mantenedor TCG</small>
+            </span>
+          </button>
+          <button
             className={tool === 'downloads' ? 'active' : ''}
             onClick={() => {
               setTool('downloads');
@@ -351,6 +365,8 @@ export default function App() {
           <AnalogReplayTool />
         ) : tool === 'collection' ? (
           <CollectionTool />
+        ) : tool === 'bindertrack' ? (
+          <BinderTrackTool />
         ) : tool === 'hdd' ? (
           <HddInventoryTool
             activeDriveId={hddActiveDriveId}
@@ -396,6 +412,18 @@ function BookIcon() {
     <SidebarIcon>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </SidebarIcon>
+  );
+}
+
+function BinderTrackIcon() {
+  return (
+    <SidebarIcon>
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z" />
+      <line x1="8" y1="7" x2="15" y2="7" />
+      <line x1="8" y1="11" x2="15" y2="11" />
+      <circle cx="8" cy="15" r="1" fill="currentColor" stroke="none" />
+      <line x1="11" y1="15" x2="15" y2="15" />
     </SidebarIcon>
   );
 }

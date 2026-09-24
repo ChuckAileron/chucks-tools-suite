@@ -162,4 +162,44 @@ contextBridge.exposeInMainWorld('tools', {
   },
   mediaDocumentText: (driveId, entryId) =>
     ipcRenderer.invoke('media:document-text', { driveId, entryId }),
+  binderListSeries: () => ipcRenderer.invoke('binder:list-series'),
+  binderListSubseries: (series) => ipcRenderer.invoke('binder:list-subseries', series),
+  binderListSets: (filter) => ipcRenderer.invoke('binder:list-sets', filter),
+  binderGetSet: (id) => ipcRenderer.invoke('binder:get-set', id),
+  binderCreateSet: (data) => ipcRenderer.invoke('binder:create-set', data),
+  binderUpdateSet: (id, patch) => ipcRenderer.invoke('binder:update-set', { id, patch }),
+  binderDeleteSet: (id) => ipcRenderer.invoke('binder:delete-set', id),
+  binderListCards: (setId) => ipcRenderer.invoke('binder:list-cards', setId),
+  binderSearchCards: (query) => ipcRenderer.invoke('binder:search-cards', query),
+  binderGetCard: (id) => ipcRenderer.invoke('binder:get-card', id),
+  binderCreateCard: (data) => ipcRenderer.invoke('binder:create-card', data),
+  binderUpdateCard: (id, patch) => ipcRenderer.invoke('binder:update-card', { id, patch }),
+  binderDeleteCard: (id) => ipcRenderer.invoke('binder:delete-card', id),
+  binderListVariants: (cardId) => ipcRenderer.invoke('binder:list-variants', cardId),
+  binderCreateVariant: (data) => ipcRenderer.invoke('binder:create-variant', data),
+  binderUpdateVariant: (id, patch) => ipcRenderer.invoke('binder:update-variant', { id, patch }),
+  binderDeleteVariant: (id) => ipcRenderer.invoke('binder:delete-variant', id),
+  binderListCustomLists: () => ipcRenderer.invoke('binder:list-custom-lists'),
+  binderCreateCustomList: (data) => ipcRenderer.invoke('binder:create-custom-list', data),
+  binderUpdateCustomList: (id, patch) =>
+    ipcRenderer.invoke('binder:update-custom-list', { id, patch }),
+  binderDeleteCustomList: (id) => ipcRenderer.invoke('binder:delete-custom-list', id),
+  binderListCustomListCards: (listId) =>
+    ipcRenderer.invoke('binder:list-custom-list-cards', listId),
+  binderAddCardToList: (data) => ipcRenderer.invoke('binder:add-card-to-list', data),
+  binderRemoveCardFromList: (id) => ipcRenderer.invoke('binder:remove-card-from-list', id),
+  binderReorderCustomListCards: (listId, ids) =>
+    ipcRenderer.invoke('binder:reorder-custom-list-cards', { listId, ids }),
+  binderSelectImportFile: () => ipcRenderer.invoke('binder:select-import-file'),
+  binderImportZip: (filePath) => ipcRenderer.invoke('binder:import-zip', filePath),
+  binderSelectExportDestination: (defaultName) =>
+    ipcRenderer.invoke('binder:select-export-destination', defaultName),
+  binderExportCollection: (destination) =>
+    ipcRenderer.invoke('binder:export-collection', destination),
+  binderExportSet: (setId, destination) =>
+    ipcRenderer.invoke('binder:export-set', { setId, destination }),
+  binderExportCustomList: (listId, destination) =>
+    ipcRenderer.invoke('binder:export-custom-list', { listId, destination }),
+  binderAddCardToCollection: (data) => ipcRenderer.invoke('binder:add-card-to-collection', data),
+  binderAddSetToCollection: (data) => ipcRenderer.invoke('binder:add-set-to-collection', data),
 });

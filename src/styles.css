@@ -4715,6 +4715,54 @@ nav button i {
    suite deben dar la "mano" al pasar el cursor. Se excluye :disabled (ya
    declara cursor propio donde hace falta) y .hdd-thumb-button, que usa
    intencionalmente cursor de zoom. */
+/* ---- BinderTrack (mantenedor de colección TCG) ---- */
+.binder-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 4px;
+}
+.binder-variant-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 100px auto;
+  gap: 8px;
+  align-items: center;
+}
+.binder-variant-row input {
+  padding: 7px 9px;
+  border: 1px solid var(--c-border-d6d9d4);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.binder-list-detail {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border-e6e7e2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.binder-transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.binder-transfer section {
+  padding: 16px;
+  border: 1px solid var(--c-border-e0e2dd);
+  border-radius: 13px;
+  background: var(--c-bg-fafbf8);
+}
+.binder-transfer section h2 {
+  margin: 0 0 6px;
+  font: 800 15px Manrope;
+}
+.binder-transfer section p {
+  margin: 0 0 12px;
+  color: var(--c-text-727a75);
+  font-size: 12px;
+}
+
 /* ---- Cortar audio/video ---- */
 .trim-results section.trim-file-list {
   max-height: none;

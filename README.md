@@ -4,7 +4,7 @@ Aplicación de escritorio para Windows, macOS y Linux que reúne herramientas lo
 
 Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. El módulo de Descargas realiza solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
 
-La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Gestor de descargas, Identificador, Colección, Organizar, Renombrar, Video a SD, Normalizar, AnalogReplayTV, Wishlist y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos.
+La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Organizar, Renombrar, Cortar audio/video, Video a SD, Normalizar, Gestor de descargas, Colección, BinderTrack, AnalogReplayTV, Inventario HDD, Reproductor, Wishlist y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos.
 
 ## Herramientas incluidas
 
@@ -59,6 +59,19 @@ Genera una tabla temporal (vive solo mientras se navega dentro de Renombrar arch
 - Con más de una columna nombre, una casilla adicional permite **usar el mismo prefijo de unión** para todas; si se desactiva, se define un prefijo independiente por columna.
 - Ejemplo: `nombrearchivo.txt` + columna 1 ("valor 1", prefijo `" "`) + columna 2 ("valor 2", prefijo `"-X-"`) → `nombrearchivo valor 1-X-valor 2.txt`.
 - Columnas renombrables y eliminables de forma independiente; renombrado final aplicado solo a las filas seleccionadas y con cambios reales.
+
+### Cortar audio/video
+
+Recorta audio o video con FFmpeg local, conservando siempre los archivos originales.
+
+- Procesamiento de varias carpetas en una misma ejecución, con tipo de contenido (audio o video) por lote.
+- Modo **Conservar sección**: descarta todo lo que quede fuera del rango indicado.
+- Modo **Eliminar sección**: quita el rango y conserva el resto.
+- Recorte interior (cuando el tramo no toca ni el inicio ni el final) con la casilla **Separar en dos archivos** para conservar los dos segmentos; si se desactiva, ambos tramos se unen en uno solo.
+- Tiempos ingresables en segundos, `mm:ss` o `h:mm:ss`, con validación de rango por archivo y descripción del resultado antes de procesar.
+- Progreso global y por archivo, cancelación del proceso activo, indicador ✓ en archivos terminados y registro de actividad en pantalla.
+- Una carpeta solo puede quitarse de la cola mientras no se esté procesando uno de sus archivos.
+- Salida en `trimmed_output-audio` o `trimmed_output-video` dentro de cada carpeta; los originales nunca se modifican.
 
 ### Video a SD
 
@@ -116,6 +129,19 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 - Base de datos guardada en el directorio local de datos de Electron.
 - Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
 - Consulta de precios mediante scraping local de JSON-LD, metadatos de producto y HTML.
+
+### BinderTrack
+
+Mantenedor TCG compatible con la app móvil BinderTrack, para inventariar y administrar una colección de cartas con persistencia SQLite local. La interfaz se organiza en cuatro pestañas: **Series y sets**, **Cartas**, **Listas personalizadas** e **Importar / Exportar**.
+
+- **Series y sets**: creación, edición y eliminación de sets con nombre, serie y subserie, fecha de lanzamiento, fabricante, imágenes (logo, packs, caja, símbolo, misceláneas), opción "considera variantes" y marcado de completado; filtrado por serie.
+- **Cartas**: número, código, nombre, rareza, tipo, ilustrador, idioma, descripción, imagen, cantidad poseída, categoría personalizada y marca de promo, organizadas por set.
+  - **Variantes** por carta (tipo, rareza, imagen y poseídas) editables en línea desde la fila expandida de cada carta.
+- **Listas personalizadas**: listas con nombre, estado ("en progreso"/"completado") y color, con búsqueda de cartas por nombre para añadirlas y reordenación (▲/▼) o eliminación de entradas.
+- **Importar / Exportar**: intercambio con la app móvil mediante archivos ZIP. Al importar, los sets que ya existen se reemplazan (quedan en 0 copias, listos para inventariar) y las listas se agregan sin sobrescribir datos existentes; se puede exportar la colección completa, un set o una lista.
+- Integración con la sección **Colección**: volcado de una carta o de todas las cartas de un set como ítems de una colección genérica ya existente.
+
+La base de datos (`bindertrack.sqlite`) y las imágenes que la app móvil envía en los ZIP importados (carpeta `bindertrack-media/`) se guardan en el directorio local de datos de Electron; no se sincronizan con ningún servicio externo.
 
 ### Gestor de descargas
 
@@ -204,11 +230,23 @@ Cataloga el contenido completo de discos duros externos en una base de datos loc
 
 El catálogo, las miniaturas y las propiedades técnicas se guardan en el directorio local de datos de Electron; no se sincronizan ni se transmiten a ningún servicio externo.
 
+### Reproductor
+
+Reproduce el contenido catalogado en Inventario HDD directamente desde el disco conectado, sin importar ni copiar archivos.
+
+- Se abre con el botón **▶ Reproducir** de un archivo en Inventario HDD y mantiene un botón **← Volver a Inventario HDD** en el reproductor.
+- Los archivos se sirven mediante el protocolo privilegiado `hddmedia://` con soporte de rangos (Range), lo que permite búsqueda (seek) en video y audio sin cargar el archivo completo.
+- **Video**: reproductor con controles y reproducción.
+- **Audio**: reproductor con barra de búsqueda y controles de salto.
+- **Imágenes**: galería con las demás imágenes de la misma carpeta y visor a pantalla completa (lightbox) con zoom.
+- **Documentos**: extracción y lectura del texto dentro de la aplicación (PDF, Word, Excel, PowerPoint, OpenDocument, RTF y texto plano).
+- Si el disco está desconectado, el reproductor lo indica y no reproduce el contenido hasta reconectar el HDD.
+
 ## Requisitos
 
 - Node.js 26.9.0 o posterior.
 - npm 11.19.1 o posterior.
-- FFmpeg y FFprobe para utilizar el módulo Video a SD y para las miniaturas/ficha técnica de Inventario HDD.
+- FFmpeg y FFprobe para los módulos Video a SD, Cortar audio/video y para las miniaturas/ficha técnica de Inventario HDD.
 - Poppler (`pdftoppm`) opcional, para generar miniaturas reales de la primera página de archivos PDF en Inventario HDD; sin él se usa un marcador genérico.
 - Conexión a Internet para Descargas, el buscador de imágenes de Colección y las integraciones con hosts externos.
 
@@ -304,6 +342,7 @@ CHUCK's Tools Suite/
 │   ├── preload.cjs          # API segura expuesta al renderer
 │   ├── audioNormalizer.cjs  # Normalización mediante FFmpeg
 │   ├── analogReplay.cjs     # Canales, programas y generación de programación
+│   ├── binderTrack.cjs      # Base de datos BinderTrack e importación/exportación ZIP
 │   ├── collectionManager.cjs # Colecciones y persistencia SQLite
 │   ├── imageSearch.cjs      # Búsqueda de imágenes (Bing, Google, DuckDuckGo, Wikimedia, Openverse)
 │   ├── priceScraper.cjs     # Scraping de precios para la wishlist
@@ -313,24 +352,32 @@ CHUCK's Tools Suite/
 │   ├── urlResolver.cjs      # Resolución y validación segura de URLs
 │   ├── clipboardWatcher.cjs # Detección de enlaces copiados
 │   ├── downloadManager.cjs  # Cola persistente y extracción
-│   └── hddInventory.cjs    # Catálogo de discos, miniaturas y ficha técnica
+│   ├── hddInventory.cjs     # Catálogo de discos, miniaturas y ficha técnica
+│   ├── mediaPlayer.cjs      # Protocolo hddmedia:// y visor de texto de documentos
+│   ├── megaProvider.cjs     # Descarga y descifrado de enlaces MEGA (AES-CTR)
+│   ├── teraboxProvider.cjs  # Enlaces compartidos de TeraBox
+│   └── trim.cjs             # Recorte de audio/video con FFmpeg
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
 │   ├── MoverTool.tsx     # Herramienta para mover por tipo
 │   ├── RenameTool.tsx    # Herramienta para renombrar
+│   ├── TrimTool.tsx      # Cortar audio/video
 │   ├── VideoTool.tsx     # Conversión de videos a SD
 │   ├── NormalizeTool.tsx # Normalización de volumen
 │   ├── CollectionTool.tsx # Catálogos y fichas personalizadas
+│   ├── BinderTrackTool.tsx # Mantenedor de colección TCG
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
+│   ├── MediaPlayerTool.tsx # Reproductor de medios del Inventario HDD
 │   ├── HddInventoryTool.tsx # Inventario y explorador de discos duros
+│   ├── mediaUrl.ts       # URLs del protocolo hddmedia://
 │   ├── collapseState.ts  # Persistencia de grupos colapsados (localStorage)
 │   ├── main.tsx          # Entrada de React
 │   ├── styles.css        # Sistema visual, modo claro/oscuro y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, colecciones, scraping, imágenes, renombrado, inventario HDD y programación analog
+├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones, imágenes, renombrado, inventario HDD y BinderTrack
 ├── vite.config.ts
 └── package.json
 ```
@@ -358,6 +405,8 @@ La aplicación separa el renderer de las operaciones privilegiadas:
 El gestor persiste su estado en `downloads.json` dentro de `app.getPath('userData')`. Este archivo puede contener URLs, rutas locales, una API key de Google Drive y contraseñas de extracción. No se sincroniza ni se transmite deliberadamente, pero cualquier usuario o proceso con acceso al perfil local podría leerlo.
 
 Inventario HDD guarda su catálogo en `hdd-inventory.sqlite` y sus miniaturas en la carpeta `hdd-thumbnails/`, ambos dentro de `app.getPath('userData')`. Contienen rutas completas del disco, nombres de archivos y miniaturas de su contenido; se mantienen únicamente en el equipo local.
+
+BinderTrack guarda su catálogo en `bindertrack.sqlite` y las imágenes importadas desde la app móvil en `bindertrack-media/`, ambos dentro de `app.getPath('userData')`. Contienen datos de la colección de cartas editados por el usuario; se mantienen únicamente en el equipo local.
 
 ### Dependencias conocidas
 

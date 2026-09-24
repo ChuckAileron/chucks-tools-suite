@@ -189,6 +189,67 @@ export type TrimState = {
   logs: { text: string; tone?: string }[];
   activeFolder?: string;
 };
+export type BinderSet = {
+  id: string;
+  name: string;
+  releaseDate: string;
+  manufacturer: string;
+  series: string;
+  subseries: string | null;
+  considerVariants: boolean;
+  logoImg: string | null;
+  packsImg: string[];
+  boxArtImg: string[];
+  miscImg: string[];
+  symbolImg: string | null;
+  completed: boolean;
+  customCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BinderCard = {
+  id: string;
+  name: string;
+  illustrator: string | null;
+  description: string | null;
+  img: string;
+  type: string | null;
+  rarity: string | null;
+  language: string | null;
+  owned: number;
+  number: number;
+  code: string;
+  isPromo: boolean;
+  customCategory: string | null;
+  metadata: string | null;
+  setId: string | null;
+};
+export type BinderCardVariant = {
+  id: string;
+  cardId: string;
+  type: string | null;
+  rarity: string | null;
+  description: string | null;
+  img: string | null;
+  owned: number;
+};
+export type BinderCustomListStatus = 'completado' | 'en progreso';
+export type BinderCustomList = {
+  id: string;
+  name: string;
+  status: BinderCustomListStatus;
+  iconColor: number;
+};
+export type BinderCustomListCard = {
+  id: string;
+  listId: string;
+  cardId: string;
+  variantId: string | null;
+  position: number;
+  card: BinderCard | null;
+  variant: BinderCardVariant | null;
+};
+export type BinderImportSummary = { sets: number; lists: number };
 export type CollectionColumnType = 'string' | 'number' | 'boolean' | 'date' | 'url' | 'tags';
 export type CollectionColumn = {
   name: string;
@@ -577,6 +638,56 @@ declare global {
       hddCancelScan(): Promise<boolean>;
       onHddScanState(callback: (state: HddScanState) => void): () => void;
       mediaDocumentText(driveId: number, entryId: number): Promise<{ text: string }>;
+      binderListSeries(): Promise<string[]>;
+      binderListSubseries(series: string): Promise<string[]>;
+      binderListSets(filter?: { series?: string; subseries?: string }): Promise<BinderSet[]>;
+      binderGetSet(id: string): Promise<BinderSet | null>;
+      binderCreateSet(data: Partial<BinderSet>): Promise<BinderSet>;
+      binderUpdateSet(id: string, patch: Partial<BinderSet>): Promise<BinderSet>;
+      binderDeleteSet(id: string): Promise<boolean>;
+      binderListCards(setId: string): Promise<BinderCard[]>;
+      binderSearchCards(query: string): Promise<BinderCard[]>;
+      binderGetCard(id: string): Promise<BinderCard | null>;
+      binderCreateCard(data: Partial<BinderCard>): Promise<BinderCard>;
+      binderUpdateCard(id: string, patch: Partial<BinderCard>): Promise<BinderCard>;
+      binderDeleteCard(id: string): Promise<boolean>;
+      binderListVariants(cardId: string): Promise<BinderCardVariant[]>;
+      binderCreateVariant(data: Partial<BinderCardVariant>): Promise<BinderCardVariant>;
+      binderUpdateVariant(
+        id: string,
+        patch: Partial<BinderCardVariant>,
+      ): Promise<BinderCardVariant>;
+      binderDeleteVariant(id: string): Promise<boolean>;
+      binderListCustomLists(): Promise<BinderCustomList[]>;
+      binderCreateCustomList(data: Partial<BinderCustomList>): Promise<BinderCustomList>;
+      binderUpdateCustomList(
+        id: string,
+        patch: Partial<BinderCustomList>,
+      ): Promise<BinderCustomList>;
+      binderDeleteCustomList(id: string): Promise<boolean>;
+      binderListCustomListCards(listId: string): Promise<BinderCustomListCard[]>;
+      binderAddCardToList(data: {
+        listId: string;
+        cardId: string;
+        variantId?: string | null;
+      }): Promise<BinderCustomListCard>;
+      binderRemoveCardFromList(id: string): Promise<boolean>;
+      binderReorderCustomListCards(listId: string, ids: string[]): Promise<BinderCustomListCard[]>;
+      binderSelectImportFile(): Promise<string | null>;
+      binderImportZip(filePath: string): Promise<BinderImportSummary>;
+      binderSelectExportDestination(defaultName: string): Promise<string | null>;
+      binderExportCollection(destination: string): Promise<boolean>;
+      binderExportSet(setId: string, destination: string): Promise<boolean>;
+      binderExportCustomList(listId: string, destination: string): Promise<boolean>;
+      binderAddCardToCollection(data: {
+        cardId: string;
+        collectionId: number;
+        variantId?: string | null;
+      }): Promise<{ added: number }>;
+      binderAddSetToCollection(data: {
+        setId: string;
+        collectionId: number;
+      }): Promise<{ added: number }>;
     };
   }
 }

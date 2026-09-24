@@ -22,6 +22,7 @@ const { listFiles, listFolders, renameFile } = require('./renameManager.cjs');
 const hddInventory = require('./hddInventory.cjs');
 const mediaPlayer = require('./mediaPlayer.cjs');
 const trimTool = require('./trim.cjs');
+const binderTrack = require('./binderTrack.cjs');
 // Esquema privilegiado usado para transmitir video/audio/imágenes desde un
 // HDD catalogado directamente al reproductor, con soporte de rango (Range)
 // para permitir búsqueda (seek). Debe registrarse antes de que la app esté
@@ -36,6 +37,8 @@ let downloadManager;
 let collectionManager;
 let hddManager;
 let hddThumbnailsDir;
+let binderManager;
+let binderTrackMediaDir;
 let hddScanCancelled = false;
 let hddScanState = {
   running: false,
@@ -558,6 +561,11 @@ app.whenReady().then(async () => {
   hddManager = new hddInventory.HddInventoryManager(
     path.join(app.getPath('userData'), 'hdd-inventory.sqlite'),
     hddThumbnailsDir,
+  );
+  binderTrackMediaDir = path.join(app.getPath('userData'), 'bindertrack-media');
+  binderManager = new binderTrack.BinderTrackManager(
+    path.join(app.getPath('userData'), 'bindertrack.sqlite'),
+    binderTrackMediaDir,
   );
   downloadManager = new DownloadManager(
     path.join(app.getPath('userData'), 'downloads.json'),
@@ -1501,6 +1509,115 @@ app.whenReady().then(async () => {
     const absolute = path.join(connection.mountPoint, entry.relativePath);
     const text = await mediaPlayer.extractDocumentText(absolute, entry.extension);
     return { text: String(text || '') };
+  });
+  // --- Mantenedor de BinderTrack -------------------------------------------
+  ipcMain.handle('binder:list-series', () => binderManager.listSeries());
+  ipcMain.handle('binder:list-subseries', (_event, series) => binderManager.listSubseries(series));
+  ipcMain.handle('binder:list-sets', (_event, filter) => binderManager.listSets(filter || {}));
+  ipcMain.handle('binder:get-set', (_event, id) => binderManager.getSet(id));
+  ipcMain.handle('binder:create-set', (_event, data) => binderManager.createSet(data));
+  ipcMain.handle('binder:update-set', (_event, { id, patch }) =>
+    binderManager.updateSet(id, patch),
+  );
+  ipcMain.handle('binder:delete-set', (_event, id) => binderManager.deleteSet(id));
+  ipcMain.handle('binder:list-cards', (_event, setId) => binderManager.listCards(setId));
+  ipcMain.handle('binder:search-cards', (_event, query) => binderManager.searchCards(query));
+  ipcMain.handle('binder:get-card', (_event, id) => binderManager.getCard(id));
+  ipcMain.handle('binder:create-card', (_event, data) => binderManager.createCard(data));
+  ipcMain.handle('binder:update-card', (_event, { id, patch }) =>
+    binderManager.updateCard(id, patch),
+  );
+  ipcMain.handle('binder:delete-card', (_event, id) => binderManager.deleteCard(id));
+  ipcMain.handle('binder:list-variants', (_event, cardId) => binderManager.listVariants(cardId));
+  ipcMain.handle('binder:create-variant', (_event, data) => binderManager.createVariant(data));
+  ipcMain.handle('binder:update-variant', (_event, { id, patch }) =>
+    binderManager.updateVariant(id, patch),
+  );
+  ipcMain.handle('binder:delete-variant', (_event, id) => binderManager.deleteVariant(id));
+  ipcMain.handle('binder:list-custom-lists', () => binderManager.listCustomLists());
+  ipcMain.handle('binder:create-custom-list', (_event, data) =>
+    binderManager.createCustomList(data),
+  );
+  ipcMain.handle('binder:update-custom-list', (_event, { id, patch }) =>
+    binderManager.updateCustomList(id, patch),
+  );
+  ipcMain.handle('binder:delete-custom-list', (_event, id) => binderManager.deleteCustomList(id));
+  ipcMain.handle('binder:list-custom-list-cards', (_event, listId) =>
+    binderManager.listCustomListCards(listId),
+  );
+  ipcMain.handle('binder:add-card-to-list', (_event, data) => binderManager.addCardToList(data));
+  ipcMain.handle('binder:remove-card-from-list', (_event, id) =>
+    binderManager.removeCardFromList(id),
+  );
+  ipcMain.handle('binder:reorder-custom-list-cards', (_event, { listId, ids }) =>
+    binderManager.reorderCustomListCards(listId, ids),
+  );
+  ipcMain.handle('binder:select-import-file', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'BinderTrack ZIP', extensions: ['zip'] }],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('binder:import-zip', async (_event, filePath) =>
+    binderTrack.importZip(binderManager, filePath, binderTrackMediaDir),
+  );
+  ipcMain.handle('binder:select-export-destination', async (_event, defaultName) => {
+    const result = await dialog.showSaveDialog({
+      defaultPath: defaultName,
+      filters: [{ name: 'BinderTrack ZIP', extensions: ['zip'] }],
+    });
+    return result.canceled ? null : result.filePath;
+  });
+  ipcMain.handle('binder:export-collection', async (_event, destination) => {
+    await binderTrack.exportCollectionZip(binderManager, destination);
+    return true;
+  });
+  ipcMain.handle('binder:export-set', async (_event, { setId, destination }) => {
+    await binderTrack.exportSetZip(binderManager, setId, destination);
+    return true;
+  });
+  ipcMain.handle('binder:export-custom-list', async (_event, { listId, destination }) => {
+    await binderTrack.exportCustomListZip(binderManager, listId, destination);
+    return true;
+  });
+  // Integración con la sección "Colección": vuelca cartas unitarias o el set
+  // completo como ítems de una colección genérica ya existente.
+  ipcMain.handle('binder:add-card-to-collection', (_event, { cardId, collectionId, variantId }) => {
+    const card = binderManager.getCard(cardId);
+    if (!card) throw new Error('La carta no existe.');
+    const collection = collectionManager.getCollection(collectionId);
+    if (!collection) throw new Error('La colección no existe.');
+    const set = card.setId ? binderManager.getSet(card.setId) : null;
+    const variant = variantId ? binderManager.getVariant(variantId) : null;
+    const values = binderTrack.mapCardToCollectionValues(card, set, variant, collection.columns);
+    collectionManager.addItem({
+      collectionId,
+      name: variant ? `${card.name} (${variant.type || 'Variante'})` : card.name,
+      imageUrl: binderTrack.asCollectionImageUrl(variant?.img || card.img),
+      tags: set ? [set.name] : [],
+      values,
+    });
+    return { added: 1 };
+  });
+  ipcMain.handle('binder:add-set-to-collection', (_event, { setId, collectionId }) => {
+    const set = binderManager.getSet(setId);
+    if (!set) throw new Error('El set no existe.');
+    const collection = collectionManager.getCollection(collectionId);
+    if (!collection) throw new Error('La colección no existe.');
+    let added = 0;
+    for (const card of binderManager.listCards(setId)) {
+      const values = binderTrack.mapCardToCollectionValues(card, set, null, collection.columns);
+      collectionManager.addItem({
+        collectionId,
+        name: card.name,
+        imageUrl: binderTrack.asCollectionImageUrl(card.img),
+        tags: [set.name],
+        values,
+      });
+      added += 1;
+    }
+    return { added };
   });
   createWindow();
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
