@@ -35,6 +35,20 @@ contextBridge.exposeInMainWorld('tools', {
   exportCollection: (id) => ipcRenderer.invoke('collections:export', id),
   importCollection: () => ipcRenderer.invoke('collections:import'),
   searchImages: (data) => ipcRenderer.invoke('images:search', data),
+  launchboxSelectCsv: () => ipcRenderer.invoke('launchbox:select-csv'),
+  launchboxMatchRows: (data) => ipcRenderer.invoke('launchbox:match-rows', data),
+  launchboxSingle: (data) => ipcRenderer.invoke('launchbox:single', data),
+  launchboxApplyOne: (data) => ipcRenderer.invoke('launchbox:apply-one', data),
+  launchboxBulkSearch: (data) => ipcRenderer.invoke('launchbox:bulk-search', data),
+  launchboxBulkCancel: () => ipcRenderer.invoke('launchbox:bulk-cancel'),
+  launchboxApplyBulk: (data) => ipcRenderer.invoke('launchbox:apply-bulk', data),
+  launchboxExportResults: (data) => ipcRenderer.invoke('launchbox:export-results', data),
+  launchboxApplyResultsCsv: (data) => ipcRenderer.invoke('launchbox:apply-results-csv', data),
+  onLaunchBoxBulkProgress: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('launchbox:bulk-progress', listener);
+    return () => ipcRenderer.removeListener('launchbox:bulk-progress', listener);
+  },
   analogListChannels: () => ipcRenderer.invoke('analog:channels:list'),
   analogCreateChannel: (data) => ipcRenderer.invoke('analog:channels:create', data),
   analogUpdateChannel: (id, patch) => ipcRenderer.invoke('analog:channels:update', { id, patch }),

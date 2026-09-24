@@ -48,6 +48,7 @@ const normalizeColumns = (columns) => {
 };
 const sanitizeValue = (column, value) => {
   if (value === '' || value === null || value === undefined) {
+    if (column.type === 'boolean') return false;
     if (column.required) throw new Error(`La columna "${column.label}" es obligatoria.`);
     return undefined;
   }

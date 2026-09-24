@@ -23,6 +23,7 @@ const hddInventory = require('./hddInventory.cjs');
 const mediaPlayer = require('./mediaPlayer.cjs');
 const trimTool = require('./trim.cjs');
 const binderTrack = require('./binderTrack.cjs');
+const launchboxMetadata = require('./launchboxMetadata.cjs');
 // Esquema privilegiado usado para transmitir video/audio/imágenes desde un
 // HDD catalogado directamente al reproductor, con soporte de rango (Range)
 // para permitir búsqueda (seek). Debe registrarse antes de que la app esté
@@ -39,6 +40,11 @@ let hddManager;
 let hddThumbnailsDir;
 let binderManager;
 let binderTrackMediaDir;
+let launchboxBulkCancelled = false;
+function emitLaunchBoxBulkProgress(data) {
+  for (const window of BrowserWindow.getAllWindows())
+    window.webContents.send('launchbox:bulk-progress', data);
+}
 let hddScanCancelled = false;
 let hddScanState = {
   running: false,
@@ -676,6 +682,224 @@ app.whenReady().then(async () => {
     collectionManager.updateItem(id, patch),
   );
   ipcMain.handle('collection-items:delete', (_event, id) => collectionManager.deleteItem(id));
+  ipcMain.handle(
+    'launchbox:single',
+    async (_event, { collectionId, platformColumn, name, platform }) => {
+      const items = collectionManager.listItems(collectionId);
+      const { matched } = launchboxMetadata.matchRowsToItems({
+        items,
+        rows: [{ name, platform }],
+        platformColumn,
+      });
+      const item = matched[0] || null;
+      const search = await launchboxMetadata.searchGameMetadata({ name, platform });
+      return {
+        inCollection: !!item,
+        itemId: item ? item.id : null,
+        found: search.found,
+        title: search.title || '',
+        platformLabel: search.platform || '',
+        metadata: search.metadata || null,
+      };
+    },
+  );
+  ipcMain.handle('launchbox:apply-one', (_event, { mapping, itemId, metadata }) => {
+    const current = collectionManager.getItem(itemId);
+    if (!current) throw new Error(`No existe el ítem ${itemId}`);
+    return collectionManager.updateItem(
+      itemId,
+      launchboxMetadata.buildItemPatch({ current, mapping, metadata }),
+    );
+  });
+  ipcMain.handle('launchbox:select-csv', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = result.filePaths[0];
+    const parsed = launchboxMetadata.parseCsv(await fs.readFile(filePath, 'utf8'));
+    const keys = launchboxMetadata.detectCsvKeyColumns(parsed.headers);
+    if (!keys)
+      throw new Error(
+        'El CSV debe tener columnas de "nombre" y "plataforma" (p. ej. "Name" y "Platform").',
+      );
+    const rows = parsed.rows
+      .map((row) => ({ name: row[keys.nameColumn], platform: row[keys.platformColumn] }))
+      .filter((row) => String(row.name || '').trim() !== '');
+    if (!rows.length) throw new Error('El CSV no contiene filas con nombre.');
+    return { fileName: path.basename(filePath), rows };
+  });
+  ipcMain.handle('launchbox:match-rows', (_event, { collectionId, platformColumn, rows }) => {
+    const items = collectionManager.listItems(collectionId);
+    const { matched, missing } = launchboxMetadata.matchRowsToItems({
+      items,
+      rows,
+      platformColumn,
+    });
+    return {
+      matched: matched.map(({ name, platform, itemId }) => ({ name, platform, itemId })),
+      missing: missing.map(({ name, platform }) => ({ name, platform })),
+    };
+  });
+  ipcMain.handle('launchbox:bulk-search', async (_event, { rows }) => {
+    launchboxBulkCancelled = false;
+    const results = [];
+    const total = rows.length;
+    let current = 0;
+    for (const row of rows) {
+      if (launchboxBulkCancelled) break;
+      emitLaunchBoxBulkProgress({
+        type: 'progress',
+        current,
+        total,
+        name: row.name,
+        message: `Consultando "${row.name}"`,
+      });
+      let entry = { name: row.name, platform: row.platform, itemId: row.itemId, found: false };
+      try {
+        const search = await launchboxMetadata.searchGameMetadata(
+          { name: row.name, platform: row.platform },
+          () => launchboxBulkCancelled,
+        );
+        entry = {
+          ...entry,
+          found: search.found,
+          title: search.title || '',
+          platformLabel: search.platform || '',
+          metadata: search.metadata || null,
+        };
+      } catch (error) {
+        if (error.message === 'CANCELLED') break;
+        entry.error = error.message;
+      }
+      results.push(entry);
+      current += 1;
+      emitLaunchBoxBulkProgress({
+        type: 'item-done',
+        current,
+        total,
+        name: row.name,
+        found: entry.found,
+      });
+      if (!launchboxBulkCancelled && current < total)
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    emitLaunchBoxBulkProgress({
+      type: launchboxBulkCancelled ? 'cancelled' : 'done',
+      current,
+      total,
+    });
+    return results;
+  });
+  ipcMain.handle('launchbox:bulk-cancel', () => {
+    launchboxBulkCancelled = true;
+    return true;
+  });
+  ipcMain.handle('launchbox:apply-bulk', (_event, { collectionId, mapping, results }) => {
+    let applied = 0;
+    let missing = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const entry of results) {
+      if (!entry.found || !entry.itemId) {
+        skipped += 1;
+        continue;
+      }
+      const current = collectionManager.getItem(entry.itemId);
+      if (!current) {
+        missing += 1;
+        continue;
+      }
+      try {
+        collectionManager.updateItem(
+          entry.itemId,
+          launchboxMetadata.buildItemPatch({ current, mapping, metadata: entry.metadata }),
+        );
+        applied += 1;
+      } catch (error) {
+        failed += 1;
+      }
+    }
+    return { applied, missing, skipped, failed };
+  });
+  ipcMain.handle('launchbox:export-results', async (_event, { results }) => {
+    const csv = launchboxMetadata.stringifyCsv(
+      launchboxMetadata.buildResultCsvRows(results),
+      launchboxMetadata.RESULT_CSV_HEADERS,
+    );
+    const save = await dialog.showSaveDialog({
+      defaultPath: `launchbox-metadata-${new Date().toISOString().slice(0, 10)}.csv`,
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (save.canceled || !save.filePath) return null;
+    await fs.writeFile(save.filePath, csv, 'utf8');
+    return save.filePath;
+  });
+  ipcMain.handle('launchbox:apply-results-csv', async (_event, { collectionId, mapping }) => {
+    const open = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (open.canceled || !open.filePaths[0]) return null;
+    const filePath = open.filePaths[0];
+    const parsed = launchboxMetadata.parseCsv(await fs.readFile(filePath, 'utf8'));
+    const keys = launchboxMetadata.detectCsvKeyColumns(parsed.headers);
+    if (!keys)
+      throw new Error(
+        'El CSV debe tener columnas de "nombre" y "plataforma" (p. ej. "Name" y "Platform").',
+      );
+    const metadataCols = launchboxMetadata.detectMetadataColumns(parsed.headers);
+    const rows = parsed.rows.map((row) => ({
+      name: row[keys.nameColumn],
+      platform: row[keys.platformColumn],
+      metadata: {
+        boxartUrl: metadataCols.boxartColumn ? row[metadataCols.boxartColumn] || '' : '',
+        releaseDate: metadataCols.releaseDateColumn
+          ? row[metadataCols.releaseDateColumn] || ''
+          : '',
+        publisher: metadataCols.publisherColumn ? row[metadataCols.publisherColumn] || '' : '',
+        developer: metadataCols.developerColumn ? row[metadataCols.developerColumn] || '' : '',
+      },
+    }));
+    const items = collectionManager.listItems(collectionId);
+    let applied = 0;
+    let missing = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const row of rows) {
+      if (String(row.name || '').trim() === '') continue;
+      const { matched } = launchboxMetadata.matchRowsToItems({
+        items,
+        rows: [{ name: row.name, platform: row.platform }],
+        platformColumn: mapping.platformColumn,
+      });
+      const item = matched[0];
+      if (!item) {
+        missing += 1;
+        continue;
+      }
+      if (
+        !row.metadata.boxartUrl &&
+        !row.metadata.releaseDate &&
+        !row.metadata.publisher &&
+        !row.metadata.developer
+      ) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        collectionManager.updateItem(
+          item.id,
+          launchboxMetadata.buildItemPatch({ current: item, mapping, metadata: row.metadata }),
+        );
+        applied += 1;
+      } catch (error) {
+        failed += 1;
+      }
+    }
+    return { fileName: path.basename(filePath), applied, missing, skipped, failed };
+  });
   ipcMain.handle('collections:export', async (_event, id) => {
     const data = collectionManager.exportCollection(id);
     const result = await dialog.showSaveDialog({

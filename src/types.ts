@@ -277,6 +277,56 @@ export type CollectionItem = {
   createdAt: string;
   updatedAt: string;
 };
+export type LaunchBoxMetadata = {
+  boxartUrl: string;
+  releaseDate: string;
+  publisher: string;
+  developer: string;
+};
+export type LaunchBoxMapping = {
+  platformColumn: string;
+  releaseDateColumn: string;
+  publisherColumn: string;
+  developerColumn: string;
+};
+export type LaunchBoxCsvRow = { name: string; platform: string };
+export type LaunchBoxMatchResult = {
+  matched: { name: string; platform: string; itemId: number }[];
+  missing: { name: string; platform: string }[];
+};
+export type LaunchBoxBulkProgress = {
+  type: 'progress' | 'item-done' | 'cancelled' | 'done';
+  current: number;
+  total: number;
+  name?: string;
+  found?: boolean;
+  message?: string;
+};
+export type LaunchBoxBulkResult = {
+  name: string;
+  platform: string;
+  itemId: number | null;
+  found: boolean;
+  title?: string;
+  platformLabel?: string;
+  metadata?: LaunchBoxMetadata | null;
+  error?: string;
+};
+export type LaunchBoxSingleResult = {
+  inCollection: boolean;
+  itemId: number | null;
+  found: boolean;
+  title: string;
+  platformLabel: string;
+  metadata: LaunchBoxMetadata | null;
+};
+export type LaunchBoxApplySummary = {
+  applied: number;
+  missing: number;
+  skipped: number;
+  failed: number;
+  fileName?: string;
+};
 export type ImageSearchEngine = 'google' | 'bing' | 'duckduckgo' | 'wikimedia' | 'openverse';
 export type ImageSearchResult = {
   imageUrl: string;
@@ -504,6 +554,38 @@ declare global {
         engine: ImageSearchEngine;
         page?: number;
       }): Promise<ImageSearchResult[]>;
+      launchboxSelectCsv(): Promise<{ fileName: string; rows: LaunchBoxCsvRow[] } | null>;
+      launchboxMatchRows(data: {
+        collectionId: number;
+        platformColumn: string;
+        rows: LaunchBoxCsvRow[];
+      }): Promise<LaunchBoxMatchResult>;
+      launchboxSingle(data: {
+        collectionId: number;
+        platformColumn: string;
+        name: string;
+        platform: string;
+      }): Promise<LaunchBoxSingleResult>;
+      launchboxApplyOne(data: {
+        mapping: LaunchBoxMapping;
+        itemId: number;
+        metadata: LaunchBoxMetadata;
+      }): Promise<CollectionItem>;
+      launchboxBulkSearch(data: {
+        rows: (LaunchBoxCsvRow & { itemId: number | null })[];
+      }): Promise<LaunchBoxBulkResult[]>;
+      launchboxBulkCancel(): Promise<boolean>;
+      launchboxApplyBulk(data: {
+        collectionId: number;
+        mapping: LaunchBoxMapping;
+        results: LaunchBoxBulkResult[];
+      }): Promise<LaunchBoxApplySummary>;
+      launchboxExportResults(data: { results: LaunchBoxBulkResult[] }): Promise<string | null>;
+      launchboxApplyResultsCsv(data: {
+        collectionId: number;
+        mapping: LaunchBoxMapping;
+      }): Promise<LaunchBoxApplySummary | null>;
+      onLaunchBoxBulkProgress(callback: (data: LaunchBoxBulkProgress) => void): () => void;
       analogListChannels(): Promise<AnalogChannel[]>;
       analogCreateChannel(data: {
         name: string;

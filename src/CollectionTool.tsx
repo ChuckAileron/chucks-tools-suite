@@ -8,8 +8,9 @@ import type {
   ImageSearchResult,
 } from './types';
 import WishlistView from './WishlistView';
+import LaunchBoxMetadataPanel from './LaunchBoxMetadataPanel';
 
-type View = 'catalog' | 'wishlist' | 'settings';
+type View = 'catalog' | 'wishlist' | 'metadata' | 'settings';
 type CatalogView = 'grid' | 'list';
 type SortDirection = 'asc' | 'desc';
 const CATALOG_VIEW_KEY = 'chucks.collection.catalog-view';
@@ -225,6 +226,9 @@ export default function CollectionTool() {
         <button className={view === 'wishlist' ? 'active' : ''} onClick={() => setView('wishlist')}>
           Wishlist
         </button>
+        <button className={view === 'metadata' ? 'active' : ''} onClick={() => setView('metadata')}>
+          Metadata LaunchBox
+        </button>
       </div>
       <div className="workspace collection-workspace">
         {view !== 'wishlist' && (
@@ -406,6 +410,20 @@ export default function CollectionTool() {
           </>
         ) : view === 'wishlist' ? (
           <WishlistView />
+        ) : view === 'metadata' ? (
+          <LaunchBoxMetadataPanel
+            key={active?.id ?? 'none'}
+            collection={active}
+            collections={collections}
+            onCollectionChanged={() => {
+              if (activeId)
+                window.tools
+                  .getCollectionItems(activeId, search)
+                  .then(setItems)
+                  .catch((error) => setMessage(String(error)));
+            }}
+            notify={setMessage}
+          />
         ) : (
           <CollectionEditor
             draft={collectionDraft}
@@ -814,13 +832,13 @@ function ImageSearchModal({
                 title={result.title || result.imageUrl}
                 aria-pressed={selected?.imageUrl === result.imageUrl}
                 className={selected?.imageUrl === result.imageUrl ? 'selected' : ''}
-                onClick={() =>
-                  setSelected(
-                    selected?.imageUrl === result.imageUrl ? null : result,
-                  )
-                }
+                onClick={() => setSelected(selected?.imageUrl === result.imageUrl ? null : result)}
               >
-                <img src={result.thumbnailUrl} alt={result.title || 'Resultado de imagen'} loading="lazy" />
+                <img
+                  src={result.thumbnailUrl}
+                  alt={result.title || 'Resultado de imagen'}
+                  loading="lazy"
+                />
                 <small>{result.source}</small>
               </button>
             ))}
@@ -828,15 +846,15 @@ function ImageSearchModal({
         ) : (
           !loading && (
             <p className="image-search-empty">
-              {searched ? 'Sin resultados, prueba con otro término.' : 'Busca y haz clic en una imagen.'}
+              {searched
+                ? 'Sin resultados, prueba con otro término.'
+                : 'Busca y haz clic en una imagen.'}
             </p>
           )
         )}
         {loading && <p className="image-search-empty">Buscando imágenes...</p>}
         <footer>
-          <span>
-            {selected ? `1 imagen seleccionada (${selected.source})` : 'Sin selección'}
-          </span>
+          <span>{selected ? `1 imagen seleccionada (${selected.source})` : 'Sin selección'}</span>
           <div>
             {results.length > 0 && (
               <button
@@ -865,7 +883,8 @@ function ImageSearchModal({
   );
 }
 
-function ColumnInput({  column,
+function ColumnInput({
+  column,
   value,
   setValue,
 }: {

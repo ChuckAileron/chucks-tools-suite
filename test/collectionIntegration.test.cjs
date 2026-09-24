@@ -289,6 +289,26 @@ test('omite valores vacíos de columnas no obligatorias', () => {
   }
 });
 
+test('las booleanas obligatorias quedan en falso por defecto', () => {
+  const fixture = managerForTest();
+  try {
+    const collection = fixture.manager.createCollection({
+      name: 'Booleanas',
+      columns: [{ name: 'owned', label: '¿En Colección?', type: 'boolean', required: true }],
+    });
+    const item = fixture.manager.addItem({ collectionId: collection.id, name: 'X' });
+    assert.equal(item.values.owned, false);
+    const viaEditor = fixture.manager.addItem({
+      collectionId: collection.id,
+      name: 'Y',
+      values: { owned: '' },
+    });
+    assert.equal(viaEditor.values.owned, false);
+  } finally {
+    fixture.close();
+  }
+});
+
 test('valida booleanos, fechas, URLs y etiquetas en las columnas', () => {
   const fixture = managerForTest();
   try {

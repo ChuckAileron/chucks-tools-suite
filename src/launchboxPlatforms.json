@@ -1,0 +1,955 @@
+{
+  "total": 190,
+  "platforms": [
+    {
+      "id": 1,
+      "name": "3DO Interactive Multiplayer",
+      "imageUrl": "https://images.launchbox-app.com/platforms/1e62345f-2dc3-4aa7-a560-33dc37bff6f2.png"
+    },
+    {
+      "id": 2,
+      "name": "Commodore Amiga",
+      "imageUrl": "https://images.launchbox-app.com/platforms/b5f8740e-d0f8-4592-a3eb-91cfe5a718f2.png"
+    },
+    {
+      "id": 3,
+      "name": "Amstrad CPC",
+      "imageUrl": "https://images.launchbox-app.com/platforms/9def2daa-49b1-4b61-9adc-6eed9f7b9397.png"
+    },
+    {
+      "id": 4,
+      "name": "Android",
+      "imageUrl": "https://images.launchbox-app.com/platforms/3d078984-39cf-4d6d-8a21-022b0beffe91.png"
+    },
+    {
+      "id": 5,
+      "name": "Arcade",
+      "imageUrl": "https://images.launchbox-app.com/platforms/2dde1f35-1d7d-4394-b571-c42dc301e801.png"
+    },
+    {
+      "id": 6,
+      "name": "Atari 2600",
+      "imageUrl": "https://images.launchbox-app.com/platforms/2463f8e6-8765-464f-b7b3-a9640c158d6f.png"
+    },
+    {
+      "id": 7,
+      "name": "Atari 5200",
+      "imageUrl": "https://images.launchbox-app.com/platforms/36a0cd69-320b-46e4-b4e4-1a7e72094bd9.png"
+    },
+    {
+      "id": 8,
+      "name": "Atari 7800",
+      "imageUrl": "https://images.launchbox-app.com/platforms/cad42053-485a-4ace-8038-bdfca718a839.png"
+    },
+    {
+      "id": 9,
+      "name": "Atari Jaguar",
+      "imageUrl": "https://images.launchbox-app.com/platforms/e87f0bc0-d1aa-4e95-9c1f-4431543d39c2.png"
+    },
+    {
+      "id": 10,
+      "name": "Atari Jaguar CD",
+      "imageUrl": "https://images.launchbox-app.com/platforms/a4fa40f2-64ef-4631-951c-4490e4e4546d.png"
+    },
+    {
+      "id": 11,
+      "name": "Atari Lynx",
+      "imageUrl": "https://images.launchbox-app.com/platforms/e043932e-b44b-41f3-b8d8-e7d539a14ee8.png"
+    },
+    {
+      "id": 12,
+      "name": "Atari XEGS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/ba5627bb-86fb-4623-8b0c-a748fe70f8bb.png"
+    },
+    {
+      "id": 13,
+      "name": "ColecoVision",
+      "imageUrl": "https://images.launchbox-app.com/platforms/c08a5600-a720-4ac0-a1a9-68ace182b78b.png"
+    },
+    {
+      "id": 14,
+      "name": "Commodore 64",
+      "imageUrl": "https://images.launchbox-app.com/platforms/c371eaae-ea43-4e84-951e-be20e4c5572c.png"
+    },
+    {
+      "id": 15,
+      "name": "Mattel Intellivision",
+      "imageUrl": "https://images.launchbox-app.com/platforms/4a4af29a-5729-4537-a098-cf4c5f999a31.png"
+    },
+    {
+      "id": 16,
+      "name": "Apple iOS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/29b1bc36-837f-490f-8ae0-062ea4ab2986.png"
+    },
+    {
+      "id": 17,
+      "name": "Apple Mac OS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/318917a8-fef4-4de7-9760-e022bea4cd76.png"
+    },
+    {
+      "id": 18,
+      "name": "Microsoft Xbox",
+      "imageUrl": "https://images.launchbox-app.com/platforms/463f9e14-c700-4a2a-98db-15abeb92df9d.png"
+    },
+    {
+      "id": 19,
+      "name": "Microsoft Xbox 360",
+      "imageUrl": "https://images.launchbox-app.com/platforms/1bfcdb90-33d1-4ff9-9b60-d3ee6bc391af.png"
+    },
+    {
+      "id": 20,
+      "name": "Microsoft Xbox One",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5698ea3e-d5ba-4069-9c3a-c2923087ee1b.png"
+    },
+    {
+      "id": 21,
+      "name": "SNK Neo Geo Pocket",
+      "imageUrl": null
+    },
+    {
+      "id": 22,
+      "name": "SNK Neo Geo Pocket Color",
+      "imageUrl": null
+    },
+    {
+      "id": 23,
+      "name": "SNK Neo Geo AES",
+      "imageUrl": null
+    },
+    {
+      "id": 24,
+      "name": "Nintendo 3DS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/dc44a8aa-97da-49da-9952-0de2f09ea201.png"
+    },
+    {
+      "id": 25,
+      "name": "Nintendo 64",
+      "imageUrl": "https://images.launchbox-app.com/platforms/50289ed4-0106-4e41-8dcd-874c200ed520.png"
+    },
+    {
+      "id": 26,
+      "name": "Nintendo DS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/2a802398-9228-4c1c-bcaa-dfeb70a6762d.png"
+    },
+    {
+      "id": 27,
+      "name": "Nintendo Entertainment System",
+      "imageUrl": "https://images.launchbox-app.com/platforms/b1c55048-acf5-4993-a1ad-3bcceccfe83b.png"
+    },
+    {
+      "id": 28,
+      "name": "Nintendo Game Boy",
+      "imageUrl": "https://images.launchbox-app.com/platforms/64fe5ad8-11e3-4a9e-830a-e4ae9135b5b0.png"
+    },
+    {
+      "id": 29,
+      "name": "Nintendo Game Boy Advance",
+      "imageUrl": "https://images.launchbox-app.com/platforms/ce43a8f2-609b-4000-83ce-048cdaed8bd9.png"
+    },
+    {
+      "id": 30,
+      "name": "Nintendo Game Boy Color",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5d6e6b6b-75eb-4403-be41-fa7d63f3f93e.png"
+    },
+    {
+      "id": 31,
+      "name": "Nintendo GameCube",
+      "imageUrl": "https://images.launchbox-app.com/platforms/552c4d91-53dd-45ab-8ce1-003675726ddd.png"
+    },
+    {
+      "id": 32,
+      "name": "Nintendo Virtual Boy",
+      "imageUrl": null
+    },
+    {
+      "id": 33,
+      "name": "Nintendo Wii",
+      "imageUrl": null
+    },
+    {
+      "id": 34,
+      "name": "Nintendo Wii U",
+      "imageUrl": null
+    },
+    {
+      "id": 35,
+      "name": "Ouya",
+      "imageUrl": null
+    },
+    {
+      "id": 37,
+      "name": "Philips CD-i",
+      "imageUrl": null
+    },
+    {
+      "id": 38,
+      "name": "Sega 32X",
+      "imageUrl": null
+    },
+    {
+      "id": 39,
+      "name": "Sega CD",
+      "imageUrl": null
+    },
+    {
+      "id": 40,
+      "name": "Sega Dreamcast",
+      "imageUrl": null
+    },
+    {
+      "id": 41,
+      "name": "Sega Game Gear",
+      "imageUrl": null
+    },
+    {
+      "id": 42,
+      "name": "Sega Genesis",
+      "imageUrl": null
+    },
+    {
+      "id": 43,
+      "name": "Sega Master System",
+      "imageUrl": null
+    },
+    {
+      "id": 45,
+      "name": "Sega Saturn",
+      "imageUrl": null
+    },
+    {
+      "id": 46,
+      "name": "Sinclair ZX Spectrum",
+      "imageUrl": null
+    },
+    {
+      "id": 47,
+      "name": "Sony Playstation",
+      "imageUrl": null
+    },
+    {
+      "id": 48,
+      "name": "Sony Playstation 2",
+      "imageUrl": null
+    },
+    {
+      "id": 49,
+      "name": "Sony Playstation 3",
+      "imageUrl": null
+    },
+    {
+      "id": 50,
+      "name": "Sony Playstation 4",
+      "imageUrl": null
+    },
+    {
+      "id": 51,
+      "name": "Sony Playstation Vita",
+      "imageUrl": null
+    },
+    {
+      "id": 52,
+      "name": "Sony PSP",
+      "imageUrl": null
+    },
+    {
+      "id": 53,
+      "name": "Super Nintendo Entertainment System",
+      "imageUrl": null
+    },
+    {
+      "id": 54,
+      "name": "NEC TurboGrafx-16",
+      "imageUrl": null
+    },
+    {
+      "id": 55,
+      "name": "WonderSwan",
+      "imageUrl": null
+    },
+    {
+      "id": 56,
+      "name": "WonderSwan Color",
+      "imageUrl": null
+    },
+    {
+      "id": 57,
+      "name": "Magnavox Odyssey 2",
+      "imageUrl": null
+    },
+    {
+      "id": 58,
+      "name": "Fairchild Channel F",
+      "imageUrl": "https://images.launchbox-app.com/platforms/a5f36117-d2f1-4d1c-a8db-005a552e2a53.png"
+    },
+    {
+      "id": 59,
+      "name": "BBC Microcomputer System",
+      "imageUrl": "https://images.launchbox-app.com/platforms/cca86b7d-9bb9-4c31-8fe9-40c719881bc6.png"
+    },
+    {
+      "id": 60,
+      "name": "Memotech MTX512",
+      "imageUrl": null
+    },
+    {
+      "id": 61,
+      "name": "Camputers Lynx",
+      "imageUrl": "https://images.launchbox-app.com/platforms/f96c76e8-672e-44ec-8663-8982be9f6c79.png"
+    },
+    {
+      "id": 63,
+      "name": "Tiger Game.com",
+      "imageUrl": null
+    },
+    {
+      "id": 64,
+      "name": "Oric Atmos",
+      "imageUrl": null
+    },
+    {
+      "id": 65,
+      "name": "Acorn Electron",
+      "imageUrl": "https://images.launchbox-app.com/platforms/cefbb75f-6c42-4738-bc56-e36a6ac539d1.png"
+    },
+    {
+      "id": 66,
+      "name": "Dragon 32/64",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5f76ab1a-89ae-4444-a9ec-1b6b6d38924e.png"
+    },
+    {
+      "id": 67,
+      "name": "Entex Adventure Vision",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5bccdd34-7b39-4adc-868d-aeadebb96f48.png"
+    },
+    {
+      "id": 68,
+      "name": "APF Imagination Machine",
+      "imageUrl": "https://images.launchbox-app.com/platforms/d7d07bb8-3467-45e3-8b77-303f404d7e52.png"
+    },
+    {
+      "id": 69,
+      "name": "Mattel Aquarius",
+      "imageUrl": null
+    },
+    {
+      "id": 70,
+      "name": "Jupiter Ace",
+      "imageUrl": null
+    },
+    {
+      "id": 71,
+      "name": "SAM Coupé",
+      "imageUrl": null
+    },
+    {
+      "id": 72,
+      "name": "Enterprise",
+      "imageUrl": "https://images.launchbox-app.com/platforms/4f63cd7e-8033-4c80-aa25-ae4f0165ee49.png"
+    },
+    {
+      "id": 73,
+      "name": "EACA EG2000 Colour Genie",
+      "imageUrl": "https://images.launchbox-app.com/platforms/7cf9bc69-35c0-4310-9443-f6f662856de2.png"
+    },
+    {
+      "id": 74,
+      "name": "Acorn Archimedes",
+      "imageUrl": "https://images.launchbox-app.com/platforms/c3b2f18b-667f-4c73-be36-261125b801f6.png"
+    },
+    {
+      "id": 75,
+      "name": "Tapwave Zodiac",
+      "imageUrl": null
+    },
+    {
+      "id": 76,
+      "name": "Atari ST",
+      "imageUrl": "https://images.launchbox-app.com/platforms/fada6bc6-082d-4c32-a5ec-8707d1ed54e3.png"
+    },
+    {
+      "id": 77,
+      "name": "Bally Astrocade",
+      "imageUrl": "https://images.launchbox-app.com/platforms/d816f050-e72c-4af6-bfe0-3c7e29600a20.png"
+    },
+    {
+      "id": 78,
+      "name": "Magnavox Odyssey",
+      "imageUrl": "https://images.launchbox-app.com/platforms/2b6bc00b-edcd-43f1-9c57-df3db0e77d47.png"
+    },
+    {
+      "id": 79,
+      "name": "Emerson Arcadia 2001",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5c199325-5613-4576-9f23-51342cde0a97.png"
+    },
+    {
+      "id": 80,
+      "name": "Sega SG-1000",
+      "imageUrl": null
+    },
+    {
+      "id": 81,
+      "name": "Epoch Super Cassette Vision",
+      "imageUrl": "https://images.launchbox-app.com/platforms/ff66ee2c-ada0-46ad-8984-a704fce4d0e3.png"
+    },
+    {
+      "id": 82,
+      "name": "Microsoft MSX",
+      "imageUrl": null
+    },
+    {
+      "id": 83,
+      "name": "MS-DOS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/c6478844-33c2-4b9c-b5cd-4b2250524152.png"
+    },
+    {
+      "id": 84,
+      "name": "Windows",
+      "imageUrl": null
+    },
+    {
+      "id": 85,
+      "name": "Web Browser",
+      "imageUrl": null
+    },
+    {
+      "id": 88,
+      "name": "Sega Model 2",
+      "imageUrl": null
+    },
+    {
+      "id": 93,
+      "name": "Namco System 22",
+      "imageUrl": null
+    },
+    {
+      "id": 94,
+      "name": "Sega Model 3",
+      "imageUrl": null
+    },
+    {
+      "id": 96,
+      "name": "Sega System 32",
+      "imageUrl": null
+    },
+    {
+      "id": 97,
+      "name": "Sega System 16",
+      "imageUrl": null
+    },
+    {
+      "id": 98,
+      "name": "Sammy Atomiswave",
+      "imageUrl": null
+    },
+    {
+      "id": 99,
+      "name": "Sega Naomi",
+      "imageUrl": null
+    },
+    {
+      "id": 100,
+      "name": "Sega Naomi 2",
+      "imageUrl": null
+    },
+    {
+      "id": 102,
+      "name": "Atari 800",
+      "imageUrl": "https://images.launchbox-app.com/platforms/2a4b22a8-4018-4c34-96d1-ffcbb982551e.png"
+    },
+    {
+      "id": 104,
+      "name": "Sega Model 1",
+      "imageUrl": null
+    },
+    {
+      "id": 105,
+      "name": "Sega Pico",
+      "imageUrl": null
+    },
+    {
+      "id": 107,
+      "name": "Acorn Atom",
+      "imageUrl": "https://images.launchbox-app.com/platforms/0b129c9b-f3c9-4391-86fc-c468d9b10d30.png"
+    },
+    {
+      "id": 109,
+      "name": "Amstrad GX4000",
+      "imageUrl": "https://images.launchbox-app.com/platforms/f3dbdb5f-de9a-4b95-b401-e992a46ef84e.png"
+    },
+    {
+      "id": 111,
+      "name": "Apple II",
+      "imageUrl": "https://images.launchbox-app.com/platforms/1d337081-c6ef-463b-9877-81f765f8cfd1.png"
+    },
+    {
+      "id": 112,
+      "name": "Apple IIGS",
+      "imageUrl": "https://images.launchbox-app.com/platforms/2702dab2-d495-4dfe-9c76-bb548f94d084.png"
+    },
+    {
+      "id": 114,
+      "name": "Casio Loopy",
+      "imageUrl": "https://images.launchbox-app.com/platforms/cf04256b-f725-4da4-8e1a-37b621d37f99.png"
+    },
+    {
+      "id": 115,
+      "name": "Casio PV-1000",
+      "imageUrl": "https://images.launchbox-app.com/platforms/6dea6dec-cc18-445a-a09d-ea941c0cf0ed.png"
+    },
+    {
+      "id": 117,
+      "name": "Coleco ADAM",
+      "imageUrl": "https://images.launchbox-app.com/platforms/13800a87-c169-4c2c-9c73-865548d88b21.png"
+    },
+    {
+      "id": 118,
+      "name": "Commodore 128",
+      "imageUrl": "https://images.launchbox-app.com/platforms/613ea525-faef-4689-a925-657a693a31c8.png"
+    },
+    {
+      "id": 119,
+      "name": "Commodore Amiga CD32",
+      "imageUrl": "https://images.launchbox-app.com/platforms/38864fcb-f095-4572-ad5f-692ad1a20256.png"
+    },
+    {
+      "id": 120,
+      "name": "Commodore CDTV",
+      "imageUrl": "https://images.launchbox-app.com/platforms/8b727d8f-160a-4b05-9b8a-82869c228b5c.png"
+    },
+    {
+      "id": 121,
+      "name": "Commodore Plus 4",
+      "imageUrl": "https://images.launchbox-app.com/platforms/a3e91abb-50bc-44b2-8d46-6550c801c035.png"
+    },
+    {
+      "id": 122,
+      "name": "Commodore VIC-20",
+      "imageUrl": "https://images.launchbox-app.com/platforms/4a9d36cc-6a03-4862-9fcc-f74b33e8da63.png"
+    },
+    {
+      "id": 124,
+      "name": "Fujitsu FM Towns Marty",
+      "imageUrl": "https://images.launchbox-app.com/platforms/86819bbf-41f4-4844-a133-25fa7ac5fb3d.png"
+    },
+    {
+      "id": 125,
+      "name": "GCE Vectrex",
+      "imageUrl": "https://images.launchbox-app.com/platforms/7b474152-29e5-4157-a7ea-5b50e6345776.png"
+    },
+    {
+      "id": 126,
+      "name": "Nuon",
+      "imageUrl": null
+    },
+    {
+      "id": 127,
+      "name": "Mega Duck",
+      "imageUrl": null
+    },
+    {
+      "id": 128,
+      "name": "Sharp X68000",
+      "imageUrl": null
+    },
+    {
+      "id": 129,
+      "name": "Tandy TRS-80",
+      "imageUrl": null
+    },
+    {
+      "id": 131,
+      "name": "Elektronika BK",
+      "imageUrl": "https://images.launchbox-app.com/platforms/f05ad5f7-462a-4774-8194-6c34780d310f.png"
+    },
+    {
+      "id": 132,
+      "name": "Epoch Game Pocket Computer",
+      "imageUrl": "https://images.launchbox-app.com/platforms/1f62f85c-c5cc-4b5f-91e0-8ec9a487463c.png"
+    },
+    {
+      "id": 133,
+      "name": "Funtech Super Acan",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5f283da5-a0ad-4bfb-8ab2-75412c8b4fbe.png"
+    },
+    {
+      "id": 135,
+      "name": "GamePark GP32",
+      "imageUrl": "https://images.launchbox-app.com/platforms/9925f1a5-bb96-4201-8cf5-d5aa164bcf23.png"
+    },
+    {
+      "id": 136,
+      "name": "Hartung Game Master",
+      "imageUrl": null
+    },
+    {
+      "id": 137,
+      "name": "Interton VC 4000",
+      "imageUrl": "https://images.launchbox-app.com/platforms/b6c1bac3-7db0-4007-b703-f40dd03b81ea.png"
+    },
+    {
+      "id": 138,
+      "name": "MUGEN",
+      "imageUrl": null
+    },
+    {
+      "id": 139,
+      "name": "OpenBOR",
+      "imageUrl": null
+    },
+    {
+      "id": 140,
+      "name": "Philips VG 5000",
+      "imageUrl": null
+    },
+    {
+      "id": 141,
+      "name": "Philips Videopac+",
+      "imageUrl": null
+    },
+    {
+      "id": 142,
+      "name": "RCA Studio II",
+      "imageUrl": null
+    },
+    {
+      "id": 143,
+      "name": "ScummVM",
+      "imageUrl": null
+    },
+    {
+      "id": 144,
+      "name": "Sega Dreamcast VMU",
+      "imageUrl": null
+    },
+    {
+      "id": 145,
+      "name": "Sega SC-3000",
+      "imageUrl": null
+    },
+    {
+      "id": 146,
+      "name": "Sega ST-V",
+      "imageUrl": null
+    },
+    {
+      "id": 147,
+      "name": "Sinclair ZX-81",
+      "imageUrl": null
+    },
+    {
+      "id": 148,
+      "name": "Sord M5",
+      "imageUrl": null
+    },
+    {
+      "id": 149,
+      "name": "Texas Instruments TI 99/4A",
+      "imageUrl": null
+    },
+    {
+      "id": 151,
+      "name": "Pinball",
+      "imageUrl": null
+    },
+    {
+      "id": 152,
+      "name": "VTech CreatiVision",
+      "imageUrl": null
+    },
+    {
+      "id": 153,
+      "name": "Watara Supervision",
+      "imageUrl": null
+    },
+    {
+      "id": 154,
+      "name": "WoW Action Max",
+      "imageUrl": null
+    },
+    {
+      "id": 155,
+      "name": "ZiNc",
+      "imageUrl": null
+    },
+    {
+      "id": 157,
+      "name": "Nintendo Famicom Disk System",
+      "imageUrl": "https://images.launchbox-app.com/platforms/8bad3aa9-d08c-4591-850e-d620107ce48c.png"
+    },
+    {
+      "id": 161,
+      "name": "NEC PC-FX",
+      "imageUrl": null
+    },
+    {
+      "id": 162,
+      "name": "PC Engine SuperGrafx",
+      "imageUrl": null
+    },
+    {
+      "id": 163,
+      "name": "NEC TurboGrafx-CD",
+      "imageUrl": null
+    },
+    {
+      "id": 164,
+      "name": "TRS-80 Color Computer",
+      "imageUrl": null
+    },
+    {
+      "id": 166,
+      "name": "Nintendo Game & Watch",
+      "imageUrl": null
+    },
+    {
+      "id": 167,
+      "name": "SNK Neo Geo CD",
+      "imageUrl": null
+    },
+    {
+      "id": 168,
+      "name": "Nintendo Satellaview",
+      "imageUrl": null
+    },
+    {
+      "id": 169,
+      "name": "Taito Type X",
+      "imageUrl": null
+    },
+    {
+      "id": 170,
+      "name": "XaviXPORT",
+      "imageUrl": null
+    },
+    {
+      "id": 171,
+      "name": "Mattel HyperScan",
+      "imageUrl": null
+    },
+    {
+      "id": 172,
+      "name": "Game Wave Family Entertainment System",
+      "imageUrl": "https://images.launchbox-app.com/platforms/965cddd6-15dd-4707-9cae-52fda8191bb5.png"
+    },
+    {
+      "id": 173,
+      "name": "Sega CD 32X",
+      "imageUrl": null
+    },
+    {
+      "id": 174,
+      "name": "Aamber Pegasus",
+      "imageUrl": "https://images.launchbox-app.com/platforms/40ff60c6-f18c-460f-8249-f9321bee1cfc.png"
+    },
+    {
+      "id": 175,
+      "name": "Apogee BK-01",
+      "imageUrl": "https://images.launchbox-app.com/platforms/c75c77e6-2a2c-488b-94af-a2d815bb5522.png"
+    },
+    {
+      "id": 180,
+      "name": "Commodore MAX Machine",
+      "imageUrl": "https://images.launchbox-app.com/platforms/1c7bc4d3-a5b9-4e92-bf2f-1b45dc162cfb.png"
+    },
+    {
+      "id": 181,
+      "name": "Commodore PET",
+      "imageUrl": "https://images.launchbox-app.com/platforms/986d4836-5f93-46c7-b4a4-78f4fd3edf41.png"
+    },
+    {
+      "id": 183,
+      "name": "Exelvision EXL 100",
+      "imageUrl": null
+    },
+    {
+      "id": 184,
+      "name": "Exidy Sorcerer",
+      "imageUrl": "https://images.launchbox-app.com/platforms/1c5f8b21-b2ea-4a6d-a1ca-f8ccf29cc78d.png"
+    },
+    {
+      "id": 186,
+      "name": "Fujitsu FM-7",
+      "imageUrl": "https://images.launchbox-app.com/platforms/d45190c3-5600-4c46-975a-a30ebbf3ac36.png"
+    },
+    {
+      "id": 187,
+      "name": "Hector HRX",
+      "imageUrl": null
+    },
+    {
+      "id": 189,
+      "name": "Matra and Hachette Alice",
+      "imageUrl": null
+    },
+    {
+      "id": 190,
+      "name": "Microsoft MSX2",
+      "imageUrl": null
+    },
+    {
+      "id": 191,
+      "name": "Microsoft MSX2+",
+      "imageUrl": null
+    },
+    {
+      "id": 192,
+      "name": "NEC PC-8801",
+      "imageUrl": null
+    },
+    {
+      "id": 193,
+      "name": "NEC PC-9801",
+      "imageUrl": null
+    },
+    {
+      "id": 194,
+      "name": "Nintendo 64DD",
+      "imageUrl": "https://images.launchbox-app.com/platforms/5d9ec7ee-af5d-47e5-8bb6-be4b09effcb7.png"
+    },
+    {
+      "id": 195,
+      "name": "Nintendo Pokemon Mini",
+      "imageUrl": null
+    },
+    {
+      "id": 197,
+      "name": "Othello Multivision",
+      "imageUrl": null
+    },
+    {
+      "id": 198,
+      "name": "VTech Socrates",
+      "imageUrl": null
+    },
+    {
+      "id": 199,
+      "name": "Vector-06C",
+      "imageUrl": null
+    },
+    {
+      "id": 200,
+      "name": "Tomy Tutor",
+      "imageUrl": null
+    },
+    {
+      "id": 201,
+      "name": "Spectravideo",
+      "imageUrl": null
+    },
+    {
+      "id": 202,
+      "name": "Sony PSP Minis",
+      "imageUrl": null
+    },
+    {
+      "id": 203,
+      "name": "Sony PocketStation",
+      "imageUrl": null
+    },
+    {
+      "id": 204,
+      "name": "Sharp X1",
+      "imageUrl": null
+    },
+    {
+      "id": 205,
+      "name": "Sharp MZ-2500",
+      "imageUrl": null
+    },
+    {
+      "id": 207,
+      "name": "Sega Triforce",
+      "imageUrl": null
+    },
+    {
+      "id": 208,
+      "name": "Sega Hikaru",
+      "imageUrl": null
+    },
+    {
+      "id": 210,
+      "name": "SNK Neo Geo MVS",
+      "imageUrl": null
+    },
+    {
+      "id": 211,
+      "name": "Nintendo Switch",
+      "imageUrl": null
+    },
+    {
+      "id": 212,
+      "name": "Windows 3.X",
+      "imageUrl": null
+    },
+    {
+      "id": 213,
+      "name": "Nokia N-Gage",
+      "imageUrl": null
+    },
+    {
+      "id": 216,
+      "name": "GameWave",
+      "imageUrl": null
+    },
+    {
+      "id": 218,
+      "name": "Linux",
+      "imageUrl": null
+    },
+    {
+      "id": 219,
+      "name": "Sony Playstation 5",
+      "imageUrl": null
+    },
+    {
+      "id": 220,
+      "name": "PICO-8",
+      "imageUrl": null
+    },
+    {
+      "id": 221,
+      "name": "VTech V.Smile",
+      "imageUrl": null
+    },
+    {
+      "id": 222,
+      "name": "Microsoft Xbox Series X/S",
+      "imageUrl": null
+    },
+    {
+      "id": 223,
+      "name": "Bandai Super Vision 8000",
+      "imageUrl": null
+    },
+    {
+      "id": 224,
+      "name": "Nintendo Switch 2",
+      "imageUrl": null
+    },
+    {
+      "id": 225,
+      "name": "Elektor TV Games Computer",
+      "imageUrl": null
+    },
+    {
+      "id": 226,
+      "name": "Arduboy",
+      "imageUrl": null
+    },
+    {
+      "id": 227,
+      "name": "Uzebox",
+      "imageUrl": null
+    },
+    {
+      "id": 228,
+      "name": "WASM-4",
+      "imageUrl": null
+    },
+    {
+      "id": 229,
+      "name": "Pioneer LaserActive",
+      "imageUrl": null
+    }
+  ]
+}

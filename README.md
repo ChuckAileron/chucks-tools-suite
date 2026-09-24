@@ -130,6 +130,18 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 - Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
 - Consulta de precios mediante scraping local de JSON-LD, metadatos de producto y HTML.
 
+#### Metadata LaunchBox
+
+La pestaña **Metadata LaunchBox** busca la metadata de juegos en el GamesDB de LaunchBox (`gamesdb.launchbox-app.com`) y la aplica a los ítems de la colección o los crea directamente.
+
+- Mapeo de columnas de la colección (plataforma, fecha de lanzamiento, publisher y developer) con detección automática por etiqueta.
+- Búsqueda individual por nombre y plataforma. La plataforma se elige con un selector con buscador que incluye las 190 plataformas registradas en el GamesDB (con el ícono de la plataforma cuando está disponible y navegación por teclado), aunque también acepta texto libre como antes.
+- Al procesar por CSV se avisa primero qué registros no coinciden exactamente (nombre + plataforma) con la colección, para no buscar metadata de juegos que no existen en ella.
+- Búsqueda por CSV con progreso en tiempo real y cancelación; los resultados se muestran en una tabla con estado, título, lanzamiento, publisher y developer.
+- Exportación de los resultados a CSV y aplicación directa a la colección; también se puede aplicar un CSV de resultados previamente guardado.
+- Si el juego encontrado no está en la colección, se ofrece agregarlo a una o varias colecciones a la vez con su metadata y su imagen de portada.
+- El CSV se importa/exporta sin dependencias externas (parser y serializer propios, robustos ante comas, comillas, BOM y CRLF, con soporte de headers en español e inglés).
+
 ### BinderTrack
 
 Mantenedor TCG compatible con la app móvil BinderTrack, para inventariar y administrar una colección de cartas con persistencia SQLite local. La interfaz se organiza en cuatro pestañas: **Series y sets**, **Cartas**, **Listas personalizadas** e **Importar / Exportar**.
@@ -248,7 +260,7 @@ Reproduce el contenido catalogado en Inventario HDD directamente desde el disco 
 - npm 11.19.1 o posterior.
 - FFmpeg y FFprobe para los módulos Video a SD, Cortar audio/video y para las miniaturas/ficha técnica de Inventario HDD.
 - Poppler (`pdftoppm`) opcional, para generar miniaturas reales de la primera página de archivos PDF en Inventario HDD; sin él se usa un marcador genérico.
-- Conexión a Internet para Descargas, el buscador de imágenes de Colección y las integraciones con hosts externos.
+- Conexión a Internet para Descargas, el buscador de imágenes y la metadata de juegos de Colección, y las integraciones con hosts externos.
 
 HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente. `yt-dlp` se distribuye dentro de la aplicación (en `vendor/` al compilar) y, ante fallos de reconocimiento de videos, intenta actualizarse automáticamente y reintenta el análisis.
 
@@ -344,6 +356,7 @@ CHUCK's Tools Suite/
 │   ├── analogReplay.cjs     # Canales, programas y generación de programación
 │   ├── binderTrack.cjs      # Base de datos BinderTrack e importación/exportación ZIP
 │   ├── collectionManager.cjs # Colecciones y persistencia SQLite
+│   ├── launchboxMetadata.cjs # Metadata del GamesDB de LaunchBox (búsqueda y CSV)
 │   ├── imageSearch.cjs      # Búsqueda de imágenes (Bing, Google, DuckDuckGo, Wikimedia, Openverse)
 │   ├── priceScraper.cjs     # Scraping de precios para la wishlist
 │   ├── renameManager.cjs    # Listado y renombrado de archivos
@@ -364,7 +377,10 @@ CHUCK's Tools Suite/
 │   ├── TrimTool.tsx      # Cortar audio/video
 │   ├── VideoTool.tsx     # Conversión de videos a SD
 │   ├── NormalizeTool.tsx # Normalización de volumen
-│   ├── CollectionTool.tsx # Catálogos y fichas personalizadas
+│   ├── CollectionTool.tsx # Catálogos, metadata LaunchBox y fichas personalizadas
+│   ├── LaunchBoxMetadataPanel.tsx # Búsqueda y aplicación de metadata de juegos
+│   ├── LaunchboxPlatformSelect.tsx # Selector de plataforma con buscador
+│   ├── launchboxPlatforms.json # Las 190 plataformas del GamesDB de LaunchBox
 │   ├── BinderTrackTool.tsx # Mantenedor de colección TCG
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
@@ -377,7 +393,7 @@ CHUCK's Tools Suite/
 │   ├── styles.css        # Sistema visual, modo claro/oscuro y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones, imágenes, renombrado, inventario HDD y BinderTrack
+├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones (con metadata LaunchBox), imágenes, renombrado, inventario HDD y BinderTrack
 ├── vite.config.ts
 └── package.json
 ```
