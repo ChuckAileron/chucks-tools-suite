@@ -11,14 +11,14 @@ type Ops = {
   suffix: string;
 };
 const INITIAL: Ops = {
-  search: '',
-  replace: '',
-  backwardFind: '',
+  search:          '',
+  replace:         '',
+  backwardFind:    '',
   backwardReplace: '',
-  forwardFind: '',
-  forwardReplace: '',
-  prefix: '',
-  suffix: '',
+  forwardFind:     '',
+  forwardReplace:  '',
+  prefix:          '',
+  suffix:          '',
 };
 type Entry = { folder: string; name: string };
 const key = (entry: Entry) => `${entry.folder}\u0000${entry.name}`;
@@ -29,7 +29,7 @@ function splitExtension(file: string, keepExtension: boolean) {
 }
 function transform(file: string, o: Ops, keepExtension: boolean) {
   const { base, ext } = splitExtension(file, keepExtension);
-  let name = o.search ? base.replaceAll(o.search, o.replace) : base;
+  let name            = o.search ? base.replaceAll(o.search, o.replace) : base;
   if (o.backwardFind) {
     const index = name.indexOf(o.backwardFind);
     if (index >= 0) name = o.backwardReplace + name.slice(index + o.backwardFind.length);
@@ -88,20 +88,20 @@ export default function RenameTool() {
 }
 
 function BatchRenameTab({ mode }: { mode: RenameKind }) {
-  const isFiles = mode === 'files';
-  const noun = isFiles ? 'archivos' : 'carpetas';
+  const isFiles                       = mode === 'files';
+  const noun                          = isFiles ? 'archivos' : 'carpetas';
   const [directories, setDirectories] = useState<string[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [ops, setOps] = useState<Ops>(INITIAL);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const list = () =>
+  const [entries, setEntries]         = useState<Entry[]>([]);
+  const [selected, setSelected]       = useState<Set<string>>(new Set());
+  const [ops, setOps]                 = useState<Ops>(INITIAL);
+  const [busy, setBusy]               = useState(false);
+  const [message, setMessage]         = useState('');
+  const list                          = () =>
     isFiles ? window.tools.list(directories) : window.tools.listFolders(directories);
   useEffect(() => {
     if (!directories.length) return;
     let cancelled = false;
-    const run = async () => {
+    const run     = async () => {
       setBusy(true);
       try {
         const found = await (isFiles
@@ -120,12 +120,12 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
       clearTimeout(timer);
     };
   }, [directories, isFiles]);
-  const renames = useMemo(
+  const renames    = useMemo(
     () => entries.map((entry) => ({ ...entry, newName: transform(entry.name, ops, isFiles) })),
     [entries, ops, isFiles],
   );
-  const changed = renames.filter((x) => selected.has(key(x)) && x.name !== x.newName).length;
-  const multi = directories.length > 1;
+  const changed    = renames.filter((x) => selected.has(key(x)) && x.name !== x.newName).length;
+  const multi      = directories.length > 1;
   const addFolders = async () => {
     const paths = await window.tools.selectRenameFolders();
     if (paths.length) {
@@ -134,7 +134,7 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
       setSelected(new Set());
     }
   };
-  const clear = () => {
+  const clear        = () => {
     setDirectories([]);
     setEntries([]);
     setSelected(new Set());
@@ -144,14 +144,14 @@ function BatchRenameTab({ mode }: { mode: RenameKind }) {
     setEntries([]);
     setSelected(new Set());
   };
-  const execute = async () => {
+  const execute      = async () => {
     setBusy(true);
     let count = 0;
     for (const item of renames)
       if (selected.has(key(item)) && item.name !== item.newName) {
         try {
           await window.tools.rename({
-            folder: item.folder,
+            folder:  item.folder,
             oldName: item.name,
             newName: item.newName,
           });
@@ -370,24 +370,24 @@ type NameColumn = { id: string; label: string; raw: string };
 // carpetas de varias rutas y combinar columnas de nombres pegadas por el
 // usuario en un nuevo nombre por fila.
 function NameBuilderTab() {
-  const [mode, setMode] = useState<RenameKind>('files');
-  const [directories, setDirectories] = useState<string[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [columns, setColumns] = useState<NameColumn[]>([]);
+  const [mode, setMode]                     = useState<RenameKind>('files');
+  const [directories, setDirectories]       = useState<string[]>([]);
+  const [entries, setEntries]               = useState<Entry[]>([]);
+  const [selected, setSelected]             = useState<Set<string>>(new Set());
+  const [busy, setBusy]                     = useState(false);
+  const [message, setMessage]               = useState('');
+  const [columns, setColumns]               = useState<NameColumn[]>([]);
   const [combineEnabled, setCombineEnabled] = useState(false);
-  const [sameJoin, setSameJoin] = useState(true);
-  const [sharedJoin, setSharedJoin] = useState('');
-  const [joinByColumn, setJoinByColumn] = useState<Record<string, string>>({});
-  const columnCounter = useRef(0);
-  const noun = mode === 'files' ? 'archivos' : 'carpetas';
-  const multi = directories.length > 1;
+  const [sameJoin, setSameJoin]             = useState(true);
+  const [sharedJoin, setSharedJoin]         = useState('');
+  const [joinByColumn, setJoinByColumn]     = useState<Record<string, string>>({});
+  const columnCounter                       = useRef(0);
+  const noun                                = mode === 'files' ? 'archivos' : 'carpetas';
+  const multi                               = directories.length > 1;
 
-  const list = () =>
+  const list       = () =>
     mode === 'files' ? window.tools.list(directories) : window.tools.listFolders(directories);
-  const resetList = () => {
+  const resetList  = () => {
     setEntries([]);
     setSelected(new Set());
   };
@@ -414,7 +414,7 @@ function NameBuilderTab() {
   useEffect(() => {
     if (!directories.length) return;
     let cancelled = false;
-    const run = async () => {
+    const run     = async () => {
       setBusy(true);
       try {
         const found = await (mode === 'files'
@@ -435,13 +435,13 @@ function NameBuilderTab() {
   }, [directories, mode]);
   const addColumn = () => {
     columnCounter.current += 1;
-    const id = `col-${columnCounter.current}`;
+    const id               = `col-${columnCounter.current}`;
     setColumns((current) => [
       ...current,
       { id, label: `Columna nombre ${current.length + 1}`, raw: '' },
     ]);
   };
-  const updateColumnRaw = (id: string, raw: string) =>
+  const updateColumnRaw   = (id: string, raw: string) =>
     setColumns((current) =>
       current.map((column) => (column.id === id ? { ...column, raw } : column)),
     );
@@ -449,7 +449,7 @@ function NameBuilderTab() {
     setColumns((current) =>
       current.map((column) => (column.id === id ? { ...column, label } : column)),
     );
-  const removeColumn = (id: string) => {
+  const removeColumn      = (id: string) => {
     setColumns((current) => current.filter((column) => column.id !== id));
     setJoinByColumn((current) => {
       const next = { ...current };
@@ -459,16 +459,17 @@ function NameBuilderTab() {
   };
   const computeNewName = (entry: Entry, index: number) => {
     const { base, ext } = splitExtension(entry.name, mode === 'files');
-    let newBase = base;
+    let newBase         = base;
     if (combineEnabled)
       for (const column of columns) {
-        const value = columnValues(column.raw)[index] ?? '';
+        // eslint-disable-next-line align-assignments/align-assignments
+        const value  = columnValues(column.raw)[index] ?? '';
         const prefix = columns.length > 1 && sameJoin ? sharedJoin : joinByColumn[column.id] || '';
         newBase += prefix + value;
       }
     return newBase + ext;
   };
-  const rows = useMemo(
+  const rows    = useMemo(
     () => entries.map((entry, index) => ({ ...entry, newName: computeNewName(entry, index) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [entries, columns, combineEnabled, sameJoin, sharedJoin, joinByColumn, mode],
@@ -481,7 +482,7 @@ function NameBuilderTab() {
       if (selected.has(key(item)) && item.name !== item.newName) {
         try {
           await window.tools.rename({
-            folder: item.folder,
+            folder:  item.folder,
             oldName: item.name,
             newName: item.newName,
           });

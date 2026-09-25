@@ -62,7 +62,7 @@ function makeControls() {
   const controls = {
     cancelled: false,
     isCancelled: () => controls.cancelled,
-    setProcess: () => {},
+    processes: new Set(),
   };
   return controls;
 }
@@ -351,6 +351,50 @@ test('convertFolder procesa varios archivos y avanza el contador global', async 
   );
   assert.equal(fs.existsSync(path.join(dir, 'sd-output-h264', 'a_SD.mp4')), true);
   assert.equal(fs.existsSync(path.join(dir, 'sd-output-h264', 'b_SD.mp4')), true);
+});
+
+test('convertFolder procesa archivos en paralelo según el concurrency', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vc-parallel-'));
+  fs.writeFileSync(path.join(dir, 'a.mp4'), 'x');
+  fs.writeFileSync(path.join(dir, 'b.mp4'), 'x');
+  const events = [];
+  reset();
+  execFileHandler = (command, args, callback) =>
+    callback(
+      null,
+      JSON.stringify(metadataBody({ duration: 5, height: 720, audio: 1, subtitle: 0 })),
+      '',
+    );
+  const promise = convertFolder(dir, 'h264', {}, (p) => events.push(p), makeControls(), null, 2);
+  // Ambos procesos se lanzan antes de que cierre ninguno: la conversión corre en paralelo.
+  const [first, second] = await waitChildren(2);
+  fs.writeFileSync(first.temporary, 'data');
+  fs.writeFileSync(second.temporary, 'data');
+  closeChild(first, 0);
+  closeChild(second, 0);
+  await promise;
+  assert.equal(state.children.length, 2);
+  assert.equal(fs.existsSync(path.join(dir, 'sd-output-h264', 'a_SD.mp4')), true);
+  assert.equal(fs.existsSync(path.join(dir, 'sd-output-h264', 'b_SD.mp4')), true);
+  assert.equal(events.filter((e) => e.type === 'file-done').length, 2);
+});
+
+test('convertFolder no lanza más procesos que archivos disponibles', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vc-parallelcap-'));
+  fs.writeFileSync(path.join(dir, 'a.mp4'), 'x');
+  reset();
+  execFileHandler = (command, args, callback) =>
+    callback(
+      null,
+      JSON.stringify(metadataBody({ duration: 5, height: 720, audio: 1, subtitle: 0 })),
+      '',
+    );
+  const promise = convertFolder(dir, 'h264', {}, silentProgress, makeControls(), null, 3);
+  const [child] = await waitChildren(1);
+  fs.writeFileSync(child.temporary, 'data');
+  closeChild(child, 0);
+  await promise;
+  assert.equal(state.children.length, 1);
 });
 
 test('inspectFolder tolera mkv sin streams y con codec desconocido', async () => {

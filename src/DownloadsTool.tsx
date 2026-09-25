@@ -12,35 +12,35 @@ import type {
 import { loadCollapsed, saveCollapsed } from './collapseState';
 
 type Tab = 'downloads' | 'collector' | 'settings';
-const EMPTY: DownloadsState = {
+const EMPTY: DownloadsState                            = {
   settings: {
-    defaultDirectory: '',
+    defaultDirectory:     '',
     defaultDeleteArchive: true,
-    concurrency: 3,
-    autoExtract: true,
-    clipboard: true,
-    googleDriveApiKey: '',
+    concurrency:          3,
+    autoExtract:          true,
+    clipboard:            true,
+    googleDriveApiKey:    '',
   },
   tasks: [],
 };
-const STATUS: Record<string, string> = {
-  pending: 'En cola',
-  downloading: 'Descargando',
-  paused: 'Pausada',
-  stopped: 'Detenida',
-  completed: 'Finalizada',
-  extracting: 'Extrayendo',
+const STATUS: Record<string, string>                   = {
+  pending:             'En cola',
+  downloading:         'Descargando',
+  paused:              'Pausada',
+  stopped:             'Detenida',
+  completed:           'Finalizada',
+  extracting:          'Extrayendo',
   'password-required': 'Requiere contraseña',
-  error: 'Error',
+  error:               'Error',
 };
-const PRIORITIES: DownloadPriority[] = ['urgent', 'high', 'medium', 'low'];
+const PRIORITIES: DownloadPriority[]                   = ['urgent', 'high', 'medium', 'low'];
 const PRIORITY_LABEL: Record<DownloadPriority, string> = {
   urgent: 'Urgente',
-  high: 'Alta',
+  high:   'Alta',
   medium: 'Media',
-  low: 'Baja',
+  low:    'Baja',
 };
-const formatSize = (bytes: number) =>
+const formatSize                                       = (bytes: number) =>
   !bytes
     ? '—'
     : bytes < 1048576
@@ -48,7 +48,7 @@ const formatSize = (bytes: number) =>
       : bytes < 1073741824
         ? `${(bytes / 1048576).toFixed(1)} MB`
         : `${(bytes / 1073741824).toFixed(2)} GB`;
-const progressOf = (tasks: DownloadTask[]) =>
+const progressOf                                       = (tasks: DownloadTask[]) =>
   tasks.length
     ? Math.round(
         tasks.reduce(
@@ -65,25 +65,25 @@ export default function DownloadsTool({
   candidates: DownloadCandidate[];
   setCandidates: Dispatch<SetStateAction<DownloadCandidate[]>>;
 }) {
-  const [tab, setTab] = useState<Tab>(candidates.length ? 'collector' : 'downloads');
-  const [state, setState] = useState<DownloadsState>(EMPTY);
-  const [disk, setDisk] = useState<DownloadDiskInfo | null>(null);
+  const [tab, setTab]             = useState<Tab>(candidates.length ? 'collector' : 'downloads');
+  const [state, setState]         = useState<DownloadsState>(EMPTY);
+  const [disk, setDisk]           = useState<DownloadDiskInfo | null>(null);
   const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed('downloads'));
   useEffect(() => {
     saveCollapsed('downloads', collapsed);
   }, [collapsed]);
-  const toggleCollapsed = (key: string) =>
+  const toggleCollapsed           = (key: string) =>
     setCollapsed((current) =>
       current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
     );
-  const isCollapsed = (key: string) => collapsed.includes(key);
-  const [text, setText] = useState('');
+  const isCollapsed               = (key: string) => collapsed.includes(key);
+  const [text, setText]           = useState('');
   const [analyzing, setAnalyzing] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage]     = useState('');
 
   const mergeCandidates = (found: DownloadCandidate[]) =>
     setCandidates((current) => {
-      const key = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
+      const key      = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
       const existing = new Set(current.map(key));
       // Enlaces ya en cola/descargando no se vuelven a identificar, a menos
       // que la tarea se haya borrado o ya haya finalizado.
@@ -96,9 +96,9 @@ export default function DownloadsTool({
           .filter((item) => !existing.has(key(item)) && !active.has(item.originalUrl))
           .map((item) => ({
             ...item,
-            destination: state.settings.defaultDirectory,
-            priority: 'medium' as DownloadPriority,
-            extract: true,
+            destination:   state.settings.defaultDirectory,
+            priority:      'medium' as DownloadPriority,
+            extract:       true,
             deleteArchive: state.settings.defaultDeleteArchive !== false,
           })),
       ];
@@ -114,7 +114,7 @@ export default function DownloadsTool({
     return () => stopState();
   }, []);
   useEffect(() => {
-    let live = true;
+    let live   = true;
     const load = () =>
       window.tools
         .getDownloadDiskInfo()
@@ -147,7 +147,7 @@ export default function DownloadsTool({
     setCandidates((current) =>
       current.map((item) => (item.id === id ? { ...item, ...changes } : item)),
     );
-  const chooseFolder = async (id?: string) => {
+  const chooseFolder    = async (id?: string) => {
     const directory = await window.tools.selectDownloadDirectory();
     if (!directory) return;
     setCandidates((current) =>
@@ -159,6 +159,17 @@ export default function DownloadsTool({
           : item.selected
             ? { ...item, destination: directory }
             : item,
+      ),
+    );
+  };
+  const chooseCollectionFolder = async (collection: string) => {
+    const directory = await window.tools.selectDownloadDirectory();
+    if (!directory) return;
+    setCandidates((current) =>
+      current.map((item) =>
+        (item.collection || 'Sin colección') === collection
+          ? { ...item, destination: directory }
+          : item,
       ),
     );
   };
@@ -218,6 +229,7 @@ export default function DownloadsTool({
             analyze={analyze}
             update={updateCandidate}
             chooseFolder={chooseFolder}
+            chooseCollectionFolder={chooseCollectionFolder}
             queue={queue}
             clear={() => setCandidates([])}
             isCollapsed={isCollapsed}
@@ -252,7 +264,7 @@ function PromptModal({
   onClose: (value: PromptResult) => void;
 }) {
   const [value, setValue] = useState('');
-  const accept = () => onClose(value);
+  const accept            = () => onClose(value);
   return (
     <div
       className="image-search-overlay"
@@ -299,7 +311,7 @@ const usePrompt = () => {
       })
     | null
   >(null);
-  const ask = (options: Omit<React.ComponentProps<typeof PromptModal>, 'onClose'>) =>
+  const ask                   = (options: Omit<React.ComponentProps<typeof PromptModal>, 'onClose'>) =>
     new Promise<PromptResult>((resolve) => {
       setRequest({
         ...options,
@@ -318,8 +330,8 @@ function LinksModal({
   onClose,
 }: LinksModalData & { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const text = links.join('\n');
-  const copyAll = async () => {
+  const text                = links.join('\n');
+  const copyAll             = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -364,21 +376,21 @@ function DownloadsTab({
   toggleCollapsed: (key: string) => void;
 }) {
   const [linksModal, setLinksModal] = useState<LinksModalData | null>(null);
-  const { ask, dialog } = usePrompt();
-  const showLinksFor = (title: string, groupTasks: DownloadTask[]) =>
+  const { ask, dialog }             = usePrompt();
+  const showLinksFor                = (title: string, groupTasks: DownloadTask[]) =>
     setLinksModal({
       title,
       description: `${groupTasks.length} enlace${groupTasks.length === 1 ? '' : 's'} en la cola de descargas.`,
-      links: groupTasks.map((task) => task.originalUrl),
+      links:       groupTasks.map((task) => task.originalUrl),
     });
-  const groups = Map.groupBy(tasks, (task) => task.destination);
-  const setGroupPassword = async (groupTasks: DownloadTask[], label: string) => {
+  const groups                      = Map.groupBy(tasks, (task) => task.destination);
+  const setGroupPassword            = async (groupTasks: DownloadTask[], label: string) => {
     const eligible = groupTasks.filter((task) => task.status !== 'completed');
     if (!eligible.length) return;
     const value = await ask({
-      title: `Contraseña para ${label}`,
+      title:       `Contraseña para ${label}`,
       description: `${eligible.length} archivo${eligible.length === 1 ? '' : 's'} en el grupo.`,
-      secret: true,
+      secret:      true,
     });
     if (value === null) return;
     for (const task of eligible) {
@@ -388,7 +400,7 @@ function DownloadsTab({
       else await window.tools.updateDownload(task.id, { password: value });
     }
   };
-  const groupSpeed = (groupTasks: DownloadTask[]) =>
+  const groupSpeed   = (groupTasks: DownloadTask[]) =>
     groupTasks
       .filter((task) => task.status === 'downloading')
       .reduce((total, task) => total + (task.speed || 0), 0);
@@ -406,14 +418,32 @@ function DownloadsTab({
     if (confirmMessage && !confirm(confirmMessage)) return;
     void window.tools.controlDownloads(ids, action);
   };
+  const removeCollection  = (collection: string, collectionTasks: DownloadTask[]) => {
+    if (
+      !confirm(
+        `¿${
+          collectionTasks.some((task) => ['downloading', 'extracting'].includes(task.status))
+            ? 'Detener y borrar'
+            : 'Borrar'
+        } la colección "${collection}" (${collectionTasks.length} descarga${
+          collectionTasks.length === 1 ? '' : 's'
+        })?`,
+      )
+    )
+      return;
+    void window.tools.controlDownloads(
+      collectionTasks.map((task) => task.id),
+      'remove',
+    );
+  };
   const hasAnyDownloading = tasks.some((task) => task.status === 'downloading');
-  const hasAnyResumable = tasks.some((task) =>
+  const hasAnyResumable   = tasks.some((task) =>
     ['paused', 'stopped', 'error'].includes(task.status),
   );
-  const hasAnyStoppable = tasks.some((task) =>
+  const hasAnyStoppable   = tasks.some((task) =>
     ['downloading', 'paused', 'pending'].includes(task.status),
   );
-  const totalSpeed = tasks
+  const totalSpeed        = tasks
     .filter((task) => task.status === 'downloading')
     .reduce((total, task) => total + (task.speed || 0), 0);
   return (
@@ -471,19 +501,18 @@ function DownloadsTab({
       </div>
       {tasks.length ? (
         [...groups].map(([directory, items]) => {
-          const groupKey = `dir:${directory}`;
-          const groupProgress = progressOf(items);
-          const groupComplete =
-            items.length > 0 && items.every((task) => task.status === 'completed');
-          const speed = groupSpeed(items);
+          const groupKey       = `dir:${directory}`;
+          const groupProgress  = progressOf(items);
+          const groupComplete  = items.length > 0 && items.every((task) => task.status === 'completed');
+          const speed          = groupSpeed(items);
           const hasDownloading = items.some((task) => task.status === 'downloading');
-          const hasResumable = items.some((task) =>
+          const hasResumable   = items.some((task) =>
             ['paused', 'stopped', 'error'].includes(task.status),
           );
-          const hasStoppable = items.some((task) =>
+          const hasStoppable   = items.some((task) =>
             ['downloading', 'paused', 'pending'].includes(task.status),
           );
-          const hasRemovable = items.length > 0;
+          const hasRemovable   = items.length > 0;
           return (
             <section
               className={`download-group ${isCollapsed(groupKey) ? 'collapsed' : ''}${groupComplete ? ' complete' : ''}`}
@@ -597,8 +626,11 @@ function DownloadsTab({
               {!isCollapsed(groupKey) &&
                 [...Map.groupBy(items, (task) => task.collection || 'Sin colección')].map(
                   ([collection, collectionTasks]) => {
-                    const collectionKey = `col:${directory}::${collection}`;
+                    const collectionKey      = `col:${directory}::${collection}`;
                     const collectionProgress = progressOf(collectionTasks);
+                    const collectionComplete =
+                      collectionTasks.length > 0 &&
+                      collectionTasks.every((task) => task.status === 'completed');
                     return (
                       <div
                         className={`download-collection ${isCollapsed(collectionKey) ? 'collapsed' : ''}`}
@@ -618,6 +650,11 @@ function DownloadsTab({
                               enlaces · {collectionProgress}%
                             </small>
                           </button>
+                          {collectionComplete && (
+                            <em className="collection-complete" title="Colección completada">
+                              ✓
+                            </em>
+                          )}
                           <button
                             className="download-group-toggle"
                             type="button"
@@ -639,6 +676,15 @@ function DownloadsTab({
                             aria-label={`Listar enlaces de ${collection}`}
                           >
                             🔗
+                          </button>
+                          <button
+                            className="download-group-toggle collection-delete"
+                            type="button"
+                            onClick={() => removeCollection(collection, collectionTasks)}
+                            title="Borrar la colección completa"
+                            aria-label={`Borrar la colección ${collection}`}
+                          >
+                            ×
                           </button>
                         </div>
                         {!isCollapsed(collectionKey) &&
@@ -663,16 +709,20 @@ function DownloadsTab({
 
 function DownloadRow({ task }: { task: DownloadTask }) {
   const { ask, dialog } = usePrompt();
-  const askPassword = async () => {
+  const askPassword     = async () => {
     const value = await ask({ title: 'Contraseña del archivo comprimido', secret: true });
     if (value === null) return;
     await window.tools.retryExtraction(task.id, value);
   };
   const idle = !['downloading', 'extracting', 'completed'].includes(task.status);
+  // La extracción falló cuando el archivo ya está en disco: si quedó en
+  // "error" o "password-required" con filePath, el problema fue el comprimido
+  // (normalmente una contraseña mal definida), no la descarga.
+  const extractionFailed = !!task.filePath && ['error', 'password-required'].includes(task.status);
   // Cualquier tarea puede borrarse en cualquier estado; si está descargando
   // o extrayendo (p. ej. quedó colgada) se pide confirmación primero.
   const removable = true;
-  const remove = () => {
+  const remove    = () => {
     if (
       ['downloading', 'extracting'].includes(task.status) &&
       !confirm(`¿Detener y borrar la descarga de "${task.name}"?`)
@@ -724,9 +774,13 @@ function DownloadRow({ task }: { task: DownloadTask }) {
               ■
             </button>
           )}
-          {task.status === 'password-required' && (
-            <button title="Ingresar contraseña" onClick={askPassword}>
-              ⌕
+          {extractionFailed && (
+            <button
+              className="download-retry"
+              title="Reintentar extracción (pudo fallar por una contraseña mal definida)"
+              onClick={askPassword}
+            >
+              ↻
             </button>
           )}
           {task.filePath && (
@@ -769,7 +823,7 @@ function QualitySelect({
 }) {
   const [options, setOptions] = useState<VideoQualityOption[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const load = () => {
+  const load                  = () => {
     if (options || loading) return;
     setLoading(true);
     window.tools
@@ -778,8 +832,8 @@ function QualitySelect({
       .catch(() => setOptions([BEST_QUALITY]))
       .finally(() => setLoading(false));
   };
-  const known = options && options.length ? options : [BEST_QUALITY];
-  const hasCurrentValue = known.some((option) => option.videoFormat === value);
+  const known                 = options && options.length ? options : [BEST_QUALITY];
+  const hasCurrentValue       = known.some((option) => option.videoFormat === value);
   return (
     <select
       className="candidate-quality"
@@ -812,6 +866,7 @@ type CollectorProps = {
   analyze: () => void;
   update: (id: string, changes: Partial<DownloadCandidate>) => void;
   chooseFolder: (id?: string) => void;
+  chooseCollectionFolder: (collection: string) => void;
   queue: () => void;
   clear: () => void;
   isCollapsed: (key: string) => boolean;
@@ -828,6 +883,7 @@ function CollectorTab({
   analyze,
   update,
   chooseFolder,
+  chooseCollectionFolder,
   queue,
   clear,
   isCollapsed,
@@ -835,12 +891,12 @@ function CollectorTab({
   deleteCandidates,
   deleteCollection,
 }: CollectorProps) {
-  const { ask, dialog } = usePrompt();
+  const { ask, dialog }   = usePrompt();
   const setSharedPassword = async () => {
     const password = await ask({
-      title: 'Contraseña para los enlaces seleccionados',
+      title:       'Contraseña para los enlaces seleccionados',
       description: 'La contraseña se guardará en cada enlace seleccionado.',
-      secret: true,
+      secret:      true,
     });
     if (password === null) return;
     candidates.forEach((item) => item.selected && update(item.id, { password }));
@@ -854,8 +910,8 @@ function CollectorTab({
         (item) => item.selected && update(item.id, { collection: collection.trim() }),
       );
   };
-  const online = candidates.filter((item) => item.online);
-  const allSelected = online.length > 0 && online.every((item) => item.selected);
+  const online       = candidates.filter((item) => item.online);
+  const allSelected  = online.length > 0 && online.every((item) => item.selected);
   const noneSelected = online.every((item) => !item.selected);
   return (
     <>
@@ -953,6 +1009,19 @@ function CollectorTab({
                   <small className="collector-group-count">
                     {items.length} enlace{items.length === 1 ? '' : 's'}
                   </small>
+                  <button
+                    className={`collector-group-folder${items.every((item) => item.destination) ? ' has-destination' : ''}`}
+                    type="button"
+                    title={
+                      items.every((item) => item.destination)
+                        ? `Destino de la colección ${collection}: ${items.find((item) => item.destination)?.destination}`
+                        : `Definir el destino de toda la colección ${collection}`
+                    }
+                    aria-label={`Definir destino de ${collection}`}
+                    onClick={() => chooseCollectionFolder(collection)}
+                  >
+                    ▣
+                  </button>
                   <button
                     className="collector-group-delete"
                     type="button"

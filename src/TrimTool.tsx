@@ -18,10 +18,10 @@ const extensionLabel = (name: string) => {
 // necesita mostrar al usuario.
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const total = Math.round(seconds * 10) / 10;
-  const hours = Math.floor(total / 3600);
+  const total   = Math.round(seconds * 10) / 10;
+  const hours   = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
+  const secs    = total % 60;
   const secsStr = secs.toFixed(secs % 1 ? 1 : 0).padStart(secs < 10 ? 3 : 2, '0');
   return hours > 0
     ? `${hours}:${String(minutes).padStart(2, '0')}:${secsStr}`
@@ -39,25 +39,25 @@ function parseTime(value: string): number {
 }
 
 const EMPTY_TRIM: TrimState = {
-  running: false,
+  running:        false,
   globalProgress: 0,
-  fileProgress: 0,
-  activeFile: 'Sin procesos activos',
-  message: '',
-  folders: [],
-  type: 'audio',
-  files: [],
-  selected: [],
-  processed: [],
-  settings: {},
-  logs: [],
-  activeFolder: '',
+  fileProgress:   0,
+  activeFile:     'Sin procesos activos',
+  message:        '',
+  folders:        [],
+  type:           'audio',
+  files:          [],
+  selected:       [],
+  processed:      [],
+  settings:       {},
+  logs:           [],
+  activeFolder:   '',
 };
 
 const defaultSettings = (file: TrimFile): TrimSettings => ({
-  mode: 'keep',
+  mode:  'keep',
   start: 0,
-  end: file.duration,
+  end:   file.duration,
   split: false,
 });
 
@@ -71,7 +71,7 @@ const isInteriorCut = (settings: TrimSettings, duration: number) =>
 
 function describeSettings(settings: TrimSettings, duration: number): string {
   const startLabel = formatTime(settings.start);
-  const endLabel = formatTime(settings.end);
+  const endLabel   = formatTime(settings.end);
   if (settings.mode === 'keep') return `Se conservará de ${startLabel} a ${endLabel}.`;
   if (isInteriorCut(settings, duration))
     return settings.split
@@ -90,15 +90,15 @@ function isValidSettings(settings: TrimSettings, duration: number): boolean {
 }
 
 export default function TrimTool() {
-  const [folders, setFolders] = useState<string[]>([]);
-  const [type, setType] = useState<MediaType>('audio');
-  const [files, setFiles] = useState<TrimFile[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [folders, setFolders]        = useState<string[]>([]);
+  const [type, setType]              = useState<MediaType>('audio');
+  const [files, setFiles]            = useState<TrimFile[]>([]);
+  const [selected, setSelected]      = useState<Set<string>>(new Set());
   const [settings, setSettingsState] = useState<Record<string, TrimSettings>>({});
-  const [trim, setTrim] = useState<TrimState>(EMPTY_TRIM);
-  const [message, setMessage] = useState('');
-  const [processed, setProcessed] = useState<Set<string>>(new Set());
-  const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
+  const [trim, setTrim]              = useState<TrimState>(EMPTY_TRIM);
+  const [message, setMessage]        = useState('');
+  const [processed, setProcessed]    = useState<Set<string>>(new Set());
+  const [logs, setLogs]              = useState<{ text: string; tone?: string }[]>([]);
 
   useEffect(() => {
     const hydrate = (state: TrimState) => {
@@ -120,7 +120,7 @@ export default function TrimTool() {
   };
 
   const addFolders = async () => {
-    const paths = await window.tools.selectTrimFolders();
+    const paths       = await window.tools.selectTrimFolders();
     const nextFolders = [...new Set([...folders, ...paths])];
     setFolders(nextFolders);
     setFiles([]);
@@ -130,15 +130,15 @@ export default function TrimTool() {
     setLogs([]);
     setTrim(EMPTY_TRIM);
     pushUi({
-      folders: nextFolders,
-      files: [],
-      selected: [],
-      processed: [],
-      settings: {},
-      logs: [],
-      running: false,
+      folders:        nextFolders,
+      files:          [],
+      selected:       [],
+      processed:      [],
+      settings:       {},
+      logs:           [],
+      running:        false,
       globalProgress: 0,
-      fileProgress: 0,
+      fileProgress:   0,
     });
   };
   const clear = () => {
@@ -150,23 +150,23 @@ export default function TrimTool() {
     setLogs([]);
     setTrim(EMPTY_TRIM);
     pushUi({
-      folders: [],
-      files: [],
-      selected: [],
-      processed: [],
-      settings: {},
-      logs: [],
-      running: false,
+      folders:        [],
+      files:          [],
+      selected:       [],
+      processed:      [],
+      settings:       {},
+      logs:           [],
+      running:        false,
       globalProgress: 0,
-      fileProgress: 0,
+      fileProgress:   0,
     });
   };
-  const scan = async () => {
+  const scan  = async () => {
     setMessage('Explorando archivos...');
     setLogs([]);
     setTrim(EMPTY_TRIM);
     try {
-      const result = await window.tools.scanTrimFiles({ folders, type });
+      const result                                     = await window.tools.scanTrimFiles({ folders, type });
       const nextSettings: Record<string, TrimSettings> = {};
       for (const file of result) nextSettings[file.path] = defaultSettings(file);
       setFiles(result);
@@ -174,14 +174,14 @@ export default function TrimTool() {
       setProcessed(new Set());
       setSettingsState(nextSettings);
       pushUi({
-        files: result,
-        selected: result.map((file) => file.path),
-        processed: [],
-        settings: nextSettings,
-        logs: [],
-        running: false,
+        files:          result,
+        selected:       result.map((file) => file.path),
+        processed:      [],
+        settings:       nextSettings,
+        logs:           [],
+        running:        false,
         globalProgress: 0,
-        fileProgress: 0,
+        fileProgress:   0,
       });
       setMessage(
         result.length
@@ -198,14 +198,14 @@ export default function TrimTool() {
       if (!ok) setMessage('No se puede quitar una carpeta mientras se procesa uno de sus archivos.');
       return;
     }
-    const nextFolders = folders.filter((item) => item !== folder);
-    const kept = new Set(files.filter((file) => file.folder !== folder).map((file) => file.path));
-    const nextFiles = files.filter((file) => kept.has(file.path));
+    const nextFolders                                = folders.filter((item) => item !== folder);
+    const kept                                       = new Set(files.filter((file) => file.folder !== folder).map((file) => file.path));
+    const nextFiles                                  = files.filter((file) => kept.has(file.path));
     const nextSettings: Record<string, TrimSettings> = {};
     for (const [key, value] of Object.entries(settings)) if (kept.has(key)) nextSettings[key] = value;
     setFolders(nextFolders);
     setFiles(nextFiles);
-    const nextSelected = [...selected].filter((path) => kept.has(path));
+    const nextSelected  = [...selected].filter((path) => kept.has(path));
     const nextProcessed = [...processed].filter((path) => kept.has(path));
     setSelected(new Set(nextSelected));
     setProcessed(new Set(nextProcessed));
@@ -213,20 +213,20 @@ export default function TrimTool() {
     setTrim((current) => ({
       ...current,
       globalProgress: 0,
-      fileProgress: 0,
-      running: false,
-      activeFile: 'Sin procesos activos',
-      activeFolder: '',
+      fileProgress:   0,
+      running:        false,
+      activeFile:     'Sin procesos activos',
+      activeFolder:   '',
     }));
     pushUi({
-      folders: nextFolders,
-      files: nextFiles,
-      selected: nextSelected,
-      processed: nextProcessed,
-      settings: nextSettings,
+      folders:        nextFolders,
+      files:          nextFiles,
+      selected:       nextSelected,
+      processed:      nextProcessed,
+      settings:       nextSettings,
       globalProgress: 0,
-      fileProgress: 0,
-      running: false,
+      fileProgress:   0,
+      running:        false,
     });
   };
   const toggleSelected = (path: string) => {
@@ -258,20 +258,20 @@ export default function TrimTool() {
     const jobs: TrimJob[] = targets.map((file) => {
       const fileSettings = settings[file.path] || defaultSettings(file);
       return {
-        path: file.path,
-        name: file.name,
+        path:   file.path,
+        name:   file.name,
         folder: file.folder,
-        mode: fileSettings.mode,
-        start: fileSettings.start,
-        end: fileSettings.end,
-        split: fileSettings.split,
+        mode:   fileSettings.mode,
+        start:  fileSettings.start,
+        end:    fileSettings.end,
+        split:  fileSettings.split,
       };
     });
     await window.tools.startTrim({ jobs, type });
   };
 
-  const all = files.length > 0 && selected.size === files.length;
-  const trimmedCount = files.filter((file) => processed.has(file.path)).length;
+  const all                  = files.length > 0 && selected.size === files.length;
+  const trimmedCount         = files.filter((file) => processed.has(file.path)).length;
   const selectedInvalidCount = files.filter(
     (file) =>
       selected.has(file.path) &&
@@ -316,15 +316,15 @@ export default function TrimTool() {
               setLogs([]);
               setTrim(EMPTY_TRIM);
               pushUi({
-                type: next,
-                files: [],
-                selected: [],
-                processed: [],
-                settings: {},
-                logs: [],
-                running: false,
+                type:           next,
+                files:          [],
+                selected:       [],
+                processed:      [],
+                settings:       {},
+                logs:           [],
+                running:        false,
                 globalProgress: 0,
-                fileProgress: 0,
+                fileProgress:   0,
               });
             }}
           >
@@ -336,7 +336,7 @@ export default function TrimTool() {
           {folders.length ? (
             folders.map((folder) => {
               const folderFiles = files.filter((file) => file.folder === folder);
-              const folderDone = folderFiles.filter((file) => processed.has(file.path)).length;
+              const folderDone  = folderFiles.filter((file) => processed.has(file.path)).length;
               return (
                 <div key={folder}>
                   <span title={folder}>{folder}</span>
@@ -389,8 +389,8 @@ export default function TrimTool() {
             <section className="trim-file-list">
               {files.map((file) => {
                 const fileSettings = settings[file.path] || defaultSettings(file);
-                const interior = isInteriorCut(fileSettings, file.duration);
-                const valid = isValidSettings(fileSettings, file.duration);
+                const interior     = isInteriorCut(fileSettings, file.duration);
+                const valid        = isValidSettings(fileSettings, file.duration);
                 return (
                   <div className="trim-file-row" key={file.path}>
                     <label className="trim-file-header">

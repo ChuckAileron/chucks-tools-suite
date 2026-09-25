@@ -1048,6 +1048,44 @@ test('maybeExtractVolume marca error cuando 7-Zip rechaza el volumen', async () 
   assert.match(manager.tasks.get('p1').error, /Wrong password/);
 });
 
+test('retryExtraction reintenta un volumen multiparte completo y limpia todas las partes', async () => {
+  resetStubs();
+  const { manager, dir } = makeManager();
+  const part1 = path.join(dir, 'Serie.part1.rar');
+  const part2 = path.join(dir, 'Serie.part2.rar');
+  fs.writeFileSync(part1, 'p1');
+  fs.writeFileSync(part2, 'p2');
+  manager.settings.autoExtract = true;
+  manager.tasks.set('p1', {
+    id: 'p1',
+    status: 'password-required',
+    filePath: part1,
+    name: 'Serie.part1.rar',
+    destination: dir,
+    deleteArchive: true,
+    extract: true,
+    password: '',
+  });
+  manager.tasks.set('p2', {
+    id: 'p2',
+    status: 'completed',
+    filePath: part2,
+    name: 'Serie.part2.rar',
+    destination: dir,
+    deleteArchive: true,
+    extract: true,
+    password: '',
+  });
+  state.sevenCmd = async () => {};
+  const completed = await manager.retryExtraction('p1', 'clave');
+  assert.equal(completed, true);
+  assert.equal(manager.tasks.get('p1').status, 'completed');
+  assert.equal(manager.tasks.get('p2').status, 'completed');
+  assert.equal(manager.tasks.get('p1').extractedTo, path.join(dir, 'Serie'));
+  assert.equal(fs.existsSync(part1), false);
+  assert.equal(fs.existsSync(part2), false);
+});
+
 const embedHtml = (title, entries) => `<html><head><title>${title}</title></head><body>
 ${entries
   .map(

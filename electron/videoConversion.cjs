@@ -81,7 +81,29 @@ async function inspectFolder(directory, codec = 'h264') {
 const cancelledError = () =>
   Object.assign(new Error('Conversión cancelada'), { code: 'CANCELLED' });
 
-async function convertFolder(directory, codec, selections, onProgress, controls, audio = null) {
+function killProcess(child) {
+  if (!child) return;
+  if (typeof child.cancel === 'function') {
+    try {
+      child.cancel();
+    } catch {}
+    return;
+  }
+  if (typeof child.kill !== 'function') return;
+  if (process.platform === 'win32')
+    execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {});
+  else child.kill('SIGTERM');
+}
+
+async function convertFolder(
+  directory,
+  codec,
+  selections,
+  onProgress,
+  controls,
+  audio = null,
+  concurrency = 1,
+) {
   const output = path.join(directory, `sd-output-${codec}`);
   fs.mkdirSync(output, { recursive: true });
   const normalizeAudio = audio?.normalize
@@ -89,9 +111,22 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
     : null;
   const files = videoFiles(directory);
   if (!files.length) return onProgress({ type: 'info', message: 'No hay videos en la carpeta.' });
-  onProgress({ type: 'global', current: 0, total: files.length, folder: directory });
-  for (let index = 0; index < files.length; index += 1) {
-    if (controls.isCancelled()) throw cancelledError();
+  const total = files.length;
+  const workersFor = Math.max(1, Math.min(total, Math.floor(Number(concurrency)) || 1));
+  onProgress({ type: 'global', current: 0, total, folder: directory });
+  if (controls.isCancelled()) throw cancelledError();
+
+  // Piscina de conversión: cada worker toma el siguiente archivo libre. Ante el
+  // primer fallo se matan los procesos activos para no dejar transcodificaciones
+  // huérfanas ni hacer esperar al resto de la cola.
+  let nextIndex = 0;
+  let failed = null;
+  const killActive = () => {
+    for (const child of controls.processes) killProcess(child);
+    controls.processes.clear();
+  };
+
+  const convertOne = async (index) => {
     const file = files[index];
     const input = path.join(directory, file);
     const finalPath = outputPath(directory, output, file);
@@ -101,7 +136,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
       type: 'file-start',
       file,
       current: index + 1,
-      total: files.length,
+      total,
       folder: directory,
     });
     if (!FFMPEG_PATTERN.test(file) && !normalizeAudio) {
@@ -115,8 +150,8 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
         onProgress,
         controls,
       );
-      onProgress({ type: 'global', current: index + 1, total: files.length, folder: directory });
-      continue;
+      onProgress({ type: 'global', current: index + 1, total, folder: directory });
+      return;
     }
     let metadata = {};
     try {
@@ -206,7 +241,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
     const duration = Number.parseFloat(metadata.format?.duration) || 0;
     await new Promise((resolve, reject) => {
       const process = spawn('ffmpeg', args);
-      controls.setProcess(process);
+      controls.processes.add(process);
       let stderr = '';
       process.stderr.on('data', (data) => {
         const chunk = data.toString();
@@ -225,7 +260,7 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
       });
       process.once('error', reject);
       process.once('close', (code) => {
-        controls.setProcess(null);
+        controls.processes.delete(process);
         if (controls.isCancelled()) {
           fs.rmSync(temporary, { force: true });
           return reject(cancelledError());
@@ -239,8 +274,28 @@ async function convertFolder(directory, codec, selections, onProgress, controls,
         resolve();
       });
     });
-    onProgress({ type: 'global', current: index + 1, total: files.length, folder: directory });
-  }
+    onProgress({ type: 'global', current: index + 1, total, folder: directory });
+  };
+
+  const worker = async () => {
+    while (!controls.isCancelled() && failed === null) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= total) break;
+      try {
+        await convertOne(index);
+      } catch (error) {
+        if (failed === null) {
+          failed = error;
+          killActive();
+        }
+        break;
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: workersFor }, worker));
+  if (failed) throw failed;
 }
 
 function convertWithHandbrake(
@@ -268,12 +323,12 @@ function convertWithHandbrake(
       ab: '128',
       optimize: true,
     });
-    controls.setProcess(job);
+    controls.processes.add(job);
     let settled = false;
     const finish = (error) => {
       if (settled) return;
       settled = true;
-      controls.setProcess(null);
+      controls.processes.delete(job);
       if (error || controls.isCancelled()) {
         fs.rmSync(temporary, { force: true });
         reject(error || cancelledError());
@@ -296,4 +351,4 @@ function convertWithHandbrake(
   });
 }
 
-module.exports = { inspectFolder, convertFolder };
+module.exports = { inspectFolder, convertFolder, killProcess };

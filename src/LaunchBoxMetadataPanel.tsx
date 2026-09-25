@@ -14,10 +14,10 @@ import type {
 } from './types';
 
 const EMPTY_MAPPING: LaunchBoxMapping = {
-  platformColumn: '',
+  platformColumn:    '',
   releaseDateColumn: '',
-  publisherColumn: '',
-  developerColumn: '',
+  publisherColumn:   '',
+  developerColumn:   '',
 };
 
 function columnMatches(column: CollectionColumn, pattern: RegExp, type?: CollectionColumnType) {
@@ -28,10 +28,10 @@ function detectMapping(collection: Collection): LaunchBoxMapping {
   const find = (pattern: RegExp, type?: CollectionColumnType) =>
     collection.columns.find((column) => columnMatches(column, pattern, type));
   return {
-    platformColumn: find(/plataforma|platform/)?.name ?? '',
+    platformColumn:    find(/plataforma|platform/)?.name ?? '',
     releaseDateColumn: find(/fecha.*(lanzamiento|estreno)|release.*(date|day)/, 'date')?.name ?? '',
-    publisherColumn: find(/publisher|editor|public[ae]dora/)?.name ?? '',
-    developerColumn: find(/developer|desarrollador|desarrollos?|estudio/)?.name ?? '',
+    publisherColumn:   find(/publisher|editor|public[ae]dora/)?.name ?? '',
+    developerColumn:   find(/developer|desarrollador|desarrollos?|estudio/)?.name ?? '',
   };
 }
 
@@ -54,20 +54,20 @@ export default function LaunchBoxMetadataPanel({
     collection ? detectMapping(collection) : EMPTY_MAPPING,
   );
 
-  const [singleName, setSingleName] = useState('');
+  const [singleName, setSingleName]         = useState('');
   const [singlePlatform, setSinglePlatform] = useState('');
-  const [singleLoading, setSingleLoading] = useState(false);
-  const [singleResult, setSingleResult] = useState<LaunchBoxSingleResult | null>(null);
-  const [applying, setApplying] = useState(false);
-  const [addToSelected, setAddToSelected] = useState<ReadonlySet<number>>(new Set());
-  const [addingTo, setAddingTo] = useState(false);
+  const [singleLoading, setSingleLoading]   = useState(false);
+  const [singleResult, setSingleResult]     = useState<LaunchBoxSingleResult | null>(null);
+  const [applying, setApplying]             = useState(false);
+  const [addToSelected, setAddToSelected]   = useState<ReadonlySet<number>>(new Set());
+  const [addingTo, setAddingTo]             = useState(false);
 
-  const [csv, setCsv] = useState<{ fileName: string; rows: LaunchBoxCsvRow[] } | null>(null);
-  const [match, setMatch] = useState<LaunchBoxMatchResult | null>(null);
-  const [bulkResults, setBulkResults] = useState<LaunchBoxBulkResult[] | null>(null);
-  const [bulkRunning, setBulkRunning] = useState(false);
+  const [csv, setCsv]                   = useState<{ fileName: string; rows: LaunchBoxCsvRow[] } | null>(null);
+  const [match, setMatch]               = useState<LaunchBoxMatchResult | null>(null);
+  const [bulkResults, setBulkResults]   = useState<LaunchBoxBulkResult[] | null>(null);
+  const [bulkRunning, setBulkRunning]   = useState(false);
   const [bulkProgress, setBulkProgress] = useState<LaunchBoxBulkProgress | null>(null);
-  const [csvMessage, setCsvMessage] = useState('');
+  const [csvMessage, setCsvMessage]     = useState('');
 
   useEffect(() => window.tools.onLaunchBoxBulkProgress(setBulkProgress), []);
 
@@ -77,7 +77,7 @@ export default function LaunchBoxMetadataPanel({
       return;
     }
     const result = await window.tools.launchboxMatchRows({
-      collectionId: collection.id,
+      collectionId:   collection.id,
       platformColumn: mapping.platformColumn,
       rows,
     });
@@ -145,7 +145,7 @@ export default function LaunchBoxMetadataPanel({
       const summary = await window.tools.launchboxApplyBulk({
         collectionId: collection.id,
         mapping,
-        results: bulkResults,
+        results:      bulkResults,
       });
       setCsvMessage(summaryText(summary));
       notify('Metadatos de LaunchBox aplicados a la colección.');
@@ -180,10 +180,10 @@ export default function LaunchBoxMetadataPanel({
     notify('');
     try {
       const result = await window.tools.launchboxSingle({
-        collectionId: collection?.id ?? 0,
+        collectionId:   collection?.id ?? 0,
         platformColumn: mapping.platformColumn,
-        name: singleName,
-        platform: singlePlatform,
+        name:           singleName,
+        platform:       singlePlatform,
       });
       setSingleResult(result);
     } catch (error) {
@@ -205,7 +205,7 @@ export default function LaunchBoxMetadataPanel({
     try {
       await window.tools.launchboxApplyOne({
         mapping,
-        itemId: singleResult.itemId,
+        itemId:   singleResult.itemId,
         metadata: singleResult.metadata,
       });
       notify('Metadata aplicada al ítem.');
@@ -232,10 +232,10 @@ export default function LaunchBoxMetadataPanel({
     if (!targets.length) return;
     setAddingTo(true);
     try {
-      const name = singleResult.title || singleName.trim();
+      const name          = singleResult.title || singleName.trim();
       const platformLabel = singleResult.platformLabel || singlePlatform.trim();
       for (const target of targets) {
-        const targetMapping = detectMapping(target);
+        const targetMapping                   = detectMapping(target);
         const values: Record<string, unknown> = {};
         if (targetMapping.platformColumn && platformLabel)
           values[targetMapping.platformColumn] = platformLabel;
@@ -253,8 +253,8 @@ export default function LaunchBoxMetadataPanel({
         await window.tools.createCollectionItem({
           collectionId: target.id,
           name,
-          imageUrl: singleResult.metadata?.boxartUrl || null,
-          tags: [],
+          imageUrl:     singleResult.metadata?.boxartUrl || null,
+          tags:         [],
           values,
         });
       }

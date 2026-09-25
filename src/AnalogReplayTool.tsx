@@ -11,12 +11,12 @@ import type {
 
 type Screen = 'home' | 'channels' | 'shows' | 'schedule';
 const SCREENS: Record<Screen, { title: string; subtitle: string }> = {
-  home: { title: 'Inicio', subtitle: 'Resumen general de la configuración' },
+  home:     { title: 'Inicio', subtitle: 'Resumen general de la configuración' },
   channels: { title: 'Canales', subtitle: 'Crear, editar y eliminar canales' },
-  shows: { title: 'Programas', subtitle: 'Crear, editar y eliminar programas' },
+  shows:    { title: 'Programas', subtitle: 'Crear, editar y eliminar programas' },
   schedule: { title: 'Programación', subtitle: 'Estado, generación y reseteo de la programación' },
 };
-const NAV_ITEMS: { id: Screen; label: string; short: string }[] = [
+const NAV_ITEMS: { id: Screen; label: string; short: string }[]    = [
   { id: 'home', label: 'Inicio', short: 'IN' },
   { id: 'channels', label: 'Canales', short: 'CN' },
   { id: 'shows', label: 'Programas', short: 'PG' },
@@ -24,11 +24,11 @@ const NAV_ITEMS: { id: Screen; label: string; short: string }[] = [
 ];
 
 export default function AnalogReplayTool() {
-  const [screen, setScreen] = useState<Screen>('home');
+  const [screen, setScreen]     = useState<Screen>('home');
   const [channels, setChannels] = useState<AnalogChannel[]>([]);
-  const [shows, setShows] = useState<AnalogShow[]>([]);
-  const meta = SCREENS[screen];
-  const reloadCounts = useCallback(async () => {
+  const [shows, setShows]       = useState<AnalogShow[]>([]);
+  const meta                    = SCREENS[screen];
+  const reloadCounts            = useCallback(async () => {
     try {
       const [loadedChannels, loadedShows] = await Promise.all([
         window.tools.analogListChannels(),
@@ -104,10 +104,10 @@ function HomeScreen({
   refreshCounts: () => void;
 }) {
   const [channels, setChannels] = useState<AnalogChannel[]>([]);
-  const [shows, setShows] = useState<AnalogShow[]>([]);
-  const [status, setStatus] = useState<AnalogScheduleStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [shows, setShows]       = useState<AnalogShow[]>([]);
+  const [status, setStatus]     = useState<AnalogScheduleStatus | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -136,12 +136,12 @@ function HomeScreen({
   }, [refreshCounts]);
 
   const enabledChannels = channels.filter((channel) => channel.isEnabled !== false);
-  const totalEpisodes = shows.reduce(
+  const totalEpisodes   = shows.reduce(
     (total, show) =>
       total + show.seasons.reduce((sum, season) => sum + (season.episodes?.length || 0), 0),
     0,
   );
-  const scheduleReady = status?.status === 'ready' && status.config?.primaryYear;
+  const scheduleReady   = status?.status === 'ready' && status.config?.primaryYear;
   if (loading) return <p className="analog-message">Cargando resumen de la configuración...</p>;
   if (error) return <p className="analog-message analog-error">{error}</p>;
   return (
@@ -219,16 +219,16 @@ function HomeScreen({
 
 type ChannelView = 'list' | 'create' | 'edit' | 'import';
 function ChannelsScreen({ refreshCounts }: { refreshCounts: () => void }) {
-  const [channels, setChannels] = useState<AnalogChannel[]>([]);
-  const [view, setView] = useState<ChannelView>('list');
-  const [name, setName] = useState('');
-  const [number, setNumber] = useState('');
+  const [channels, setChannels]       = useState<AnalogChannel[]>([]);
+  const [view, setView]               = useState<ChannelView>('list');
+  const [name, setName]               = useState('');
+  const [number, setNumber]           = useState('');
   const [description, setDescription] = useState('');
-  const [enabled, setEnabled] = useState(true);
-  const [editing, setEditing] = useState<AnalogChannel | null>(null);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => {
+  const [enabled, setEnabled]         = useState(true);
+  const [editing, setEditing]         = useState<AnalogChannel | null>(null);
+  const [message, setMessage]         = useState('');
+  const [busy, setBusy]               = useState(false);
+  const load                          = useCallback(async () => {
     setMessage('');
     try {
       setChannels(await window.tools.analogListChannels());
@@ -262,7 +262,7 @@ function ChannelsScreen({ refreshCounts }: { refreshCounts: () => void }) {
     setEnabled(true);
     setEditing(null);
   };
-  const save = async () => {
+  const save      = async () => {
     const parsed = Number.parseInt(number, 10);
     if (!name.trim()) return setMessage('El nombre del canal es requerido.');
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 999)
@@ -278,17 +278,17 @@ function ChannelsScreen({ refreshCounts }: { refreshCounts: () => void }) {
     try {
       if (editing)
         await window.tools.analogUpdateChannel(editing.id, {
-          name: name.trim(),
-          number: parsed,
+          name:        name.trim(),
+          number:      parsed,
           description: description.trim(),
-          isEnabled: enabled,
+          isEnabled:   enabled,
         });
       else
         await window.tools.analogCreateChannel({
-          name: name.trim(),
-          number: parsed,
+          name:        name.trim(),
+          number:      parsed,
           description: description.trim(),
-          isEnabled: enabled,
+          isEnabled:   enabled,
         });
       resetForm();
       setView('list');
@@ -300,7 +300,7 @@ function ChannelsScreen({ refreshCounts }: { refreshCounts: () => void }) {
       setBusy(false);
     }
   };
-  const remove = async (channel: AnalogChannel) => {
+  const remove     = async (channel: AnalogChannel) => {
     if (!confirm(`¿Eliminar el canal "${channel.name}"?`)) return;
     setBusy(true);
     try {
@@ -312,7 +312,7 @@ function ChannelsScreen({ refreshCounts }: { refreshCounts: () => void }) {
       setBusy(false);
     }
   };
-  const toggle = async (channel: AnalogChannel) => {
+  const toggle     = async (channel: AnalogChannel) => {
     try {
       await window.tools.analogUpdateChannel(channel.id, {
         isEnabled: channel.isEnabled === false,
@@ -464,33 +464,33 @@ function ChannelsScreen({ refreshCounts }: { refreshCounts: () => void }) {
 
 type ShowDraft = Omit<AnalogShow, 'id'> & { id?: number };
 const EMPTY_SHOW: ShowDraft = {
-  name: '',
+  name:    '',
   channel: [],
   seasons: [
     {
-      season: 1,
-      year: new Date().getFullYear(),
-      episodes: [{ episode: 1, title: '', duration: '00:00' }],
-      contentPath: '',
+      season:       1,
+      year:         new Date().getFullYear(),
+      episodes:     [{ episode: 1, title: '', duration: '00:00' }],
+      contentPath:  '',
       contentPaths: [],
     },
   ],
-  airYears: [],
-  airUntilToDate: false,
+  airYears:          [],
+  airUntilToDate:    false,
   episodeAiringMode: 'daily-repeat',
 };
 type ShowView = 'list' | 'create' | 'edit' | 'import';
 type ShowSort = 'channel-name' | 'name' | 'year';
 function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
-  const [shows, setShows] = useState<AnalogShow[]>([]);
-  const [channels, setChannels] = useState<AnalogChannel[]>([]);
-  const [view, setView] = useState<ShowView>('list');
-  const [draft, setDraft] = useState<ShowDraft>(EMPTY_SHOW);
-  const [channelInput, setChannelInput] = useState('');
-  const [airYearInput, setAirYearInput] = useState('');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [sortBy, setSortBy] = useState<ShowSort>('name');
+  const [shows, setShows]                 = useState<AnalogShow[]>([]);
+  const [channels, setChannels]           = useState<AnalogChannel[]>([]);
+  const [view, setView]                   = useState<ShowView>('list');
+  const [draft, setDraft]                 = useState<ShowDraft>(EMPTY_SHOW);
+  const [channelInput, setChannelInput]   = useState('');
+  const [airYearInput, setAirYearInput]   = useState('');
+  const [message, setMessage]             = useState('');
+  const [busy, setBusy]                   = useState(false);
+  const [sortBy, setSortBy]               = useState<ShowSort>('name');
   const [channelFilter, setChannelFilter] = useState('');
 
   const load = useCallback(async () => {
@@ -534,15 +534,15 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
     );
     return match ? match.name : entry;
   };
-  const channelKey = (channel: AnalogChannel) => String(channel.uuid || channel.id);
+  const channelKey       = (channel: AnalogChannel) => String(channel.uuid || channel.id);
   const showChannelNames = (show: AnalogShow) =>
     show.channel.map(channelLabel).filter(Boolean).join(', ');
-  const showYear = (show: AnalogShow) => {
+  const showYear         = (show: AnalogShow) => {
     const years = (show.airYears || []).filter(Number.isInteger);
     return years.length ? Math.min(...years) : null;
   };
   const selectedChannel = channels.find((channel) => channelKey(channel) === channelFilter) || null;
-  const visibleShows = shows.filter(
+  const visibleShows    = shows.filter(
     (show) =>
       !selectedChannel ||
       show.channel.some(
@@ -552,13 +552,13 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
           String(entry).toLowerCase() === String(selectedChannel.name).toLowerCase(),
       ),
   );
-  const sortedShows = [...visibleShows].sort((left, right) => {
+  const sortedShows     = [...visibleShows].sort((left, right) => {
     if (sortBy === 'channel-name') {
-      const leftChannel = showChannelNames(left).toLowerCase();
+      const leftChannel  = showChannelNames(left).toLowerCase();
       const rightChannel = showChannelNames(right).toLowerCase();
       if (leftChannel !== rightChannel) return leftChannel < rightChannel ? -1 : 1;
     } else if (sortBy === 'year') {
-      const leftYear = showYear(left);
+      const leftYear  = showYear(left);
       const rightYear = showYear(right);
       if (leftYear == null && rightYear == null) {
         // sin años: se ordena por nombre
@@ -567,7 +567,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
       else if (leftYear !== rightYear) return leftYear - rightYear;
     }
     return left.name.localeCompare(right.name, undefined, {
-      numeric: true,
+      numeric:     true,
       sensitivity: 'base',
     });
   });
@@ -589,7 +589,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
     }
     setAirYearInput('');
   };
-  const updateSeason = (index: number, patch: Partial<ShowDraft['seasons'][number]>) =>
+  const updateSeason  = (index: number, patch: Partial<ShowDraft['seasons'][number]>) =>
     setDraft({
       ...draft,
       seasons: draft.seasons.map((season, position) =>
@@ -623,11 +623,11 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
       if (!videos.length) return setMessage('No se encontraron videos en la carpeta.');
       updateSeason(seasonIndex, {
         contentPath: folderPath,
-        episodes: videos.map((video) => ({
-          episode: video.episode,
-          title: video.title,
-          duration: video.duration,
-          fileName: video.fileName,
+        episodes:    videos.map((video) => ({
+          episode:   video.episode,
+          title:     video.title,
+          duration:  video.duration,
+          fileName:  video.fileName,
           fileNames: [video.fileName],
         })),
       });
@@ -640,7 +640,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
     try {
       const folderPath = await window.tools.analogSelectFolder();
       if (!folderPath) return;
-      const season = draft.seasons[seasonIndex];
+      const season   = draft.seasons[seasonIndex];
       const existing = season.contentPaths || [];
       if (season.contentPath === folderPath || existing.includes(folderPath)) return;
       let matches: Record<number, string | null> = {};
@@ -648,7 +648,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
         matches = await window.tools.analogFolderMatch(
           folderPath,
           season.episodes.map((episode) => ({
-            episode: episode.episode,
+            episode:   episode.episode,
             fileNames: episodeFileNames(episode),
           })),
         );
@@ -663,7 +663,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
             : {
                 ...item,
                 contentPaths: [...existing, folderPath],
-                episodes: item.episodes.map((episode) => {
+                episodes:     item.episodes.map((episode) => {
                   const matched = matches[episode.episode];
                   if (!matched) return episode;
                   const known = episodeFileNames(episode);
@@ -683,11 +683,11 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
     setMessage('');
     try {
       const payload = {
-        name: draft.name.trim(),
-        channel: draft.channel,
-        seasons: draft.seasons,
-        airYears: draft.airYears || [],
-        airUntilToDate: !!draft.airUntilToDate,
+        name:              draft.name.trim(),
+        channel:           draft.channel,
+        seasons:           draft.seasons,
+        airYears:          draft.airYears || [],
+        airUntilToDate:    !!draft.airUntilToDate,
         episodeAiringMode: draft.episodeAiringMode || 'daily-repeat',
       };
       if (view === 'edit' && draft.id) await window.tools.analogUpdateShow(draft.id, payload);
@@ -702,7 +702,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
       setBusy(false);
     }
   };
-  const remove = async (show: AnalogShow) => {
+  const remove     = async (show: AnalogShow) => {
     if (!confirm(`¿Eliminar el programa "${show.name}"?`)) return;
     setBusy(true);
     try {
@@ -820,7 +820,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
                       setDraft({
                         ...show,
                         airYears: show.airYears || [],
-                        seasons: show.seasons.map((season) => ({
+                        seasons:  show.seasons.map((season) => ({
                           ...season,
                           contentPaths: season.contentPaths || [],
                         })),
@@ -1064,8 +1064,8 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
                       episodes: [
                         ...season.episodes,
                         {
-                          episode: season.episodes.length + 1,
-                          title: '',
+                          episode:  season.episodes.length + 1,
+                          title:    '',
                           duration: '00:00',
                         },
                       ],
@@ -1086,10 +1086,10 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
                   seasons: [
                     ...draft.seasons,
                     {
-                      season: draft.seasons.length + 1,
-                      year: new Date().getFullYear(),
-                      episodes: [{ episode: 1, title: '', duration: '00:00' }],
-                      contentPath: '',
+                      season:       draft.seasons.length + 1,
+                      year:         new Date().getFullYear(),
+                      episodes:     [{ episode: 1, title: '', duration: '00:00' }],
+                      contentPath:  '',
                       contentPaths: [],
                     },
                   ],
@@ -1131,13 +1131,13 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
 }
 
 function ScheduleScreen({ refreshCounts }: { refreshCounts: () => void }) {
-  const [status, setStatus] = useState<AnalogScheduleStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [resetting, setResetting] = useState(false);
+  const [status, setStatus]         = useState<AnalogScheduleStatus | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [resetting, setResetting]   = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [showSetup, setShowSetup] = useState(false);
-  const [message, setMessage] = useState('');
-  const reload = useCallback(async () => {
+  const [showSetup, setShowSetup]   = useState(false);
+  const [message, setMessage]       = useState('');
+  const reload                      = useCallback(async () => {
     setLoading(true);
     setMessage('');
     try {
@@ -1285,10 +1285,10 @@ function YearPicker({
   onCancel: () => void;
   onGenerate: (year: number) => void;
 }) {
-  const currentYear = new Date().getFullYear();
+  const currentYear         = new Date().getFullYear();
   const [decade, setDecade] = useState<number | null>(null);
-  const [year, setYear] = useState(currentYear);
-  const decades: number[] = [];
+  const [year, setYear]     = useState(currentYear);
+  const decades: number[]   = [];
   for (let value = 1950; value <= Math.floor(currentYear / 10) * 10; value += 10)
     decades.push(value);
   const yearsOfDecade =
@@ -1359,22 +1359,21 @@ function YearPicker({
   );
 }
 
-const SLOT_MINUTES = 30;
+const SLOT_MINUTES  = 30;
 const SLOTS_PER_DAY = 1440 / SLOT_MINUTES;
 function DaySchedule() {
-  const [date, setDate] = useState<Date | null>(null);
+  const [date, setDate]               = useState<Date | null>(null);
   const [primaryYear, setPrimaryYear] = useState(new Date().getFullYear());
-  const [channels, setChannels] = useState<AnalogChannel[]>([]);
-  const [entries, setEntries] = useState<AnalogScheduleEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [channels, setChannels]       = useState<AnalogChannel[]>([]);
+  const [entries, setEntries]         = useState<AnalogScheduleEntry[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState('');
 
   useEffect(() => {
     (async () => {
       try {
         const config: AnalogScheduleConfig | null = await window.tools.analogScheduleConfig();
-        const resolved =
-          config && config.primaryYear > 0 ? config.primaryYear : new Date().getFullYear();
+        const resolved                            = config && config.primaryYear > 0 ? config.primaryYear : new Date().getFullYear();
         setPrimaryYear(resolved);
         const now = new Date();
         setDate(new Date(resolved, now.getMonth(), now.getDate()));
@@ -1407,17 +1406,17 @@ function DaySchedule() {
   const dayStart = date
     ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0).getTime()
     : 0;
-  const dayEnd = dayStart + 86400000;
-  const rows = useMemo(() => {
+  const dayEnd   = dayStart + 86400000;
+  const rows     = useMemo(() => {
     if (!date) return [];
     const enabled = [...channels]
       .filter((channel) => channel.isEnabled !== false)
       .sort((a, b) => a.number - b.number);
-    const list = enabled
+    const list    = enabled
       .map((channel) => ({
-        id: channel.uuid || String(channel.id),
-        number: channel.number,
-        name: channel.name,
+        id:      channel.uuid || String(channel.id),
+        number:  channel.number,
+        name:    channel.name,
         entries: entries
           .filter(
             (entry) =>
@@ -1433,11 +1432,11 @@ function DaySchedule() {
 
   const entryForSlot = (channelEntries: AnalogScheduleEntry[], slotIndex: number) => {
     const slotStart = dayStart + slotIndex * SLOT_MINUTES * 60000;
-    const slotEnd = slotStart + SLOT_MINUTES * 60000;
+    const slotEnd   = slotStart + SLOT_MINUTES * 60000;
     return (
       channelEntries.find((entry) => {
         const start = new Date(entry.startTime).getTime();
-        const end = new Date(entry.endTime).getTime();
+        const end   = new Date(entry.endTime).getTime();
         return start < slotEnd && end > slotStart;
       }) || null
     );
@@ -1535,9 +1534,9 @@ function DaySchedule() {
         <p className="analog-day-title">
           {date.toLocaleDateString('es', {
             weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
+            day:     'numeric',
+            month:   'long',
+            year:    'numeric',
           })}
         </p>
       )}
@@ -1595,7 +1594,7 @@ function DayRow({
         <span>{row.name}</span>
       </div>
       {Array.from({ length: SLOTS_PER_DAY }, (_, slotIndex) => {
-        const entry = entryForSlot(row.entries, slotIndex);
+        const entry    = entryForSlot(row.entries, slotIndex);
         const isFiller = entry?.type === 'filler' || entry?.showId === 'analog-replay-tv-filler';
         return (
           <div
@@ -1632,16 +1631,16 @@ function episodeFileNames(episode: { fileName?: string; fileNames?: string[] }) 
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleDateString('es', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
+    day:    'numeric',
+    month:  'long',
+    year:   'numeric',
+    hour:   '2-digit',
     minute: '2-digit',
   });
 }
 
 function formatSlotLabel(minuteOfDay: number) {
-  const hours = Math.floor(minuteOfDay / 60);
+  const hours   = Math.floor(minuteOfDay / 60);
   const minutes = minuteOfDay % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }

@@ -11,33 +11,33 @@ import type {
 
 type Tab = 'sets' | 'cards' | 'lists' | 'transfer';
 
-const EMPTY_SET_DRAFT = {
-  name: '',
-  series: '',
-  subseries: '',
-  releaseDate: '',
-  manufacturer: '',
+const EMPTY_SET_DRAFT  = {
+  name:             '',
+  series:           '',
+  subseries:        '',
+  releaseDate:      '',
+  manufacturer:     '',
   considerVariants: false,
-  logoImg: '',
-  symbolImg: '',
+  logoImg:          '',
+  symbolImg:        '',
 };
 const EMPTY_CARD_DRAFT = {
-  name: '',
-  number: 0,
-  code: '',
-  rarity: '',
-  type: '',
-  illustrator: '',
-  language: '',
-  description: '',
-  img: '',
-  owned: 0,
-  isPromo: false,
+  name:           '',
+  number:         0,
+  code:           '',
+  rarity:         '',
+  type:           '',
+  illustrator:    '',
+  language:       '',
+  description:    '',
+  img:            '',
+  owned:          0,
+  isPromo:        false,
   customCategory: '',
 };
 
 export default function BinderTrackTool() {
-  const [tab, setTab] = useState<Tab>('sets');
+  const [tab, setTab]                 = useState<Tab>('sets');
   const [collections, setCollections] = useState<Collection[]>([]);
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
 
@@ -162,19 +162,19 @@ function SetsPanel({
   collections: Collection[];
   onOpenCards: (setId: string) => void;
 }) {
-  const [series, setSeries] = useState<string[]>([]);
+  const [series, setSeries]             = useState<string[]>([]);
   const [seriesFilter, setSeriesFilter] = useState('');
-  const [sets, setSets] = useState<BinderSet[]>([]);
-  const [editing, setEditing] = useState<{
+  const [sets, setSets]                 = useState<BinderSet[]>([]);
+  const [editing, setEditing]           = useState<{
     id: string | null;
     draft: typeof EMPTY_SET_DRAFT;
   } | null>(null);
-  const [addTarget, setAddTarget] = useState<BinderSet | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [addTarget, setAddTarget]       = useState<BinderSet | null>(null);
+  const [busy, setBusy]                 = useState(false);
+  const [message, setMessage]           = useState('');
 
   const loadSeries = () => window.tools.binderListSeries().then(setSeries);
-  const loadSets = (filter: string) =>
+  const loadSets   = (filter: string) =>
     window.tools.binderListSets(filter ? { series: filter } : undefined).then(setSets);
 
   useEffect(() => {
@@ -199,32 +199,32 @@ function SetsPanel({
 
   const startCreate = () =>
     setEditing({ id: null, draft: { ...EMPTY_SET_DRAFT, series: seriesFilter } });
-  const startEdit = (set: BinderSet) =>
+  const startEdit   = (set: BinderSet) =>
     setEditing({
-      id: set.id,
+      id:    set.id,
       draft: {
-        name: set.name,
-        series: set.series,
-        subseries: set.subseries || '',
-        releaseDate: set.releaseDate,
-        manufacturer: set.manufacturer,
+        name:             set.name,
+        series:           set.series,
+        subseries:        set.subseries || '',
+        releaseDate:      set.releaseDate,
+        manufacturer:     set.manufacturer,
         considerVariants: set.considerVariants,
-        logoImg: set.logoImg || '',
-        symbolImg: set.symbolImg || '',
+        logoImg:          set.logoImg || '',
+        symbolImg:        set.symbolImg || '',
       },
     });
-  const saveSet = () => {
+  const saveSet     = () => {
     if (!editing) return;
     run(async () => {
       const payload = {
-        name: editing.draft.name,
-        series: editing.draft.series,
-        subseries: editing.draft.subseries || null,
-        releaseDate: editing.draft.releaseDate,
-        manufacturer: editing.draft.manufacturer,
+        name:             editing.draft.name,
+        series:           editing.draft.series,
+        subseries:        editing.draft.subseries || null,
+        releaseDate:      editing.draft.releaseDate,
+        manufacturer:     editing.draft.manufacturer,
         considerVariants: editing.draft.considerVariants,
-        logoImg: editing.draft.logoImg || null,
-        symbolImg: editing.draft.symbolImg || null,
+        logoImg:          editing.draft.logoImg || null,
+        symbolImg:        editing.draft.symbolImg || null,
       };
       if (editing.id) await window.tools.binderUpdateSet(editing.id, payload);
       else await window.tools.binderCreateSet(payload);
@@ -462,17 +462,17 @@ function CardsPanel({
   activeSetId: string | null;
   onActiveSetIdChange: (id: string | null) => void;
 }) {
-  const [sets, setSets] = useState<BinderSet[]>([]);
-  const [cards, setCards] = useState<BinderCard[]>([]);
-  const [editing, setEditing] = useState<{
+  const [sets, setSets]                     = useState<BinderSet[]>([]);
+  const [cards, setCards]                   = useState<BinderCard[]>([]);
+  const [editing, setEditing]               = useState<{
     id: string | null;
     draft: typeof EMPTY_CARD_DRAFT;
   } | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
-  const [variants, setVariants] = useState<BinderCardVariant[]>([]);
-  const [addTarget, setAddTarget] = useState<BinderCard | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [variants, setVariants]             = useState<BinderCardVariant[]>([]);
+  const [addTarget, setAddTarget]           = useState<BinderCard | null>(null);
+  const [busy, setBusy]                     = useState(false);
+  const [message, setMessage]               = useState('');
 
   useEffect(() => {
     window.tools.binderListSets().then(setSets);
@@ -490,7 +490,7 @@ function CardsPanel({
     );
   }, [expandedCardId]);
 
-  const run = async (action: () => Promise<void>) => {
+  const run         = async (action: () => Promise<void>) => {
     setBusy(true);
     setMessage('');
     try {
@@ -502,41 +502,41 @@ function CardsPanel({
     }
   };
   const startCreate = () => setEditing({ id: null, draft: { ...EMPTY_CARD_DRAFT } });
-  const startEdit = (card: BinderCard) =>
+  const startEdit   = (card: BinderCard) =>
     setEditing({
-      id: card.id,
+      id:    card.id,
       draft: {
-        name: card.name,
-        number: card.number,
-        code: card.code,
-        rarity: card.rarity || '',
-        type: card.type || '',
-        illustrator: card.illustrator || '',
-        language: card.language || '',
-        description: card.description || '',
-        img: card.img,
-        owned: card.owned,
-        isPromo: card.isPromo,
+        name:           card.name,
+        number:         card.number,
+        code:           card.code,
+        rarity:         card.rarity || '',
+        type:           card.type || '',
+        illustrator:    card.illustrator || '',
+        language:       card.language || '',
+        description:    card.description || '',
+        img:            card.img,
+        owned:          card.owned,
+        isPromo:        card.isPromo,
         customCategory: card.customCategory || '',
       },
     });
-  const saveCard = () => {
+  const saveCard    = () => {
     if (!editing || !activeSetId) return;
     run(async () => {
       const payload = {
-        name: editing.draft.name,
-        number: editing.draft.number,
-        code: editing.draft.code,
-        rarity: editing.draft.rarity || null,
-        type: editing.draft.type || null,
-        illustrator: editing.draft.illustrator || null,
-        language: editing.draft.language || null,
-        description: editing.draft.description || null,
-        img: editing.draft.img,
-        owned: editing.draft.owned,
-        isPromo: editing.draft.isPromo,
+        name:           editing.draft.name,
+        number:         editing.draft.number,
+        code:           editing.draft.code,
+        rarity:         editing.draft.rarity || null,
+        type:           editing.draft.type || null,
+        illustrator:    editing.draft.illustrator || null,
+        language:       editing.draft.language || null,
+        description:    editing.draft.description || null,
+        img:            editing.draft.img,
+        owned:          editing.draft.owned,
+        isPromo:        editing.draft.isPromo,
         customCategory: editing.draft.customCategory || null,
-        setId: activeSetId,
+        setId:          activeSetId,
       };
       if (editing.id) await window.tools.binderUpdateCard(editing.id, payload);
       else await window.tools.binderCreateCard(payload);
@@ -545,7 +545,7 @@ function CardsPanel({
       setMessage('Carta guardada.');
     });
   };
-  const removeCard = (card: BinderCard) => {
+  const removeCard             = (card: BinderCard) => {
     if (!confirm(`¿Eliminar la carta "${card.name}"?`)) return;
     run(async () => {
       await window.tools.binderDeleteCard(card.id);
@@ -561,18 +561,18 @@ function CardsPanel({
       setMessage(`"${addTarget.name}" agregada a la colección.`);
     });
   };
-  const addVariant = () =>
+  const addVariant             = () =>
     expandedCardId &&
     run(async () => {
       await window.tools.binderCreateVariant({ cardId: expandedCardId, type: 'Nueva variante' });
       setVariants(await window.tools.binderListVariants(expandedCardId));
     });
-  const updateVariantField = (variant: BinderCardVariant, patch: Partial<BinderCardVariant>) =>
+  const updateVariantField     = (variant: BinderCardVariant, patch: Partial<BinderCardVariant>) =>
     run(async () => {
       await window.tools.binderUpdateVariant(variant.id, { ...variant, ...patch });
       if (expandedCardId) setVariants(await window.tools.binderListVariants(expandedCardId));
     });
-  const removeVariant = (variant: BinderCardVariant) =>
+  const removeVariant          = (variant: BinderCardVariant) =>
     run(async () => {
       await window.tools.binderDeleteVariant(variant.id);
       if (expandedCardId) setVariants(await window.tools.binderListVariants(expandedCardId));
@@ -862,19 +862,19 @@ function CardsPanel({
 
 // --- Listas personalizadas ---------------------------------------------------
 function ListsPanel() {
-  const [lists, setLists] = useState<BinderCustomList[]>([]);
-  const [activeListId, setActiveListId] = useState<string | null>(null);
-  const [entries, setEntries] = useState<BinderCustomListCard[]>([]);
-  const [editing, setEditing] = useState<{
+  const [lists, setLists]                 = useState<BinderCustomList[]>([]);
+  const [activeListId, setActiveListId]   = useState<string | null>(null);
+  const [entries, setEntries]             = useState<BinderCustomListCard[]>([]);
+  const [editing, setEditing]             = useState<{
     id: string | null;
     draft: { name: string; status: BinderCustomListStatus; iconColor: string };
   } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery]     = useState('');
   const [searchResults, setSearchResults] = useState<BinderCard[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [busy, setBusy]                   = useState(false);
+  const [message, setMessage]             = useState('');
 
-  const loadLists = () => window.tools.binderListCustomLists().then(setLists);
+  const loadLists   = () => window.tools.binderListCustomLists().then(setLists);
   const loadEntries = (listId: string) =>
     window.tools.binderListCustomListCards(listId).then(setEntries);
   useEffect(() => {
@@ -887,7 +887,7 @@ function ListsPanel() {
     ).then(setEntries);
   }, [activeListId]);
 
-  const run = async (action: () => Promise<void>) => {
+  const run         = async (action: () => Promise<void>) => {
     setBusy(true);
     setMessage('');
     try {
@@ -898,21 +898,21 @@ function ListsPanel() {
       setBusy(false);
     }
   };
-  const colorToHex = (value: number) => `#${(value & 0xffffff).toString(16).padStart(6, '0')}`;
-  const hexToColor = (hex: string) => 0xff000000 + Number.parseInt(hex.replace('#', ''), 16);
+  const colorToHex  = (value: number) => `#${(value & 0xffffff).toString(16).padStart(6, '0')}`;
+  const hexToColor  = (hex: string) => 0xff000000 + Number.parseInt(hex.replace('#', ''), 16);
   const startCreate = () =>
     setEditing({ id: null, draft: { name: '', status: 'en progreso', iconColor: '#5dc1b9' } });
-  const startEdit = (list: BinderCustomList) =>
+  const startEdit   = (list: BinderCustomList) =>
     setEditing({
-      id: list.id,
+      id:    list.id,
       draft: { name: list.name, status: list.status, iconColor: colorToHex(list.iconColor) },
     });
-  const saveList = () => {
+  const saveList    = () => {
     if (!editing) return;
     run(async () => {
       const payload = {
-        name: editing.draft.name,
-        status: editing.draft.status,
+        name:      editing.draft.name,
+        status:    editing.draft.status,
         iconColor: hexToColor(editing.draft.iconColor),
       };
       if (editing.id) await window.tools.binderUpdateCustomList(editing.id, payload);
@@ -940,11 +940,11 @@ function ListsPanel() {
       await window.tools.binderExportCustomList(list.id, destination);
       setMessage(`Lista "${list.name}" exportada.`);
     });
-  const runSearch = () =>
+  const runSearch   = () =>
     run(async () => {
       setSearchResults(searchQuery.trim() ? await window.tools.binderSearchCards(searchQuery) : []);
     });
-  const addCard = (card: BinderCard) => {
+  const addCard     = (card: BinderCard) => {
     if (!activeListId) return;
     run(async () => {
       await window.tools.binderAddCardToList({ listId: activeListId, cardId: card.id });
@@ -957,7 +957,7 @@ function ListsPanel() {
       await window.tools.binderRemoveCardFromList(entry.id);
       if (activeListId) loadEntries(activeListId);
     });
-  const moveEntry = (index: number, direction: -1 | 1) => {
+  const moveEntry   = (index: number, direction: -1 | 1) => {
     if (!activeListId) return;
     const target = index + direction;
     if (target < 0 || target >= entries.length) return;
@@ -1144,10 +1144,10 @@ function ListsPanel() {
 
 // --- Importar / Exportar ------------------------------------------------------
 function TransferPanel() {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy]       = useState(false);
   const [message, setMessage] = useState('');
 
-  const run = async (action: () => Promise<void>) => {
+  const run       = async (action: () => Promise<void>) => {
     setBusy(true);
     setMessage('');
     try {

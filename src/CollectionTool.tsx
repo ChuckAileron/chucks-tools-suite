@@ -22,40 +22,40 @@ type ItemDraft = {
   tags: string;
   values: Record<string, unknown>;
 };
-const EMPTY_COLLECTION = {
-  name: '',
+const EMPTY_COLLECTION                                  = {
+  name:        '',
   description: '',
-  type: 'generic',
-  columns: [] as CollectionColumn[],
+  type:        'generic',
+  columns:     [] as CollectionColumn[],
 };
-const EMPTY_ITEM: ItemDraft = { name: '', imageUrl: '', tags: '', values: {} };
+const EMPTY_ITEM: ItemDraft                             = { name: '', imageUrl: '', tags: '', values: {} };
 const TYPE_LABELS: Record<CollectionColumnType, string> = {
-  string: 'Texto',
-  number: 'Número',
+  string:  'Texto',
+  number:  'Número',
   boolean: 'Sí / No',
-  date: 'Fecha',
-  url: 'URL',
-  tags: 'Etiquetas',
+  date:    'Fecha',
+  url:     'URL',
+  tags:    'Etiquetas',
 };
 
 export default function CollectionTool() {
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [items, setItems] = useState<CollectionItem[]>([]);
-  const [view, setView] = useState<View>('catalog');
-  const [search, setSearch] = useState('');
-  const [catalogView, setCatalogView] = useState<CatalogView>(readCatalogView);
-  const [sortField, setSortField] = useState('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [filterField, setFilterField] = useState('');
-  const [filterValue, setFilterValue] = useState('');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [collections, setCollections]                   = useState<Collection[]>([]);
+  const [activeId, setActiveId]                         = useState<number | null>(null);
+  const [items, setItems]                               = useState<CollectionItem[]>([]);
+  const [view, setView]                                 = useState<View>('catalog');
+  const [search, setSearch]                             = useState('');
+  const [catalogView, setCatalogView]                   = useState<CatalogView>(readCatalogView);
+  const [sortField, setSortField]                       = useState('name');
+  const [sortDirection, setSortDirection]               = useState<SortDirection>('asc');
+  const [filterField, setFilterField]                   = useState('');
+  const [filterValue, setFilterValue]                   = useState('');
+  const [message, setMessage]                           = useState('');
+  const [busy, setBusy]                                 = useState(false);
   const [editingNewCollection, setEditingNewCollection] = useState(false);
-  const [collectionDraft, setCollectionDraft] = useState(EMPTY_COLLECTION);
-  const [itemDraft, setItemDraft] = useState<ItemDraft | null>(null);
+  const [collectionDraft, setCollectionDraft]           = useState(EMPTY_COLLECTION);
+  const [itemDraft, setItemDraft]                       = useState<ItemDraft | null>(null);
 
-  const active = collections.find((collection) => collection.id === activeId) || null;
+  const active           = collections.find((collection) => collection.id === activeId) || null;
   const configureCatalog = (collection: Collection) => {
     const sorting = savedCatalogSort(collection) || catalogDefaults(collection);
     setSortField(sorting.field);
@@ -67,23 +67,23 @@ export default function CollectionTool() {
     setCatalogView(next);
     localStorage.setItem(CATALOG_VIEW_KEY, next);
   };
-  const changeSorting = (field: string, direction: SortDirection) => {
+  const changeSorting     = (field: string, direction: SortDirection) => {
     setSortField(field);
     setSortDirection(direction);
     if (active) saveCatalogSort(active.id, field, direction);
   };
-  const loadCollections = async (preferredId?: number) => {
-    const result = await window.tools.getCollections();
+  const loadCollections   = async (preferredId?: number) => {
+    const result   = await window.tools.getCollections();
     const selected =
       result.find((collection) => collection.id === (preferredId ?? activeId)) || result[0] || null;
     setCollections(result);
     setActiveId(selected?.id ?? null);
     if (selected) {
       setCollectionDraft({
-        name: selected.name,
+        name:        selected.name,
         description: selected.description,
-        type: selected.type,
-        columns: selected.columns,
+        type:        selected.type,
+        columns:     selected.columns,
       });
       configureCatalog(selected);
     } else setItems([]);
@@ -97,10 +97,10 @@ export default function CollectionTool() {
         setActiveId(selected?.id ?? null);
         if (selected) {
           setCollectionDraft({
-            name: selected.name,
+            name:        selected.name,
             description: selected.description,
-            type: selected.type,
-            columns: selected.columns,
+            type:        selected.type,
+            columns:     selected.columns,
           });
           const sorting = savedCatalogSort(selected) || catalogDefaults(selected);
           setSortField(sorting.field);
@@ -118,7 +118,7 @@ export default function CollectionTool() {
       .then(setItems)
       .catch((error) => setMessage(String(error)));
   }, [activeId, search]);
-  const run = async (action: () => Promise<void>) => {
+  const run            = async (action: () => Promise<void>) => {
     setBusy(true);
     setMessage('');
     try {
@@ -147,11 +147,11 @@ export default function CollectionTool() {
       setMessage('Colección eliminada.');
     });
   };
-  const moveCollection = (id: number, direction: -1 | 1) =>
+  const moveCollection   = (id: number, direction: -1 | 1) =>
     run(async () => {
       const ordered = [...collections];
-      const index = ordered.findIndex((collection) => collection.id === id);
-      const target = index + direction;
+      const index   = ordered.findIndex((collection) => collection.id === id);
+      const target  = index + direction;
       if (index < 0 || target < 0 || target >= ordered.length) return;
       const [moved] = ordered.splice(index, 1);
       ordered.splice(target, 0, moved);
@@ -163,9 +163,9 @@ export default function CollectionTool() {
     if (!active || !itemDraft) return;
     run(async () => {
       const payload = {
-        name: itemDraft.name,
+        name:     itemDraft.name,
         imageUrl: itemDraft.imageUrl || null,
-        tags: itemDraft.tags
+        tags:     itemDraft.tags
           .split(',')
           .map((tag) => tag.trim())
           .filter(Boolean),
@@ -178,7 +178,7 @@ export default function CollectionTool() {
       setMessage(itemDraft.id ? 'Ítem actualizado.' : 'Ítem agregado.');
     });
   };
-  const removeItem = (item: CollectionItem) => {
+  const removeItem       = (item: CollectionItem) => {
     if (!confirm(`¿Eliminar "${item.name}"?`)) return;
     run(async () => {
       await window.tools.deleteCollectionItem(item.id);
@@ -192,13 +192,13 @@ export default function CollectionTool() {
       await loadCollections(imported.id);
       setMessage(`Colección "${imported.name}" importada.`);
     });
-  const editItem = (item: CollectionItem) =>
+  const editItem     = (item: CollectionItem) =>
     setItemDraft({
-      id: item.id,
-      name: item.name,
+      id:       item.id,
+      name:     item.name,
       imageUrl: item.imageUrl || '',
-      tags: item.tags.join(', '),
-      values: item.values,
+      tags:     item.tags.join(', '),
+      values:   item.values,
     });
   const catalogItems = active
     ? items
@@ -243,10 +243,10 @@ export default function CollectionTool() {
                     setEditingNewCollection(false);
                     setItemDraft(null);
                     setCollectionDraft({
-                      name: collection.name,
+                      name:        collection.name,
                       description: collection.description,
-                      type: collection.type,
-                      columns: collection.columns,
+                      type:        collection.type,
+                      columns:     collection.columns,
                     });
                     configureCatalog(collection);
                   }}
@@ -466,15 +466,15 @@ function CollectionEditor({
   activeId: number | null;
   onMove: (id: number, direction: -1 | 1) => void;
 }) {
-  const addColumn = () =>
+  const addColumn    = () =>
     setDraft({
       ...draft,
       columns: [
         ...draft.columns,
         {
-          name: `campo_${draft.columns.length + 1}`,
-          label: 'Nuevo campo',
-          type: 'string',
+          name:     `campo_${draft.columns.length + 1}`,
+          label:    'Nuevo campo',
+          type:     'string',
           required: false,
         },
       ],
@@ -631,7 +631,7 @@ function ItemEditor({
   cancel: () => void;
   busy: boolean;
 }) {
-  const setValue = (name: string, value: unknown) =>
+  const setValue                    = (name: string, value: unknown) =>
     setDraft({ ...draft, values: { ...draft.values, [name]: value } });
   const [searchOpen, setSearchOpen] = useState(false);
   return (
@@ -722,13 +722,13 @@ function ImageSearchModal({
   onClose: () => void;
   onConfirm: (url: string) => void;
 }) {
-  const [query, setQuery] = useState(initialQuery);
-  const [engine, setEngine] = useState<ImageSearchEngine>('bing');
-  const [results, setResults] = useState<ImageSearchResult[]>([]);
+  const [query, setQuery]       = useState(initialQuery);
+  const [engine, setEngine]     = useState<ImageSearchEngine>('bing');
+  const [results, setResults]   = useState<ImageSearchResult[]>([]);
   const [selected, setSelected] = useState<ImageSearchResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [page, setPage] = useState(0);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+  const [page, setPage]         = useState(0);
   const [searched, setSearched] = useState(false);
 
   useEffect(() => {
@@ -911,8 +911,7 @@ function ColumnInput({
         : column.type === 'url'
           ? 'url'
           : 'text';
-  const display =
-    column.type === 'tags' && Array.isArray(value)
+  const display   = column.type === 'tags' && Array.isArray(value)
       ? value.join(', ')
       : column.type === 'date' && typeof value === 'string'
         ? value.slice(0, 10)
@@ -953,9 +952,9 @@ function formatValue(value: unknown, type: CollectionColumnType) {
 function formatDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (match) {
-    const year = Number(match[1]);
+    const year  = Number(match[1]);
     const month = Number(match[2]);
-    const day = Number(match[3]);
+    const day   = Number(match[3]);
     return new Date(year, month - 1, day).toLocaleDateString();
   }
   const date = new Date(value);
@@ -987,9 +986,8 @@ function readCatalogSorts() {
 }
 
 function savedCatalogSort(collection: Collection) {
-  const sorting = readCatalogSorts()[collection.id];
-  const validField =
-    sorting?.field === 'name' ||
+  const sorting        = readCatalogSorts()[collection.id];
+  const validField     = sorting?.field === 'name' ||
     collection.columns.some((column) => column.name === sorting?.field);
   const validDirection = sorting?.direction === 'asc' || sorting?.direction === 'desc';
   return validField && validDirection ? sorting : null;
@@ -997,6 +995,7 @@ function savedCatalogSort(collection: Collection) {
 
 function saveCatalogSort(id: number, field: string, direction: SortDirection) {
   const sorting = readCatalogSorts();
+
   sorting[id] = { field, direction };
   localStorage.setItem(CATALOG_SORT_KEY, JSON.stringify(sorting));
 }
@@ -1037,9 +1036,9 @@ function compareItems(
   field: string,
   direction: SortDirection,
 ) {
-  const leftValue = itemFieldValue(left, field);
+  const leftValue  = itemFieldValue(left, field);
   const rightValue = itemFieldValue(right, field);
-  const leftEmpty = leftValue === undefined || leftValue === null || leftValue === '';
+  const leftEmpty  = leftValue === undefined || leftValue === null || leftValue === '';
   const rightEmpty = rightValue === undefined || rightValue === null || rightValue === '';
   if (leftEmpty && rightEmpty) return 0;
   if (leftEmpty) return 1;
@@ -1052,7 +1051,7 @@ function compareItems(
   else if (column?.type === 'boolean') comparison = Number(leftValue) - Number(rightValue);
   else
     comparison = String(leftValue).localeCompare(String(rightValue), undefined, {
-      numeric: true,
+      numeric:     true,
       sensitivity: 'base',
     });
   return direction === 'asc' ? comparison : -comparison;

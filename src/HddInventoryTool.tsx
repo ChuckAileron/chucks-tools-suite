@@ -1,31 +1,31 @@
 import { useEffect, useState } from 'react';
 import type { HddDrive, HddEntry, HddScanState } from './types';
 
-const EMPTY_SCAN: HddScanState = {
-  running: false,
-  driveId: null,
-  processed: 0,
+const EMPTY_SCAN: HddScanState               = {
+  running:    false,
+  driveId:    null,
+  processed:  0,
   thumbnails: 0,
-  current: '',
-  error: '',
+  current:    '',
+  error:      '',
 };
 const CATEGORY_LABEL: Record<string, string> = {
-  folder: 'Carpeta',
-  video: 'Video',
-  image: 'Foto',
-  audio: 'Audio',
+  folder:   'Carpeta',
+  video:    'Video',
+  image:    'Foto',
+  audio:    'Audio',
   document: 'Documento',
-  other: 'Otro',
+  other:    'Otro',
 };
-const CATEGORY_ICON: Record<string, string> = {
-  folder: '📁',
-  video: '🎬',
-  image: '🖼',
-  audio: '🎵',
+const CATEGORY_ICON: Record<string, string>  = {
+  folder:   '📁',
+  video:    '🎬',
+  image:    '🖼',
+  audio:    '🎵',
   document: '📄',
-  other: '📦',
+  other:    '📦',
 };
-const formatSize = (bytes: number) =>
+const formatSize                             = (bytes: number) =>
   !bytes
     ? '—'
     : bytes < 1048576
@@ -33,7 +33,7 @@ const formatSize = (bytes: number) =>
       : bytes < 1073741824
         ? `${(bytes / 1048576).toFixed(1)} MB`
         : `${(bytes / 1073741824).toFixed(2)} GB`;
-const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString('es') : '—');
+const formatDate                             = (value: string | null) => (value ? new Date(value).toLocaleString('es') : '—');
 
 export default function HddInventoryTool({
   activeDriveId,
@@ -48,15 +48,15 @@ export default function HddInventoryTool({
   onParentPathChange?: (value: string) => void;
   onPlay?: (drive: HddDrive, entry: HddEntry) => void;
 }) {
-  const [drives, setDrives] = useState<HddDrive[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [scanState, setScanState] = useState<HddScanState>(EMPTY_SCAN);
+  const [drives, setDrives]                               = useState<HddDrive[]>([]);
+  const [loading, setLoading]                             = useState(false);
+  const [scanState, setScanState]                         = useState<HddScanState>(EMPTY_SCAN);
   const [internalActiveDriveId, setInternalActiveDriveId] = useState<number | null>(null);
-  const effectiveActiveDriveId = activeDriveId !== undefined ? activeDriveId : internalActiveDriveId;
-  const setActiveDriveId = onActiveDriveIdChange || setInternalActiveDriveId;
-  const [registerRoot, setRegisterRoot] = useState<string | null>(null);
-  const [editingDrive, setEditingDrive] = useState<HddDrive | null>(null);
-  const [message, setMessage] = useState('');
+  const effectiveActiveDriveId                            = activeDriveId !== undefined ? activeDriveId : internalActiveDriveId;
+  const setActiveDriveId                                  = onActiveDriveIdChange || setInternalActiveDriveId;
+  const [registerRoot, setRegisterRoot]                   = useState<string | null>(null);
+  const [editingDrive, setEditingDrive]                   = useState<HddDrive | null>(null);
+  const [message, setMessage]                             = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -82,7 +82,7 @@ export default function HddInventoryTool({
     const rootPath = await window.tools.hddSelectRoot();
     if (rootPath) setRegisterRoot(rootPath);
   };
-  const startScan = async (id: number) => {
+  const startScan   = async (id: number) => {
     setMessage('');
     try {
       await window.tools.hddStartScan(id);
@@ -237,10 +237,10 @@ function RegisterModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [code, setCode] = useState('');
+  const [code, setCode]   = useState('');
   const [label, setLabel] = useState('');
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy]   = useState(false);
   const submit = async () => {
     setBusy(true);
     setError('');
@@ -303,10 +303,10 @@ function EditDriveModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [code, setCode] = useState(drive.code);
+  const [code, setCode]   = useState(drive.code);
   const [label, setLabel] = useState(drive.label);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy]   = useState(false);
   const submit = async () => {
     setBusy(true);
     setError('');
@@ -368,17 +368,17 @@ function HddExplorer({
   onPlay?: (drive: HddDrive, entry: HddEntry) => void;
 }) {
   const [internalParentPath, setInternalParentPath] = useState('');
-  const parentPath = parentPathProp !== undefined ? parentPathProp : internalParentPath;
-  const setParentPath = onParentPathChange || setInternalParentPath;
-  const [entries, setEntries] = useState<HddEntry[]>([]);
-  const [thumbs, setThumbs] = useState<Record<number, string>>({});
-  const [renaming, setRenaming] = useState<HddEntry | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [applyToDisk, setApplyToDisk] = useState(false);
-  const [detail, setDetail] = useState<HddEntry | null>(null);
-  const [preview, setPreview] = useState<HddEntry | null>(null);
-  const [message, setMessage] = useState('');
-  const scanning = scanState.running && scanState.driveId === drive.id;
+  const parentPath                                  = parentPathProp !== undefined ? parentPathProp : internalParentPath;
+  const setParentPath                               = onParentPathChange || setInternalParentPath;
+  const [entries, setEntries]                       = useState<HddEntry[]>([]);
+  const [thumbs, setThumbs]                         = useState<Record<number, string>>({});
+  const [renaming, setRenaming]                     = useState<HddEntry | null>(null);
+  const [renameValue, setRenameValue]               = useState('');
+  const [applyToDisk, setApplyToDisk]               = useState(false);
+  const [detail, setDetail]                         = useState<HddEntry | null>(null);
+  const [preview, setPreview]                       = useState<HddEntry | null>(null);
+  const [message, setMessage]                       = useState('');
+  const scanning                                    = scanState.running && scanState.driveId === drive.id;
 
   const loadEntries = async (nextParent: string) => {
     const list = await window.tools.hddEntries(drive.id, nextParent);
@@ -399,7 +399,7 @@ function HddExplorer({
   }, [entries]);
 
   const crumbs = parentPath ? parentPath.split('/') : [];
-  const goTo = (index: number) => setParentPath(crumbs.slice(0, index).join('/'));
+  const goTo   = (index: number) => setParentPath(crumbs.slice(0, index).join('/'));
 
   const showInFolder = async (entry: HddEntry) => {
     setMessage('');
@@ -410,7 +410,7 @@ function HddExplorer({
     }
   };
 
-  const startRename = (entry: HddEntry) => {
+  const startRename   = (entry: HddEntry) => {
     setRenaming(entry);
     setRenameValue(entry.name);
     setApplyToDisk(false);
@@ -435,9 +435,9 @@ function HddExplorer({
     }
     try {
       await window.tools.hddRename({
-        driveId: drive.id,
-        entryId: renaming.id,
-        newName: trimmed,
+        driveId:     drive.id,
+        entryId:     renaming.id,
+        newName:     trimmed,
         applyToDisk: applyToDisk && drive.connected,
       });
       setRenaming(null);

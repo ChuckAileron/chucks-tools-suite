@@ -1,9 +1,10 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, shell } = require('electron');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
-const { inspectFolder, convertFolder } = require('./videoConversion.cjs');
+const { inspectFolder, convertFolder, killProcess } = require('./videoConversion.cjs');
 const {
   scanMedia,
   normalizeMedia,
@@ -24,6 +25,7 @@ const mediaPlayer = require('./mediaPlayer.cjs');
 const trimTool = require('./trim.cjs');
 const binderTrack = require('./binderTrack.cjs');
 const launchboxMetadata = require('./launchboxMetadata.cjs');
+const chuckbot = require('./chuckbot.cjs');
 // Esquema privilegiado usado para transmitir video/audio/imágenes desde un
 // HDD catalogado directamente al reproductor, con soporte de rango (Range)
 // para permitir búsqueda (seek). Debe registrarse antes de que la app esté
@@ -69,8 +71,24 @@ function looksLikeDownloadText(text) {
   );
 }
 const createdDestinationFolders = new Set();
+// Concurrencia de conversión de video: la transcodificación con x264/x265 es
+// CPU-bound y ya aprovecha todos los hilos por proceso, así que el paralelismo
+// solo aporta cuando sobran núcleos. Se recomienda ~1 proceso por cada 4
+// núcleos lógicos, con un tope conservador de 3.
+const VIDEO_CONCURRENCY_LIMIT = 3;
+const detectVideoConcurrency = (cores = os.cpus().length) =>
+  Math.max(1, Math.min(VIDEO_CONCURRENCY_LIMIT, Math.floor(cores / 4)));
+const parseConcurrencyPreference = (preference) => {
+  if (preference === 'auto' || preference == null || preference === '') return 'auto';
+  const parsed = Math.floor(Number(preference));
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(VIDEO_CONCURRENCY_LIMIT, parsed)) : 'auto';
+};
+const resolveVideoConcurrency = (preference, cores = os.cpus().length) => {
+  const normalized = parseConcurrencyPreference(preference);
+  return normalized === 'auto' ? detectVideoConcurrency(cores) : normalized;
+};
 let videoCancelled = false;
-let activeVideoProcess = null;
+let activeVideoProcesses = new Set();
 let videoQueue = [];
 let activeVideoFolder = '';
 let videoCompletedFiles = 0;
@@ -87,6 +105,8 @@ let videoState = {
   logs: [],
   normalizeAudio: false,
   normalizeTarget: -16,
+  concurrencyPreference: 'auto',
+  concurrency: detectVideoConcurrency(),
 };
 const parseVideoTarget = (value) => {
   const parsed = Number(value);
@@ -1023,14 +1043,32 @@ app.whenReady().then(async () => {
     Promise.all(folders.map((folder) => inspectFolder(path.resolve(folder), codec))),
   );
   ipcMain.handle('video:state', () => videoState);
+  ipcMain.handle('video:capacity', () => ({
+    cores: os.cpus().length,
+    detected: detectVideoConcurrency(),
+    max: VIDEO_CONCURRENCY_LIMIT,
+  }));
+  ipcMain.handle('video:set-concurrency', (_event, preference) => {
+    videoState.concurrencyPreference = parseConcurrencyPreference(preference);
+    videoState.concurrency = resolveVideoConcurrency(videoState.concurrencyPreference);
+    return true;
+  });
   ipcMain.handle(
     'video:start',
     async (
       _event,
-      { folders, codec, trackSelections, normalizeAudio = false, normalizeTarget = -16 },
+      {
+        folders,
+        codec,
+        trackSelections,
+        normalizeAudio = false,
+        normalizeTarget = -16,
+        concurrency = 'auto',
+      },
     ) => {
       if (videoState.running) throw new Error('Ya hay una conversión de video en curso.');
       videoCancelled = false;
+      activeVideoProcesses.clear();
       videoCompletedFiles = 0;
       const inspectedFolders = await Promise.all(
         folders.map(async (folder) => {
@@ -1056,6 +1094,8 @@ app.whenReady().then(async () => {
         logs: [],
         normalizeAudio: !!normalizeAudio,
         normalizeTarget,
+        concurrencyPreference: parseConcurrencyPreference(concurrency),
+        concurrency: resolveVideoConcurrency(concurrency),
       };
       emitVideoProgress({
         type: 'queue-progress',
@@ -1088,13 +1128,12 @@ app.whenReady().then(async () => {
             },
             {
               isCancelled: () => videoCancelled,
-              setProcess: (process) => {
-                activeVideoProcess = process;
-              },
+              processes: activeVideoProcesses,
             },
             videoState.normalizeAudio
               ? { normalize: true, targetDb: videoState.normalizeTarget }
               : null,
+            videoState.concurrency,
           );
           emitVideoProgress({ type: 'folder-done', folder: absolute });
         } catch (error) {
@@ -1113,19 +1152,15 @@ app.whenReady().then(async () => {
         }
         activeVideoFolder = '';
       }
-      activeVideoProcess = null;
+      activeVideoProcesses.clear();
       activeVideoFolder = '';
       emitVideoProgress({ type: videoCancelled ? 'cancelled' : 'all-done' });
     },
   );
   ipcMain.handle('video:cancel', () => {
     videoCancelled = true;
-    if (activeVideoProcess && !activeVideoProcess.killed) {
-      if (typeof activeVideoProcess.cancel === 'function') activeVideoProcess.cancel();
-      else if (process.platform === 'win32')
-        execFile('taskkill', ['/pid', String(activeVideoProcess.pid), '/T', '/F'], () => {});
-      else activeVideoProcess.kill('SIGTERM');
-    }
+    for (const active of activeVideoProcesses) killProcess(active);
+    activeVideoProcesses.clear();
     return true;
   });
   ipcMain.handle('video:skip-folder', (_event, folder) => {
@@ -1843,6 +1878,31 @@ app.whenReady().then(async () => {
     }
     return { added };
   });
+  // ── ChuckBot ─────────────────────────────────────────────────────────────
+  const sendChuckBotEvent = (event) => {
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('chuckbot:event', event);
+  };
+  ipcMain.handle('chuckbot:status', () => chuckbot.status());
+  ipcMain.handle('chuckbot:start', () => chuckbot.startServer());
+  ipcMain.handle('chuckbot:stop', () => chuckbot.stopServer());
+  ipcMain.handle('chuckbot:ollama-status', () => chuckbot.ollamaAction('status'));
+  ipcMain.handle('chuckbot:ollama-start', () => chuckbot.ollamaAction('start'));
+  ipcMain.handle('chuckbot:ollama-stop', () => chuckbot.ollamaAction('stop'));
+  ipcMain.handle('chuckbot:chat', (_event, data) => chuckbot.chat(data, sendChuckBotEvent));
+  ipcMain.handle('chuckbot:chat-cancel', () => chuckbot.cancelChats());
+  ipcMain.handle('chuckbot:push-vscode', (_event, data) => chuckbot.pushToVsCode(data));
+  ipcMain.handle('chuckbot:select-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle('chuckbot:save-solution', (_event, data) => chuckbot.saveSolution(data));
+  ipcMain.handle('chuckbot:reveal-file', (_event, filePath) => {
+    if (filePath) shell.showItemInFolder(path.resolve(filePath));
+    return true;
+  });
   createWindow();
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });
@@ -1856,4 +1916,5 @@ app.on('before-quit', () => {
     hddManager.close();
     hddManager = null;
   }
+  void chuckbot.stopServer();
 });

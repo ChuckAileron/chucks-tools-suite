@@ -5,7 +5,7 @@ import { loadCollapsed, saveCollapsed } from './collapseState';
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
 const MP4_SUBTITLE_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
-const extensionLabel = (name: string) => {
+const extensionLabel      = (name: string) => {
   const index = name.lastIndexOf('.');
   return index > 0 && index < name.length - 1 ? name.slice(index + 1, index + 4).toUpperCase() : '';
 };
@@ -17,21 +17,25 @@ const LUFS_PRESETS = [
 ];
 
 export default function VideoTool() {
-  const [folders, setFolders] = useState<VideoFolder[]>([]);
-  const [codec, setCodec] = useState<Codec>('h264');
-  const [selections, setSelections] = useState<Selections>({});
-  const [running, setRunning] = useState(false);
+  const [folders, setFolders]               = useState<VideoFolder[]>([]);
+  const [codec, setCodec]                   = useState<Codec>('h264');
+  const [selections, setSelections]         = useState<Selections>({});
+  const [running, setRunning]               = useState(false);
   const [globalProgress, setGlobalProgress] = useState(0);
-  const [fileProgress, setFileProgress] = useState(0);
-  const [activeFile, setActiveFile] = useState('Sin procesos activos');
-  const [activeFolder, setActiveFolder] = useState('');
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(loadCollapsed('video')));
+  const [fileProgress, setFileProgress]     = useState(0);
+  const [activeFile, setActiveFile]         = useState('Sin procesos activos');
+  const [activeFolder, setActiveFolder]     = useState('');
+  const [collapsed, setCollapsed]           = useState<Set<string>>(() => new Set(loadCollapsed('video')));
   useEffect(() => {
     saveCollapsed('video', [...collapsed]);
   }, [collapsed]);
-  const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
-  const [normalizeAudio, setNormalizeAudio] = useState(false);
+  const [logs, setLogs]                       = useState<{ text: string; tone?: string }[]>([]);
+  const [normalizeAudio, setNormalizeAudio]   = useState(false);
   const [normalizeTarget, setNormalizeTarget] = useState(-16);
+  const [concurrency, setConcurrency]         = useState<'auto' | number>('auto');
+  const [capacity, setCapacity]               = useState<{ cores: number; detected: number; max: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     const hydrate = (state: VideoState) => {
@@ -46,8 +50,10 @@ export default function VideoTool() {
       setLogs(state.logs);
       setNormalizeAudio(state.normalizeAudio);
       setNormalizeTarget(state.normalizeTarget);
+      setConcurrency(state.concurrencyPreference ?? 'auto');
     };
     window.tools.getVideoState().then(hydrate);
+    window.tools.getVideoCapacity().then(setCapacity);
     return window.tools.onVideoState(hydrate);
   }, []);
 
@@ -57,6 +63,11 @@ export default function VideoTool() {
     window.tools.setVideoNormalize(data);
   }
 
+  function setConcurrencyPreference(value: 'auto' | number) {
+    setConcurrency(value);
+    window.tools.setVideoConcurrency(value);
+  }
+
   function addLog(text: string, tone?: string) {
     setLogs((current) => [...current.slice(-99), { text, tone }]);
   }
@@ -64,7 +75,7 @@ export default function VideoTool() {
   const inspect = async (paths: string[], selectedCodec = codec) => {
     const results = await window.tools.inspectVideoFolders({
       folders: paths,
-      codec: selectedCodec,
+      codec:   selectedCodec,
     });
     setFolders((current) => {
       const map = new Map(current.map((folder) => [folder.folder, folder]));
@@ -80,8 +91,9 @@ export default function VideoTool() {
             const flagged = tracks.filter((track) => track.default);
             return (flagged.length ? flagged : tracks.slice(0, 1)).map((track) => track.index);
           };
+          // eslint-disable-next-line align-assignments/align-assignments
           next[video.path] ||= {
-            audio: pickDefaults(video.audio),
+            audio:     pickDefaults(video.audio),
             subtitles: pickDefaults(
               video.subtitles.filter((track) => MP4_SUBTITLE_CODECS.has(track.codec)),
             ),
@@ -142,11 +154,12 @@ export default function VideoTool() {
     setFileProgress(0);
     try {
       await window.tools.startVideoConversion({
-        folders: folders.map((folder) => folder.folder),
+        folders:         folders.map((folder) => folder.folder),
         codec,
         trackSelections: selections,
         normalizeAudio,
         normalizeTarget,
+        concurrency,
       });
     } catch (error) {
       addLog(`No se pudo iniciar: ${String(error)}`, 'error');
@@ -177,7 +190,7 @@ export default function VideoTool() {
       return next;
     });
 
-  const videoCount = folders.reduce((count, folder) => count + folder.videos.length, 0);
+  const videoCount     = folders.reduce((count, folder) => count + folder.videos.length, 0);
   const processedCount = folders.reduce(
     (count, folder) => count + folder.videos.filter((video) => video.processed).length,
     0,
@@ -265,6 +278,33 @@ export default function VideoTool() {
             <strong>H.265</strong>
             <small>Mayor compresión</small>
           </button>
+        </div>
+        <div className="video-concurrency-row">
+          <label htmlFor="video-concurrency">
+            <span>Procesos en paralelo</span>
+            <small>
+              {capacity
+                ? `${capacity.cores} núcleos · recomendado ${capacity.detected}`
+                : 'Detectando CPU...'}
+            </small>
+          </label>
+          <select
+            id="video-concurrency"
+            value={concurrency}
+            disabled={running || !folders.length}
+            onChange={(event) =>
+              setConcurrencyPreference(
+                event.target.value === 'auto' ? 'auto' : Number(event.target.value),
+              )
+            }
+          >
+            <option value="auto">
+              Auto ({capacity?.detected ?? '—'} proceso{capacity?.detected === 1 ? '' : 's'})
+            </option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
         </div>
         <div className="video-normalize-row">
           <label>
@@ -471,13 +511,12 @@ function TrackGroup({
   onSelect: (indices: number[]) => void;
 }) {
   if (!tracks.length) return null;
-  const selectable = tracks.filter(
+  const selectable   = tracks.filter(
     (track) => !(title === 'Subtítulos' && !MP4_SUBTITLE_CODECS.has(track.codec)),
   );
-  const allSelected =
-    selectable.length > 0 && selectable.every((track) => selected.includes(track.index));
+  const allSelected  = selectable.length > 0 && selectable.every((track) => selected.includes(track.index));
   const noneSelected = selectable.every((track) => !selected.includes(track.index));
-  const indices = selectable.map((track) => track.index);
+  const indices      = selectable.map((track) => track.index);
   return (
     <section>
       <div className="tracks-header">

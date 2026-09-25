@@ -27,7 +27,7 @@ function normalize(text: string) {
 
 function matches(value: string, query: string) {
   const normalized = normalize(value);
-  const term = normalize(query);
+  const term       = normalize(query);
   if (!term) return true;
   return normalized.includes(term);
 }
@@ -43,10 +43,10 @@ export default function LaunchboxPlatformSelect({
   placeholder?: string;
   ariaLabel?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]           = useState(false);
   const [highlight, setHighlight] = useState(0);
-  const listRef = useRef<HTMLUListElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const listRef                   = useRef<HTMLUListElement | null>(null);
+  const inputRef                  = useRef<HTMLInputElement | null>(null);
 
   const options = useMemo(
     () => LAUNCHBOX_PLATFORMS.filter((platform) => matches(platform.name, value)),

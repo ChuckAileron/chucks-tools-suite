@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
-  build: {
+  base:    './',
+  build:   {
     // react-player empaqueta en chunks separados (y cargados bajo demanda)
     // los proveedores opcionales de streaming remoto (HLS/DASH), que esta
     // suite no usa: el reproductor solo sirve archivos locales del HDD vía

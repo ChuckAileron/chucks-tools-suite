@@ -9,11 +9,11 @@ import type { HddDrive, HddEntry, MediaOrigin, NowPlaying } from './types';
 import { hddMediaUrl } from './mediaUrl';
 
 const CATEGORY_LABEL: Record<string, string> = {
-  video: 'Video',
-  audio: 'Audio',
-  image: 'Imagen',
+  video:    'Video',
+  audio:    'Audio',
+  image:    'Imagen',
   document: 'Documento',
-  other: 'Archivo',
+  other:    'Archivo',
 };
 
 export default function MediaPlayerTool({
@@ -126,8 +126,8 @@ function AudioStage({ drive, entry }: { drive: HddDrive; entry: HddEntry }) {
 }
 
 function ImageGallery({ drive, entry }: { drive: HddDrive; entry: HddEntry }) {
-  const [siblings, setSiblings] = useState<HddEntry[]>([entry]);
-  const [thumbs, setThumbs] = useState<Record<number, string>>({});
+  const [siblings, setSiblings]           = useState<HddEntry[]>([entry]);
+  const [thumbs, setThumbs]               = useState<Record<number, string>>({});
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -154,9 +154,9 @@ function ImageGallery({ drive, entry }: { drive: HddDrive; entry: HddEntry }) {
   }, [siblings]);
 
   const initialIndex = Math.max(0, siblings.findIndex((item) => item.id === entry.id));
-  const slides = siblings.map((item) => ({
-    src: hddMediaUrl(drive.id, item.id),
-    alt: item.name,
+  const slides       = siblings.map((item) => ({
+    src:   hddMediaUrl(drive.id, item.id),
+    alt:   item.name,
     title: item.name,
   }));
 
@@ -194,8 +194,8 @@ function ImageGallery({ drive, entry }: { drive: HddDrive; entry: HddEntry }) {
 function DocumentViewer({ drive, entry }: { drive: HddDrive; entry: HddEntry }) {
   const [state, setState] = useState<{ loading: boolean; text: string; error: string }>({
     loading: true,
-    text: '',
-    error: '',
+    text:    '',
+    error:   '',
   });
 
   useEffect(() => {

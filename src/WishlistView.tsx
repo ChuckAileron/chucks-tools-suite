@@ -12,12 +12,12 @@ type Draft = {
 const EMPTY: Draft = { name: '', manufacturer: '', year: '', prices: [] };
 
 export default function WishlistView() {
-  const [items, setItems] = useState<WishlistItem[]>([]);
-  const [search, setSearch] = useState('');
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [store, setStore] = useState('');
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [items, setItems]     = useState<WishlistItem[]>([]);
+  const [search, setSearch]   = useState('');
+  const [draft, setDraft]     = useState<Draft | null>(null);
+  const [store, setStore]     = useState('');
+  const [url, setUrl]         = useState('');
+  const [busy, setBusy]       = useState(false);
   const [message, setMessage] = useState('');
 
   const load = async () => setItems(await window.tools.getWishlist(search));
@@ -27,7 +27,7 @@ export default function WishlistView() {
       .then(setItems)
       .catch((error) => setMessage(String(error)));
   }, [search]);
-  const run = async (action: () => Promise<void>) => {
+  const run  = async (action: () => Promise<void>) => {
     setBusy(true);
     setMessage('');
     try {
@@ -40,11 +40,11 @@ export default function WishlistView() {
   };
   const edit = (item: WishlistItem) => {
     setDraft({
-      id: item.id,
-      name: item.name,
+      id:           item.id,
+      name:         item.name,
       manufacturer: item.manufacturer,
-      year: item.year?.toString() || '',
-      prices: item.prices,
+      year:         item.year?.toString() || '',
+      prices:       item.prices,
     });
     setStore('');
     setUrl('');
@@ -53,11 +53,11 @@ export default function WishlistView() {
     if (!draft) return;
     run(async () => {
       const payload = {
-        name: draft.name,
+        name:         draft.name,
         manufacturer: draft.manufacturer,
-        year: draft.year ? Number(draft.year) : null,
+        year:         draft.year ? Number(draft.year) : null,
       };
-      const saved = draft.id
+      const saved   = draft.id
         ? await window.tools.updateWishlistItem(draft.id, payload)
         : await window.tools.createWishlistItem(payload);
       edit(saved);
@@ -75,7 +75,7 @@ export default function WishlistView() {
       await load();
     });
   };
-  const addPrice = () => {
+  const addPrice   = () => {
     if (!draft?.id) return;
     run(async () => {
       await window.tools.addWishlistPrice(draft.id as number, { store, url });
@@ -228,7 +228,7 @@ export default function WishlistView() {
         <div className="wishlist-grid">
           {items.map((item) => {
             const available = item.prices.filter((source) => source.price !== null);
-            const lowest = available.sort((a, b) => (a.price as number) - (b.price as number))[0];
+            const lowest    = available.sort((a, b) => (a.price as number) - (b.price as number))[0];
             return (
               <article className="wishlist-card" key={item.id}>
                 <div>
@@ -263,7 +263,7 @@ function formatPrice(price: WishlistPrice) {
   if (price.price === null) return 'Sin precio';
   try {
     return new Intl.NumberFormat(undefined, {
-      style: 'currency',
+      style:    'currency',
       currency: price.currency || 'USD',
     }).format(price.price);
   } catch {

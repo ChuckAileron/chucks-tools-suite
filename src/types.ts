@@ -110,6 +110,8 @@ export type VideoState = {
   logs: { text: string; tone?: string }[];
   normalizeAudio: boolean;
   normalizeTarget: number;
+  concurrencyPreference: 'auto' | number;
+  concurrency: number;
 };
 export type NormalizeFile = {
   path: string;
@@ -647,12 +649,14 @@ declare global {
         codec: 'h264' | 'h265';
       }): Promise<VideoFolder[]>;
       getVideoState(): Promise<VideoState>;
+      getVideoCapacity(): Promise<{ cores: number; detected: number; max: number }>;
       startVideoConversion(data: {
         folders: string[];
         codec: 'h264' | 'h265';
         trackSelections: Record<string, { audio: number[]; subtitles: number[] }>;
         normalizeAudio: boolean;
         normalizeTarget: number;
+        concurrency: 'auto' | number;
       }): Promise<void>;
       cancelVideoConversion(): Promise<boolean>;
       skipVideoFolder(folder: string): Promise<boolean>;
@@ -661,6 +665,7 @@ declare global {
       setVideoNormalize(
         data: Partial<{ normalizeAudio: boolean; normalizeTarget: number }>,
       ): Promise<boolean>;
+      setVideoConcurrency(preference: 'auto' | number): Promise<boolean>;
       onVideoProgress(callback: (data: VideoProgress) => void): () => void;
       onVideoState(callback: (state: VideoState) => void): () => void;
       selectNormalizeFolders(): Promise<string[]>;
@@ -770,6 +775,68 @@ declare global {
         setId: string;
         collectionId: number;
       }): Promise<{ added: number }>;
+      chuckbotStatus(): Promise<ChuckBotServerStatus>;
+      chuckbotStart(): Promise<ChuckBotServerStatus>;
+      chuckbotStop(): Promise<ChuckBotServerStatus>;
+      chuckbotOllamaStatus(): Promise<ChuckBotOllamaStatus>;
+      chuckbotOllamaStart(): Promise<ChuckBotOllamaStatus>;
+      chuckbotOllamaStop(): Promise<ChuckBotOllamaStatus>;
+      chuckbotChat(data: ChuckBotChatRequest): Promise<{ id: number }>;
+      chuckbotCancelChat(): Promise<boolean>;
+      chuckbotPushToVsCode(data: {
+        filePath: string;
+        port?: number;
+      }): Promise<{ ok: boolean; filePath: string }>;
+      chuckbotSelectFolder(): Promise<string | null>;
+      chuckbotSaveSolution(data: {
+        folder: string;
+        name: string;
+        content: string;
+      }): Promise<{ path: string; name: string }>;
+      chuckbotRevealFile(filePath: string): Promise<boolean>;
+      onChuckBotEvent(callback: (event: ChuckBotEvent) => void): () => void;
     };
   }
 }
+
+// ── ChuckBot ────────────────────────────────────────────────────────────────
+export type ChuckBotModel = 'qwen2.5:latest' | 'sqlcoder:latest' | 'multi';
+
+export type ChuckBotChatMode = 'chat' | 'solution';
+
+export interface ChuckBotServerStatus {
+  running: boolean;
+  external?: boolean;
+  error?: string;
+}
+
+export interface ChuckBotOllamaStatus {
+  running: boolean;
+  error?: string;
+}
+
+export interface ChuckBotAttachedFile {
+  name: string;
+  content: string;
+}
+
+export interface ChuckBotChatRequest {
+  model: ChuckBotModel;
+  message: string;
+  mode: ChuckBotChatMode;
+  files: ChuckBotAttachedFile[];
+  history: { role: 'user' | 'assistant'; content: string }[];
+}
+
+export interface ChuckBotStepEvent {
+  step: 'analyzing' | 'sql' | 'synthesizing' | 'direct';
+  label: string;
+}
+
+export type ChuckBotEvent =
+  | { streamId: number; type: 'chunk'; data: string }
+  | { streamId: number; type: 'step'; data: ChuckBotStepEvent }
+  | { streamId: number; type: 'document'; data: { name: string; content: string } }
+  | { streamId: number; type: 'done'; data: Record<string, never> }
+  | { streamId: number; type: 'cancelled'; data: Record<string, never> }
+  | { streamId: number; type: 'error'; data: { message: string } };

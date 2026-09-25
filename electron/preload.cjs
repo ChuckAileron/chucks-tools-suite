@@ -96,12 +96,14 @@ contextBridge.exposeInMainWorld('tools', {
   selectVideoFolders: () => ipcRenderer.invoke('video:select-folders'),
   inspectVideoFolders: (data) => ipcRenderer.invoke('video:inspect', data),
   getVideoState: () => ipcRenderer.invoke('video:state'),
+  getVideoCapacity: () => ipcRenderer.invoke('video:capacity'),
   startVideoConversion: (data) => ipcRenderer.invoke('video:start', data),
   cancelVideoConversion: () => ipcRenderer.invoke('video:cancel'),
   skipVideoFolder: (folder) => ipcRenderer.invoke('video:skip-folder', folder),
   appendVideoFolders: (data) => ipcRenderer.invoke('video:append-folders', data),
   clearVideoState: () => ipcRenderer.invoke('video:clear'),
   setVideoNormalize: (data) => ipcRenderer.invoke('video:set-normalize', data),
+  setVideoConcurrency: (preference) => ipcRenderer.invoke('video:set-concurrency', preference),
   onVideoProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('video:progress', listener);
@@ -216,4 +218,21 @@ contextBridge.exposeInMainWorld('tools', {
     ipcRenderer.invoke('binder:export-custom-list', { listId, destination }),
   binderAddCardToCollection: (data) => ipcRenderer.invoke('binder:add-card-to-collection', data),
   binderAddSetToCollection: (data) => ipcRenderer.invoke('binder:add-set-to-collection', data),
+  chuckbotStatus: () => ipcRenderer.invoke('chuckbot:status'),
+  chuckbotStart: () => ipcRenderer.invoke('chuckbot:start'),
+  chuckbotStop: () => ipcRenderer.invoke('chuckbot:stop'),
+  chuckbotOllamaStatus: () => ipcRenderer.invoke('chuckbot:ollama-status'),
+  chuckbotOllamaStart: () => ipcRenderer.invoke('chuckbot:ollama-start'),
+  chuckbotOllamaStop: () => ipcRenderer.invoke('chuckbot:ollama-stop'),
+  chuckbotChat: (data) => ipcRenderer.invoke('chuckbot:chat', data),
+  chuckbotCancelChat: () => ipcRenderer.invoke('chuckbot:chat-cancel'),
+  chuckbotPushToVsCode: (data) => ipcRenderer.invoke('chuckbot:push-vscode', data),
+  chuckbotSelectFolder: () => ipcRenderer.invoke('chuckbot:select-folder'),
+  chuckbotSaveSolution: (data) => ipcRenderer.invoke('chuckbot:save-solution', data),
+  chuckbotRevealFile: (filePath) => ipcRenderer.invoke('chuckbot:reveal-file', filePath),
+  onChuckBotEvent: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('chuckbot:event', listener);
+    return () => ipcRenderer.removeListener('chuckbot:event', listener);
+  },
 });

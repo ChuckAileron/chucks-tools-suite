@@ -11,7 +11,10 @@ import HddInventoryTool from './HddInventoryTool';
 import MediaPlayerTool from './MediaPlayerTool';
 import TrimTool from './TrimTool';
 import BinderTrackTool from './BinderTrackTool';
+import ChuckBotTool from './ChuckBotTool';
 import type {
+  ChuckBotOllamaStatus,
+  ChuckBotServerStatus,
   DownloadCandidate,
   DownloadPriority,
   DownloadsState,
@@ -34,7 +37,8 @@ type Tool =
   | 'hdd'
   | 'media'
   | 'trim'
-  | 'bindertrack';
+  | 'bindertrack'
+  | 'chuckbot';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -48,58 +52,60 @@ function readInitialTheme(): Theme {
 }
 const EMPTY_DOWNLOADS: DownloadsState = {
   settings: {
-    defaultDirectory: '',
+    defaultDirectory:     '',
     defaultDeleteArchive: true,
-    concurrency: 3,
-    autoExtract: true,
-    clipboard: true,
-    googleDriveApiKey: '',
+    concurrency:          3,
+    autoExtract:          true,
+    clipboard:            true,
+    googleDriveApiKey:    '',
   },
   tasks: [],
 };
-const EMPTY_VIDEO: VideoState = {
-  running: false,
-  codec: 'h264',
-  folders: [],
-  trackSelections: {},
-  globalProgress: 0,
-  fileProgress: 0,
-  activeFile: 'Sin procesos activos',
-  activeFolder: '',
-  logs: [],
-  normalizeAudio: false,
-  normalizeTarget: -16,
+const EMPTY_VIDEO: VideoState         = {
+  running:               false,
+  codec:                 'h264',
+  folders:               [],
+  trackSelections:       {},
+  globalProgress:        0,
+  fileProgress:          0,
+  activeFile:            'Sin procesos activos',
+  activeFolder:          '',
+  logs:                  [],
+  normalizeAudio:        false,
+  normalizeTarget:       -16,
+  concurrencyPreference: 'auto',
+  concurrency:           0,
 };
 const EMPTY_NORMALIZE: NormalizeState = {
-  running: false,
+  running:        false,
   globalProgress: 0,
-  fileProgress: 0,
-  activeFile: 'Sin procesos activos',
-  message: '',
-  targetDb: -16,
-  folders: [],
-  type: 'audio',
-  files: [],
-  selected: [],
-  processed: [],
-  logs: [],
+  fileProgress:   0,
+  activeFile:     'Sin procesos activos',
+  message:        '',
+  targetDb:       -16,
+  folders:        [],
+  type:           'audio',
+  files:          [],
+  selected:       [],
+  processed:      [],
+  logs:           [],
 };
-const EMPTY_TRIM: TrimState = {
-  running: false,
+const EMPTY_TRIM: TrimState           = {
+  running:        false,
   globalProgress: 0,
-  fileProgress: 0,
-  activeFile: 'Sin procesos activos',
-  message: '',
-  folders: [],
-  type: 'audio',
-  files: [],
-  selected: [],
-  processed: [],
-  settings: {},
-  logs: [],
+  fileProgress:   0,
+  activeFile:     'Sin procesos activos',
+  message:        '',
+  folders:        [],
+  type:           'audio',
+  files:          [],
+  selected:       [],
+  processed:      [],
+  settings:       {},
+  logs:           [],
 };
 export default function App() {
-  const [tool, setTool] = useState<Tool>('collection');
+  const [tool, setTool]   = useState<Tool>('collection');
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -109,20 +115,45 @@ export default function App() {
       // localStorage no disponible
     }
   }, [theme]);
-  const toggleTheme = () => setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-  const [downloads, setDownloads] = useState<DownloadsState>(EMPTY_DOWNLOADS);
-  const [video, setVideo] = useState<VideoState>(EMPTY_VIDEO);
-  const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
-  const [trim, setTrim] = useState<TrimState>(EMPTY_TRIM);
-  const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
+  const toggleTheme                         = () => setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  const [downloads, setDownloads]           = useState<DownloadsState>(EMPTY_DOWNLOADS);
+  const [video, setVideo]                   = useState<VideoState>(EMPTY_VIDEO);
+  const [normalize, setNormalize]           = useState<NormalizeState>(EMPTY_NORMALIZE);
+  const [trim, setTrim]                     = useState<TrimState>(EMPTY_TRIM);
+  const [candidates, setCandidates]         = useState<DownloadCandidate[]>([]);
   const [downloadNotice, setDownloadNotice] = useState(0);
   // Estado del Inventario HDD elevado a App para poder recordar la
   // navegación del usuario (disco/carpeta) al volver desde el reproductor.
   const [hddActiveDriveId, setHddActiveDriveId] = useState<number | null>(null);
-  const [hddParentPath, setHddParentPath] = useState('');
-  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
-  const [mediaOrigin, setMediaOrigin] = useState<MediaOrigin>(null);
-  const playFromHdd = (drive: HddDrive, entry: HddEntry) => {
+  const [hddParentPath, setHddParentPath]       = useState('');
+  const [nowPlaying, setNowPlaying]             = useState<NowPlaying | null>(null);
+  const [mediaOrigin, setMediaOrigin]           = useState<MediaOrigin>(null);
+  // Estado de ChuckBot elevado a App: el estado del servidor y de Ollama se
+  // consultan de forma continua mientras la app está abierta, de modo que al
+  // cambiar de sección y volver, el encendido se conserva (solo se apaga por
+  // acción del usuario o al salir del programa).
+  const [chuckbotServer, setChuckbotServer] = useState<ChuckBotServerStatus>({
+    running: false,
+  });
+  const [chuckbotOllama, setChuckbotOllama] = useState<ChuckBotOllamaStatus>({
+    running: false,
+  });
+  useEffect(() => {
+    const pollChuckbot = () => {
+      window.tools
+        .chuckbotStatus()
+        .then(setChuckbotServer)
+        .catch(() => setChuckbotServer({ running: false }));
+      window.tools
+        .chuckbotOllamaStatus()
+        .then(setChuckbotOllama)
+        .catch(() => setChuckbotOllama({ running: false }));
+    };
+    pollChuckbot();
+    const timer = window.setInterval(pollChuckbot, 4000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const playFromHdd        = (drive: HddDrive, entry: HddEntry) => {
     setNowPlaying({ drive, entry });
     setMediaOrigin('hdd');
     setTool('media');
@@ -131,9 +162,9 @@ export default function App() {
     setMediaOrigin(null);
     setTool('hdd');
   };
-  const mergeCandidates = (found: DownloadCandidate[]) =>
+  const mergeCandidates    = (found: DownloadCandidate[]) =>
     setCandidates((current) => {
-      const key = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
+      const key      = (item: DownloadCandidate) => `${item.originalUrl}|${item.mode || ''}`;
       const existing = new Set(current.map(key));
       return [
         ...current,
@@ -141,9 +172,9 @@ export default function App() {
           .filter((item) => !existing.has(key(item)))
           .map((item) => ({
             ...item,
-            destination: downloads.settings.defaultDirectory,
-            priority: 'medium' as DownloadPriority,
-            extract: true,
+            destination:   downloads.settings.defaultDirectory,
+            priority:      'medium' as DownloadPriority,
+            extract:       true,
             deleteArchive: downloads.settings.defaultDeleteArchive !== false,
           })),
       ];
@@ -163,9 +194,9 @@ export default function App() {
     window.tools.getNormalizeState().then(setNormalize);
     window.tools.getTrimState().then(setTrim);
     const stopDownloads = window.tools.onDownloadsState(setDownloads);
-    const stopVideo = window.tools.onVideoState(setVideo);
+    const stopVideo     = window.tools.onVideoState(setVideo);
     const stopNormalize = window.tools.onNormalizeState(setNormalize);
-    const stopTrim = window.tools.onTrimState(setTrim);
+    const stopTrim      = window.tools.onTrimState(setTrim);
     const stopClipboard = window.tools.onClipboardLinks(captureClipboard);
     return () => {
       stopDownloads();
@@ -217,6 +248,18 @@ export default function App() {
             <span>
               <strong>BinderTrack</strong>
               <small>Mantenedor TCG</small>
+            </span>
+          </button>
+          <button
+            className={tool === 'chuckbot' ? 'active' : ''}
+            onClick={() => setTool('chuckbot')}
+          >
+            <i>
+              <ChuckBotIcon />
+            </i>
+            <span>
+              <strong>ChuckBot</strong>
+              <small>IA local</small>
             </span>
           </button>
           <button
@@ -367,6 +410,13 @@ export default function App() {
           <CollectionTool />
         ) : tool === 'bindertrack' ? (
           <BinderTrackTool />
+        ) : tool === 'chuckbot' ? (
+          <ChuckBotTool
+            server={chuckbotServer}
+            ollama={chuckbotOllama}
+            onServerChange={setChuckbotServer}
+            onOllamaChange={setChuckbotOllama}
+          />
         ) : tool === 'hdd' ? (
           <HddInventoryTool
             activeDriveId={hddActiveDriveId}
@@ -470,6 +520,18 @@ function PlayIcon() {
   return (
     <SidebarIcon>
       <polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none" />
+    </SidebarIcon>
+  );
+}
+
+function ChuckBotIcon() {
+  return (
+    <SidebarIcon>
+      <rect x="4" y="8" width="16" height="11" rx="2" />
+      <path d="M12 8V5a2 2 0 0 1 2-2h2" />
+      <path d="M8 8a4 4 0 1 1 8 0" />
+      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
     </SidebarIcon>
   );
 }

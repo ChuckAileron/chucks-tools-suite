@@ -7,7 +7,7 @@ const formatSize = (bytes: number) =>
 // proceso principal (misma tolerancia y duración de extracto que usa el
 // análisis de LUFS en el backend).
 const DEFAULT_CONFIG = { lufsTolerance: 1, excerptDuration: 30, excerptMinDuration: 45 };
-const isAtTarget = (lufs: number | null | undefined, target: number, tolerance: number) =>
+const isAtTarget     = (lufs: number | null | undefined, target: number, tolerance: number) =>
   typeof lufs === 'number' && Math.abs(lufs - target) <= tolerance;
 const extensionLabel = (name: string) => {
   const index = name.lastIndexOf('.');
@@ -22,42 +22,42 @@ const extensionLabel = (name: string) => {
 // - Un lote acotado de N en paralelo aprovecha varios núcleos sin saturar el
 //   equipo; como cada medición ahora analiza solo un extracto corto, N puede
 //   ser moderado sin arriesgar la respuesta del sistema.
-const LUFS_CONCURRENCY = Math.max(
+const LUFS_CONCURRENCY                = Math.max(
   2,
   Math.min(4, Math.floor((navigator.hardwareConcurrency || 4) / 2)),
 );
-const LUFS_PRESETS = [
+const LUFS_PRESETS                    = [
   { value: -14, label: '-14 Streaming' },
   { value: -16, label: '-16 General' },
   { value: -18, label: '-18 Conservador' },
   { value: -23, label: '-23 Broadcast' },
 ];
 const EMPTY_NORMALIZE: NormalizeState = {
-  running: false,
+  running:        false,
   globalProgress: 0,
-  fileProgress: 0,
-  activeFile: 'Sin procesos activos',
-  message: '',
-  targetDb: -16,
-  folders: [],
-  type: 'audio',
-  files: [],
-  selected: [],
-  processed: [],
-  logs: [],
-  activeFolder: '',
+  fileProgress:   0,
+  activeFile:     'Sin procesos activos',
+  message:        '',
+  targetDb:       -16,
+  folders:        [],
+  type:           'audio',
+  files:          [],
+  selected:       [],
+  processed:      [],
+  logs:           [],
+  activeFolder:   '',
 };
 export default function NormalizeTool() {
-  const [folders, setFolders] = useState<string[]>([]);
-  const [type, setType] = useState<MediaType>('audio');
-  const [target, setTarget] = useState(-16);
-  const [files, setFiles] = useState<NormalizeFile[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [normalize, setNormalize] = useState<NormalizeState>(EMPTY_NORMALIZE);
-  const [message, setMessage] = useState('');
-  const [processed, setProcessed] = useState<Set<string>>(new Set());
-  const [logs, setLogs] = useState<{ text: string; tone?: string }[]>([]);
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [folders, setFolders]                       = useState<string[]>([]);
+  const [type, setType]                             = useState<MediaType>('audio');
+  const [target, setTarget]                         = useState(-16);
+  const [files, setFiles]                           = useState<NormalizeFile[]>([]);
+  const [selected, setSelected]                     = useState<Set<string>>(new Set());
+  const [normalize, setNormalize]                   = useState<NormalizeState>(EMPTY_NORMALIZE);
+  const [message, setMessage]                       = useState('');
+  const [processed, setProcessed]                   = useState<Set<string>>(new Set());
+  const [logs, setLogs]                             = useState<{ text: string; tone?: string }[]>([]);
+  const [config, setConfig]                         = useState(DEFAULT_CONFIG);
   const [measuringCancelled, setMeasuringCancelled] = useState(false);
   useEffect(() => {
     window.tools.getNormalizeConfig().then(setConfig);
@@ -97,13 +97,13 @@ export default function NormalizeTool() {
     }
   }, [files, normalize.running, measuringCancelled]);
   const pendingMeasureCount = files.filter((file) => file.lufs === undefined).length;
-  const failedMeasureCount = files.filter((file) => file.lufs === null).length;
-  const measuredCount = files.length - pendingMeasureCount;
-  const cancelMeasuring = async () => {
+  const failedMeasureCount  = files.filter((file) => file.lufs === null).length;
+  const measuredCount       = files.length - pendingMeasureCount;
+  const cancelMeasuring     = async () => {
     setMeasuringCancelled(true);
     await window.tools.cancelLufsScan();
   };
-  const pushUi = (patch: Partial<NormalizeState>) => {
+  const pushUi              = (patch: Partial<NormalizeState>) => {
     void window.tools.setNormalizeUi(patch);
   };
   // Vuelve a poner en cola los archivos cuyo LUFS no se pudo calcular (p. ej.
@@ -117,7 +117,7 @@ export default function NormalizeTool() {
     void window.tools.resumeLufsScan();
   };
   const addFolders = async () => {
-    const paths = await window.tools.selectNormalizeFolders();
+    const paths       = await window.tools.selectNormalizeFolders();
     const nextFolders = [...new Set([...folders, ...paths])];
     setFolders(nextFolders);
     setFiles([]);
@@ -127,14 +127,14 @@ export default function NormalizeTool() {
     setMeasuringCancelled(false);
     setNormalize(EMPTY_NORMALIZE);
     pushUi({
-      folders: nextFolders,
-      files: [],
-      selected: [],
-      processed: [],
-      logs: [],
-      running: false,
+      folders:        nextFolders,
+      files:          [],
+      selected:       [],
+      processed:      [],
+      logs:           [],
+      running:        false,
       globalProgress: 0,
-      fileProgress: 0,
+      fileProgress:   0,
     });
   };
   const scan = async () => {
@@ -148,13 +148,13 @@ export default function NormalizeTool() {
       setSelected(new Set(result.map((file) => file.path)));
       setProcessed(new Set(result.filter((file) => file.processed).map((file) => file.path)));
       pushUi({
-        files: result,
-        selected: result.map((file) => file.path),
-        processed: result.filter((file) => file.processed).map((file) => file.path),
-        logs: [],
-        running: false,
+        files:          result,
+        selected:       result.map((file) => file.path),
+        processed:      result.filter((file) => file.processed).map((file) => file.path),
+        logs:           [],
+        running:        false,
         globalProgress: 0,
-        fileProgress: 0,
+        fileProgress:   0,
       });
       setMessage(
         result.length
@@ -165,19 +165,19 @@ export default function NormalizeTool() {
       setMessage(String(error));
     }
   };
-  const start = async () => {
+  const start        = async () => {
     if (target < -50 || target > -5)
       return setMessage('El objetivo debe estar entre -50 y -5 LUFS.');
     setMessage('');
     setLogs([]);
     pushUi({ logs: [] });
     await window.tools.startNormalization({
-      files: files.filter((file) => selected.has(file.path)),
+      files:    files.filter((file) => selected.has(file.path)),
       type,
       targetDb: target,
     });
   };
-  const clear = () => {
+  const clear        = () => {
     setFolders([]);
     setFiles([]);
     setSelected(new Set());
@@ -186,14 +186,14 @@ export default function NormalizeTool() {
     setMeasuringCancelled(false);
     setNormalize(EMPTY_NORMALIZE);
     pushUi({
-      folders: [],
-      files: [],
-      selected: [],
-      processed: [],
-      logs: [],
-      running: false,
+      folders:        [],
+      files:          [],
+      selected:       [],
+      processed:      [],
+      logs:           [],
+      running:        false,
       globalProgress: 0,
-      fileProgress: 0,
+      fileProgress:   0,
     });
   };
   const removeFolder = async (folder: string) => {
@@ -204,30 +204,30 @@ export default function NormalizeTool() {
       return;
     }
     const nextFolders = folders.filter((item) => item !== folder);
-    const kept = new Set(files.filter((file) => file.folder !== folder).map((file) => file.path));
-    const nextFiles = files.filter((file) => kept.has(file.path));
+    const kept        = new Set(files.filter((file) => file.folder !== folder).map((file) => file.path));
+    const nextFiles   = files.filter((file) => kept.has(file.path));
     setFolders(nextFolders);
     setFiles(nextFiles);
-    const nextSelected = [...selected].filter((path) => kept.has(path));
+    const nextSelected  = [...selected].filter((path) => kept.has(path));
     const nextProcessed = [...processed].filter((path) => kept.has(path));
     setSelected(new Set(nextSelected));
     setProcessed(new Set(nextProcessed));
     setNormalize((current) => ({
       ...current,
       globalProgress: 0,
-      fileProgress: 0,
-      running: false,
-      activeFile: 'Sin procesos activos',
-      activeFolder: '',
+      fileProgress:   0,
+      running:        false,
+      activeFile:     'Sin procesos activos',
+      activeFolder:   '',
     }));
     pushUi({
-      folders: nextFolders,
-      files: nextFiles,
-      selected: nextSelected,
-      processed: nextProcessed,
+      folders:        nextFolders,
+      files:          nextFiles,
+      selected:       nextSelected,
+      processed:      nextProcessed,
       globalProgress: 0,
-      fileProgress: 0,
-      running: false,
+      fileProgress:   0,
+      running:        false,
     });
   };
   const toggleSelected = (path: string) => {
@@ -242,7 +242,7 @@ export default function NormalizeTool() {
     setSelected(next);
     pushUi({ selected: [...next] });
   };
-  const all = files.length > 0 && selected.size === files.length;
+  const all             = files.length > 0 && selected.size === files.length;
   const normalizedCount = files.filter((file) => processed.has(file.path)).length;
   return (
     <section className="tool normalize-tool">
@@ -282,14 +282,14 @@ export default function NormalizeTool() {
               setMeasuringCancelled(false);
               setNormalize(EMPTY_NORMALIZE);
               pushUi({
-                type: next,
-                files: [],
-                selected: [],
-                processed: [],
-                logs: [],
-                running: false,
+                type:           next,
+                files:          [],
+                selected:       [],
+                processed:      [],
+                logs:           [],
+                running:        false,
                 globalProgress: 0,
-                fileProgress: 0,
+                fileProgress:   0,
               });
             }}
           >
@@ -301,7 +301,7 @@ export default function NormalizeTool() {
           {folders.length ? (
             folders.map((folder) => {
               const folderFiles = files.filter((file) => file.folder === folder);
-              const folderDone = folderFiles.filter((file) => processed.has(file.path)).length;
+              const folderDone  = folderFiles.filter((file) => processed.has(file.path)).length;
               return (
                 <div key={folder}>
                   <span title={folder}>{folder}</span>

@@ -155,6 +155,18 @@ Mantenedor TCG compatible con la app móvil BinderTrack, para inventariar y admi
 
 La base de datos (`bindertrack.sqlite`) y las imágenes que la app móvil envía en los ZIP importados (carpeta `bindertrack-media/`) se guardan en el directorio local de datos de Electron; no se sincronizan con ningún servicio externo.
 
+### ChuckBot
+
+Asistente de IA local que habla con modelos de [Ollama](https://ollama.com) a través del backend Go de ChuckBot (`http://localhost:8374`). La suite gestiona automáticamente el ciclo de vida de `chuckbot.exe` (empaquetado en `vendor/chuckbot`) y del servidor de Ollama.
+
+- **Chat con modelos locales**: `qwen2.5:latest` (chat general), `sqlcoder:latest` (SQL) o modo **multi-agente** que reparte el trabajo entre ambos; los eventos se muestran en vivo (tokens, pasos, archivo solución, errores).
+- **Encendido persistente**: el bot siempre aparece apagado al entrar a la sección y nada se inicia por sí solo; primero hay que pulsar **Iniciar servidor** y luego **Encender Ollama**. Una vez encendidos, el estado se conserva al navegar entre secciones y solo se apaga si el usuario lo hace o al cerrar el programa. El estado de ambos se refleja con indicadores en vivo y poll cada 4 segundos; la conversación también se mantiene al cambiar de sección (se descarta al salir de la aplicación).
+- **Archivos como contexto**: botón "Adjuntar archivos" con límite de 256 KB por archivo; el contenido se envía junto al mensaje.
+- **Archivo solución**: con el modo "solución (proyecto)" activado, la respuesta se genera como un archivo de software completo (con una "receta" de implementación) que se muestra en un panel para **guardarlo en la carpeta del proyecto**.
+- **Enviar a VS Code**: guarda el archivo solución en disco y lo abre en VS Code mediante la extensión **Remote Control** ([eliostruyf.vscode-remote-control](https://marketplace.visualstudio.com/items?itemName=eliostruyf.vscode-remote-control)), conectando por websocket al puerto que muestra la barra de estado de VS Code (por defecto 3710, configurable en la herramienta).
+
+Requisitos del módulo: instalar Ollama y descargar los modelos (`ollama pull qwen2.5:latest`, `ollama pull sqlcoder:latest`), e instalar la extensión Remote Control en VS Code solo si se quiere el envío directo.
+
 ### Gestor de descargas
 
 Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pestañas: Descargas, Identificador y Configuración.
@@ -261,6 +273,7 @@ Reproduce el contenido catalogado en Inventario HDD directamente desde el disco 
 - FFmpeg y FFprobe para los módulos Video a SD, Cortar audio/video y para las miniaturas/ficha técnica de Inventario HDD.
 - Poppler (`pdftoppm`) opcional, para generar miniaturas reales de la primera página de archivos PDF en Inventario HDD; sin él se usa un marcador genérico.
 - Conexión a Internet para Descargas, el buscador de imágenes y la metadata de juegos de Colección, y las integraciones con hosts externos.
+- Ollama con los modelos `qwen2.5:latest` y `sqlcoder:latest` para la herramienta **ChuckBot**.
 
 HandBrakeCLI y 7-Zip se instalan mediante las dependencias `handbrake-js` y `7zip-min`; no requieren instalación manual independiente. `yt-dlp` se distribuye dentro de la aplicación (en `vendor/` al compilar) y, ante fallos de reconocimiento de videos, intenta actualizarse automáticamente y reintenta el análisis.
 
@@ -369,6 +382,7 @@ CHUCK's Tools Suite/
 │   ├── mediaPlayer.cjs      # Protocolo hddmedia:// y visor de texto de documentos
 │   ├── megaProvider.cjs     # Descarga y descifrado de enlaces MEGA (AES-CTR)
 │   ├── teraboxProvider.cjs  # Enlaces compartidos de TeraBox
+│   ├── chuckbot.cjs         # Ciclo de vida de chuckbot.exe, proxy de chat/SSE y envío a VS Code
 │   └── trim.cjs             # Recorte de audio/video con FFmpeg
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
@@ -382,6 +396,7 @@ CHUCK's Tools Suite/
 │   ├── LaunchboxPlatformSelect.tsx # Selector de plataforma con buscador
 │   ├── launchboxPlatforms.json # Las 190 plataformas del GamesDB de LaunchBox
 │   ├── BinderTrackTool.tsx # Mantenedor de colección TCG
+│   ├── ChuckBotTool.tsx    # Chat con IA local (Ollama) y archivos solución
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas

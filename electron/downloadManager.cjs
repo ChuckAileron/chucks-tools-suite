@@ -1643,19 +1643,55 @@ class DownloadManager {
     const task = this.tasks.get(id);
     if (!task?.filePath) return false;
     task.password = password;
-    task.status = 'extracting';
+    // Si el archivo pertenece a un comprimido multiparte, el reintento abarca
+    // el set completo: 7-Zip necesita todas las partes (en la misma carpeta)
+    // y el resultado debe completar el volumen entero, no una sola parte.
+    const volume = archiveVolume(task.filePath || task.name || '');
+    const parts = volume?.key
+      ? [...this.tasks.values()].filter((other) => {
+          const own = archiveVolume(other.filePath || other.name || '');
+          return own && own.key === volume.key;
+        })
+      : [];
+    const first = parts.length
+      ? parts
+          .slice()
+          .sort(
+            (a, b) =>
+              (archiveVolume(a.filePath || a.name)?.index || 0) -
+              (archiveVolume(b.filePath || b.name)?.index || 0),
+          )[0]
+      : task;
+    first.password = password;
+    if (!parts.length && !fs.existsSync(task.filePath)) return false;
+    if (parts.length && !parts.every((part) => part.filePath && fs.existsSync(part.filePath))) {
+      first.status = 'error';
+      first.error = 'Faltan partes del volumen para reintentar la extracción.';
+      this.emit();
+      return false;
+    }
+    first.status = 'extracting';
     this.emit();
     try {
-      await this.extract(task);
-      this.removeArchive(task);
-      task.status = 'completed';
-      task.error = '';
+      await this.extract(first);
+      if (parts.length) for (const part of parts) this.removeArchive(part);
+      else this.removeArchive(task);
+      if (parts.length) {
+        for (const part of parts) {
+          part.status = 'completed';
+          part.error = '';
+        }
+      } else {
+        task.status = 'completed';
+        task.error = '';
+      }
     } catch (error) {
-      task.status = extractionFailureStatus(error);
-      task.error = extractionErrorMessage(error);
+      first.status = extractionFailureStatus(error);
+      first.error = extractionErrorMessage(error);
     }
     this.emit();
-    return task.status === 'completed';
+    this.process();
+    return first.status === 'completed';
   }
 }
 module.exports = {
