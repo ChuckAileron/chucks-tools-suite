@@ -34,6 +34,22 @@ contextBridge.exposeInMainWorld('tools', {
   createWikiPage: (data) => ipcRenderer.invoke('wiki:create', data),
   updateWikiPage: (id, patch) => ipcRenderer.invoke('wiki:update', { id, patch }),
   deleteWikiPage: (id) => ipcRenderer.invoke('wiki:delete', id),
+  hijitosList: () => ipcRenderer.invoke('hijitos:list'),
+  hijitosGetBanner: () => ipcRenderer.invoke('hijitos:get-banner'),
+  hijitosSetBanner: (banner) => ipcRenderer.invoke('hijitos:set-banner', banner),
+  hijitosUpdateTrack: (slug, patch) => ipcRenderer.invoke('hijitos:update-track', { slug, patch }),
+  hijitosCreateTask: (data) => ipcRenderer.invoke('hijitos:create-task', data),
+  hijitosUpdateTask: (id, patch) => ipcRenderer.invoke('hijitos:update-task', { id, patch }),
+  hijitosDeleteTask: (id) => ipcRenderer.invoke('hijitos:delete-task', id),
+  hijitosCreateSubtask: (taskId, description) =>
+    ipcRenderer.invoke('hijitos:create-subtask', { taskId, description }),
+  hijitosUpdateSubtask: (id, patch) =>
+    ipcRenderer.invoke('hijitos:update-subtask', { id, patch }),
+  hijitosDeleteSubtask: (id) => ipcRenderer.invoke('hijitos:delete-subtask', id),
+  hijitosSelectBanner: () => ipcRenderer.invoke('hijitos:select-banner'),
+  hijitosReadBanner: (filePath) => ipcRenderer.invoke('hijitos:read-banner', filePath),
+  imagesSelect: () => ipcRenderer.invoke('images:select'),
+  imagesConvert: (format, files) => ipcRenderer.invoke('images:convert', { format, files }),
   getCollectionItems: (collectionId, q = '') =>
     ipcRenderer.invoke('collection-items:list', { collectionId, q }),
   createCollectionItem: (data) => ipcRenderer.invoke('collection-items:create', data),

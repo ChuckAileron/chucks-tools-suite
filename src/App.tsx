@@ -13,6 +13,8 @@ import TrimTool from './TrimTool';
 import BinderTrackTool from './BinderTrackTool';
 import ChuckBotTool from './ChuckBotTool';
 import WikiTool from './WikiTool';
+import HijitosTool from './HijitosTool';
+import ImageTool from './ImageTool';
 import type {
   ChuckBotOllamaStatus,
   ChuckBotServerStatus,
@@ -40,7 +42,9 @@ type Tool =
   | 'trim'
   | 'bindertrack'
   | 'chuckbot'
-  | 'wiki';
+  | 'wiki'
+  | 'hijitos'
+  | 'image';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -107,7 +111,7 @@ const EMPTY_TRIM: TrimState           = {
   logs:           [],
 };
 export default function App() {
-  const [tool, setTool]   = useState<Tool>('collection');
+  const [tool, setTool]   = useState<Tool>('hijitos');
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -228,6 +232,15 @@ export default function App() {
         </div>
         <nav>
           <p>HERRAMIENTAS</p>
+          <button className={tool === 'hijitos' ? 'active' : ''} onClick={() => setTool('hijitos')}>
+            <i>
+              <CatIcon />
+            </i>
+            <span>
+              <strong>Hijitos ❤</strong>
+              <small>Tareas por gatito</small>
+            </span>
+          </button>
           <button
             className={tool === 'collection' ? 'active' : ''}
             onClick={() => setTool('collection')}
@@ -366,6 +379,15 @@ export default function App() {
               <small>Configuración TV</small>
             </span>
           </button>
+          <button className={tool === 'image' ? 'active' : ''} onClick={() => setTool('image')}>
+            <i>
+              <ImageIcon />
+            </i>
+            <span>
+              <strong>Convertir imágenes</strong>
+              <small>Cambio de formato</small>
+            </span>
+          </button>
           <button className={tool === 'hdd' ? 'active' : ''} onClick={() => setTool('hdd')}>
             <i>
               <HddIcon />
@@ -407,6 +429,8 @@ export default function App() {
         <div className="mobile-brand">CHUCK's Tools Suite</div>
         {tool === 'mover' ? (
           <MoverTool />
+        ) : tool === 'hijitos' ? (
+          <HijitosTool />
         ) : tool === 'rename' ? (
           <RenameTool />
         ) : tool === 'video' ? (
@@ -444,6 +468,8 @@ export default function App() {
             origin={mediaOrigin}
             onBackToHdd={backFromMediaToHdd}
           />
+        ) : tool === 'image' ? (
+          <ImageTool />
         ) : (
           <DownloadsTool candidates={candidates} setCandidates={setCandidates} />
         )}
@@ -475,6 +501,17 @@ function BookIcon() {
     <SidebarIcon>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </SidebarIcon>
+  );
+}
+
+function CatIcon() {
+  return (
+    <SidebarIcon>
+      <path d="M12 5c.67 0 1.35.09 2 .26 1.78-2 5.03-2.84 6.42-2.26 1.4.58-.42 7-.42 7 .57 1.07 1 2.24 1 3.44C21 17.9 16.97 21 12 21s-9-3-9-7.56c0-1.25.5-2.4 1-3.44 0 0-1.89-6.42-.5-7 1.39-.58 4.72.23 6.5 2.23A9.04 9.04 0 0 1 12 5Z" />
+      <path d="M8 14v.5" />
+      <path d="M16 14v.5" />
+      <path d="M11.25 16.25h1.5L12 17l-.75-.75Z" />
     </SidebarIcon>
   );
 }
@@ -575,6 +612,16 @@ function TvIcon() {
     <SidebarIcon>
       <rect x="2" y="7" width="20" height="14" rx="2" />
       <polyline points="17 2 12 7 7 2" />
+    </SidebarIcon>
+  );
+}
+
+function ImageIcon() {
+  return (
+    <SidebarIcon>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
     </SidebarIcon>
   );
 }

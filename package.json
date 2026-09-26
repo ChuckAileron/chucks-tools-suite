@@ -1,6 +1,6 @@
 {
   "name": "chucks-tools-suite",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "private": true,
   "type": "module",
   "description": "Suite de herramientas locales para archivos",
@@ -44,6 +44,7 @@
     "react-dom": "latest",
     "react-h5-audio-player": "^3.10.2",
     "react-player": "^3.4.0",
+    "sharp": "^0.35.4",
     "tldts": "latest",
     "vite": "latest",
     "yet-another-react-lightbox": "^3.32.2"
@@ -81,6 +82,8 @@
       "**/node_modules/handbrake-js/**",
       "**/node_modules/7zip-bin/**",
       "**/node_modules/clipboard-event/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**",
       "vendor/**"
     ],
     "win": {

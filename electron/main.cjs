@@ -18,6 +18,7 @@ const { DownloadManager } = require('./downloadManager.cjs');
 const { RuleManager, applyRule } = require('./rules.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
 const { WikiManager } = require('./wikiManager.cjs');
+const { HijitosManager } = require('./hijitosManager.cjs');
 const { scrapeProduct } = require('./priceScraper.cjs');
 const { searchImages } = require('./imageSearch.cjs');
 const analogReplay = require('./analogReplay.cjs');
@@ -28,6 +29,7 @@ const trimTool = require('./trim.cjs');
 const binderTrack = require('./binderTrack.cjs');
 const launchboxMetadata = require('./launchboxMetadata.cjs');
 const chuckbot = require('./chuckbot.cjs');
+const imageConverter = require('./imageConverter.cjs');
 // Esquema privilegiado usado para transmitir video/audio/imágenes desde un
 // HDD catalogado directamente al reproductor, con soporte de rango (Range)
 // para permitir búsqueda (seek). Debe registrarse antes de que la app esté
@@ -42,6 +44,7 @@ let downloadManager;
 let rulesManager;
 let collectionManager;
 let wikiManager;
+let hijitosManager;
 let hddManager;
 let hddThumbnailsDir;
 let binderManager;
@@ -650,6 +653,7 @@ app.whenReady().then(async () => {
       path.join(app.getPath('userData'), 'collections.sqlite'),
     );
     wikiManager = new WikiManager(path.join(app.getPath('userData'), 'wiki.sqlite'));
+    hijitosManager = new HijitosManager(path.join(app.getPath('userData'), 'hijitos.sqlite'));
   hddThumbnailsDir = path.join(app.getPath('userData'), 'hdd-thumbnails');
   hddManager = new hddInventory.HddInventoryManager(
     path.join(app.getPath('userData'), 'hdd-inventory.sqlite'),
@@ -776,6 +780,77 @@ app.whenReady().then(async () => {
   ipcMain.handle('wiki:create', (_event, data) => wikiManager.createPage(data));
   ipcMain.handle('wiki:update', (_event, { id, patch }) => wikiManager.updatePage(id, patch));
   ipcMain.handle('wiki:delete', (_event, id) => wikiManager.deletePage(id));
+  ipcMain.handle('hijitos:list', () => hijitosManager.listTracks());
+  ipcMain.handle('hijitos:get-banner', () => hijitosManager.getBanner());
+  ipcMain.handle('hijitos:set-banner', (_event, banner) => hijitosManager.setBanner(banner));
+  ipcMain.handle('hijitos:update-track', (_event, { slug, patch }) =>
+    hijitosManager.updateTrack(slug, patch),
+  );
+  ipcMain.handle('hijitos:create-task', (_event, data) => hijitosManager.createTask(data));
+  ipcMain.handle('images:select', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Imágenes', extensions: imageConverter.INPUT_EXTENSIONS }],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.filter((filePath) => imageConverter.isSupportedImage(filePath));
+  });
+  ipcMain.handle('images:convert', async (_event, { format, files }) => {
+    const selectedFormat = String(format ?? '');
+    const validFiles     = Array.isArray(files) ? files.filter((file) => typeof file === 'string') : [];
+    if (!imageConverter.isSupportedOutput(selectedFormat)) {
+      throw new Error('El formato de salida no es soportado.');
+    }
+    const results = [];
+    for (const filePath of validFiles) {
+      try {
+        const output = await imageConverter.convertFile(filePath, selectedFormat);
+        results.push({ input: filePath, output, ok: true });
+      } catch (error) {
+        results.push({
+          input: filePath,
+          output: null,
+          ok: false,
+          error: (error && error.message) || String(error),
+        });
+      }
+    }
+    return { format: selectedFormat, results };
+  });
+  ipcMain.handle('hijitos:update-task', (_event, { id, patch }) =>
+    hijitosManager.updateTask(id, patch),
+  );
+  ipcMain.handle('hijitos:delete-task', (_event, id) => hijitosManager.deleteTask(id));
+  ipcMain.handle('hijitos:create-subtask', (_event, { taskId, description }) =>
+    hijitosManager.createSubtask(taskId, description),
+  );
+  ipcMain.handle('hijitos:update-subtask', (_event, { id, patch }) =>
+    hijitosManager.updateSubtask(id, patch),
+  );
+  ipcMain.handle('hijitos:delete-subtask', (_event, id) => hijitosManager.deleteSubtask(id));
+  ipcMain.handle('hijitos:select-banner', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Imágenes',
+          extensions: [...imageConverter.INPUT_EXTENSIONS, 'svg', 'bmp'],
+        },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  // Lee un banner local y lo entrega como data URL re-codificada, de modo que
+  // cualquier formato soportado se muestre en el renderer sin depender de los
+  // codecs del navegador.
+  ipcMain.handle('hijitos:read-banner', async (_event, filePath) => {
+    if (!filePath || typeof filePath !== 'string') return null;
+    try {
+      return await imageConverter.previewDataUrl(filePath);
+    } catch {
+      return null;
+    }
+  });
   ipcMain.handle('collection-items:list', (_event, { collectionId, q }) =>
     collectionManager.listItems(collectionId, q),
   );
@@ -2002,6 +2077,10 @@ app.on('before-quit', () => {
     if (wikiManager) {
       wikiManager.close();
       wikiManager = null;
+    }
+    if (hijitosManager) {
+      hijitosManager.close();
+      hijitosManager = null;
     }
   if (hddManager) {
     hddManager.close();

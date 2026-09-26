@@ -4,7 +4,7 @@ Aplicación de escritorio para Windows, macOS y Linux que reúne herramientas lo
 
 Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. El módulo de Descargas realiza solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
 
-La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Organizar, Renombrar, Cortar audio/video, Video a SD, Normalizar, Gestor de descargas, Colección, BinderTrack, AnalogReplayTV, Inventario HDD, Reproductor, Wishlist, ChuckBot, Wiki y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos. El tamaño y la posición de la ventana principal también se recuerdan entre reinicios.
+La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Organizar, Renombrar, Cortar audio/video, Video a SD, Normalizar, Gestor de descargas, Colección, BinderTrack, AnalogReplayTV, Inventario HDD, Reproductor, Wishlist, ChuckBot, Wiki, Hijitos y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos. El tamaño y la posición de la ventana principal también se recuerdan entre reinicios.
 
 ## Herramientas incluidas
 
@@ -183,6 +183,18 @@ Base de conocimiento del equipo con persistencia SQLite local, organizada por ca
 - **Importación**: archivos `.md` individuales (por diálogo o arrastrando para reemplazar el contenido) y **generación masiva** desde una carpeta: cada subcarpeta con un `.md` se convierte en una página (título = nombre de la carpeta) y, si contiene varios `.md`, la carpeta se crea como página y cada archivo como subpágina suya.
 
 La base de datos (`wiki.sqlite`) se guarda en el directorio local de datos de Electron.
+
+### Hijitos
+
+Seguimiento de tareas del día a día de los gatitos (Izumi y Pepita) con persistencia SQLite local, organizado por tracks con banner propio.
+
+- **Dos tracks con banner**: cada gatito tiene su propia tarjeta con nombre editable y un banner de cabecera configurable por URL o por una imagen local elegida con el diálogo del sistema (la ruta se guarda tal cual y se carga solo en este equipo).
+- **Tareas**: creadas con descripción, prioridad (baja/media/alta) y fecha de compromiso opcional; las tareas nuevas nacen en la sección **Pendientes** de su gatito y muestran un aviso cuando su fecha ya venció.
+- **Marcar como realizada**: una casilla en cada tarea la mueve a **Realizadas**; desmarcarla la devuelve a Pendientes (deshacer).
+- **Subtareas**: desde la vista expandida de cada tarea se agregan, marcan y eliminan subtareas.
+- **Avance por gatito**: anillo de progreso con el porcentaje calculado sobre el total de tareas (pendientes vs. realizadas) y contadores en cada tarjeta.
+
+La base de datos (`hijitos.sqlite`) se guarda en el directorio local de datos de Electron.
 
 ### Gestor de descargas
 
@@ -404,6 +416,7 @@ CHUCK's Tools Suite/
 │   ├── chuckbot.cjs         # Ciclo de vida de chuckbot.exe, proxy de chat/SSE y envío a VS Code
 │   ├── rules.cjs            # Motor de reglas de archivos (operaciones, validación y RuleManager)
 │   ├── wikiManager.cjs      # Base de datos de la Wiki (páginas, categorías y estadísticas)
+│   ├── hijitosManager.cjs   # Seguimiento por gatito (tracks, tareas, subtareas y banner)
 │   └── trim.cjs             # Recorte de audio/video con FFmpeg
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
@@ -418,6 +431,7 @@ CHUCK's Tools Suite/
 │   ├── launchboxPlatforms.json # Las 190 plataformas del GamesDB de LaunchBox
 │   ├── BinderTrackTool.tsx # Mantenedor de colección TCG
 │   ├── ChuckBotTool.tsx    # Chat con IA local (Ollama) y archivos solución
+│   ├── HijitosTool.tsx     # Tareas de los gatitos (Izumi y Pepita)
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
@@ -433,7 +447,7 @@ CHUCK's Tools Suite/
 │   ├── styles.css        # Sistema visual, modo claro/oscuro y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones (con metadata LaunchBox), imágenes, renombrado, inventario HDD, BinderTrack, reglas de archivos y Wiki
+├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones (con metadata LaunchBox), imágenes, renombrado, inventario HDD, BinderTrack, reglas de archivos, Wiki e Hijitos
 ├── vite.config.ts
 └── package.json
 ```
@@ -465,6 +479,8 @@ Inventario HDD guarda su catálogo en `hdd-inventory.sqlite` y sus miniaturas en
 BinderTrack guarda su catálogo en `bindertrack.sqlite` y las imágenes importadas desde la app móvil en `bindertrack-media/`, ambos dentro de `app.getPath('userData')`. Contienen datos de la colección de cartas editados por el usuario; se mantienen únicamente en el equipo local.
 
 La Wiki guarda sus páginas en `wiki.sqlite` y las reglas de archivos en `rules.json`, ambos dentro de `app.getPath('userData')`; contienen el contenido documentado del equipo y las reglas de renombrado de descargas definidas por el usuario, sin sincronizar con ningún servicio externo.
+
+Hijitos guarda las tareas de cada gatito en `hijitos.sqlite`, dentro de `app.getPath('userData')`; contiene descripciones, fechas de compromiso, prioridades y las rutas de los banners elegidas por el usuario, sin salir del equipo.
 
 ### Dependencias conocidas
 

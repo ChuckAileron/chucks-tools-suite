@@ -468,6 +468,52 @@ export type WikiPage = {
 };
 export type WikiCategory = { name: string; total: number; icon: string };
 export type WikiStats = { total: number; contributors: number; lastUpdated: string | null };
+export type HijitoPriority = 'bajo' | 'medio' | 'alto';
+export type HijitoSubtask = {
+  id: number;
+  taskId: number;
+  description: string;
+  done: boolean;
+  createdAt: string;
+};
+export type HijitoTask = {
+  id: number;
+  trackSlug: string;
+  description: string;
+  dueDate: string;
+  priority: HijitoPriority;
+  done: boolean;
+  createdAt: string;
+  updatedAt: string;
+  subtasks: HijitoSubtask[];
+};
+export type HijitoSummary = { total: number; done: number; pending: number; percent: number };
+export type HijitoTaskPatch = {
+  trackSlug?: string;
+  description?: string;
+  dueDate?: string;
+  priority?: HijitoPriority;
+  done?: boolean;
+};
+export type HijitoTrack = {
+  slug: string;
+  name: string;
+  banner: string;
+  bannerX: number;
+  bannerY: number;
+  createdAt: string;
+  updatedAt: string;
+  tasks: HijitoTask[];
+  stats: HijitoSummary;
+};
+export type ImageFormat = 'jpg' | 'png' | 'webp' | 'gif' | 'tiff' | 'avif';
+export type ImageConvertResult = {
+  input: string;
+  output: string | null;
+  ok: boolean;
+  error?: string;
+};
+export type ImageConvertOutcome = { format: ImageFormat; results: ImageConvertResult[] };
 export type HddCategory = 'folder' | 'video' | 'image' | 'audio' | 'document' | 'other';
 export type HddDrive = {
   id: number;
@@ -584,6 +630,31 @@ declare global {
       createWikiPage(data: Partial<WikiPage>): Promise<WikiPage>;
       updateWikiPage(id: number, patch: Partial<WikiPage>): Promise<WikiPage>;
       deleteWikiPage(id: number): Promise<boolean>;
+      hijitosList(): Promise<HijitoTrack[]>;
+      hijitosGetBanner(): Promise<string>;
+      hijitosSetBanner(banner: string): Promise<string>;
+      hijitosUpdateTrack(
+        slug: string,
+        patch: { name?: string; banner?: string },
+      ): Promise<HijitoTrack>;
+      hijitosCreateTask(data: {
+        trackSlug: string;
+        description: string;
+        dueDate?: string;
+        priority?: HijitoPriority;
+      }): Promise<HijitoTask>;
+      hijitosUpdateTask(id: number, patch: HijitoTaskPatch): Promise<HijitoTask>;
+      hijitosDeleteTask(id: number): Promise<boolean>;
+      hijitosCreateSubtask(taskId: number, description: string): Promise<HijitoSubtask>;
+      hijitosUpdateSubtask(
+        id: number,
+        patch: { description?: string; done?: boolean },
+      ): Promise<HijitoSubtask>;
+      hijitosDeleteSubtask(id: number): Promise<boolean>;
+      hijitosSelectBanner(): Promise<string | null>;
+      hijitosReadBanner(filePath: string): Promise<string | null>;
+      imagesSelect(): Promise<string[]>;
+      imagesConvert(format: ImageFormat, files: string[]): Promise<ImageConvertOutcome>;
       getCollectionItems(collectionId: number, q?: string): Promise<CollectionItem[]>;
       createCollectionItem(data: {
         collectionId: number;
