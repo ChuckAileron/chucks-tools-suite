@@ -4,7 +4,7 @@ Aplicación de escritorio para Windows, macOS y Linux que reúne herramientas lo
 
 Las operaciones sobre archivos locales se ejecutan en el equipo del usuario. El módulo de Descargas realiza solicitudes a las URLs ingresadas y, cuando corresponde, a las APIs públicas de MediaFire o Google Drive.
 
-La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Organizar, Renombrar, Cortar audio/video, Video a SD, Normalizar, Gestor de descargas, Colección, BinderTrack, AnalogReplayTV, Inventario HDD, Reproductor, Wishlist y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos.
+La interfaz incluye un botón **Modo claro / Modo oscuro** en la barra lateral, con la preferencia persistida localmente y sincronizada con `prefers-color-scheme` en el primer inicio. Toda la suite (Organizar, Renombrar, Cortar audio/video, Video a SD, Normalizar, Gestor de descargas, Colección, BinderTrack, AnalogReplayTV, Inventario HDD, Reproductor, Wishlist, ChuckBot, Wiki y los modales) se reeskinna al cambiar de tema; la barra lateral permanece con su croma oscuro característico en ambos modos. El tamaño y la posición de la ventana principal también se recuerdan entre reinicios.
 
 ## Herramientas incluidas
 
@@ -129,6 +129,7 @@ Permite crear catálogos locales con fichas personalizadas y persistencia SQLite
 - Base de datos guardada en el directorio local de datos de Electron.
 - Wishlist con nombre, manufacturero, año y múltiples páginas de tienda por artículo.
 - Consulta de precios mediante scraping local de JSON-LD, metadatos de producto y HTML.
+- Resumen en tiempo real del valor total estimado de la wishlist (promedio de las tiendas consultadas por artículo) y botón **Actualizar todos los precios** para reconsultar la lista completa de una vez.
 
 #### Metadata LaunchBox
 
@@ -167,6 +168,22 @@ Asistente de IA local que habla con modelos de [Ollama](https://ollama.com) a tr
 
 Requisitos del módulo: instalar Ollama y descargar los modelos (`ollama pull qwen2.5:latest`, `ollama pull sqlcoder:latest`), e instalar la extensión Remote Control en VS Code solo si se quiere el envío directo.
 
+### Wiki
+
+Base de conocimiento del equipo con persistencia SQLite local, organizada por categorías y con páginas y subpáginas anidadas, escritura en Markdown e importación desde archivos `.md`.
+
+- **Página principal**: portada con estadísticas (documentos, categorías y última actualización), atajos, categorías, destacados y actividad reciente.
+- **Categorías**: cada página pertenece a una categoría con ícono y color propios; la navegación lateral agrupa las páginas raíz de cada categoría y puede expandirse para ver sus subpáginas.
+- **Páginas y subpáginas**: jerarquía padre/hijo con protección de ciclos y borrado en cascada; arriba del contenido se muestra la ruta completa del documento (breadcrumb). El editor incluye título, categoría (heredada cuando hay página padre), ícono, etiqueta, resumen, contenido opcional y marcado de destacado.
+- **Selector de emojis**: el campo de ícono despliega un buscador de emojis del sistema agrupados por categoría y filtrables por palabra (en español e inglés).
+- **Markdown**: encabezados, negrita/cursiva, enlaces, listas, citas, regla horizontal y bloques de código con resaltado de sintaxis proporcionado por highlight.js (core + ~20 lenguajes y alias).
+- **Bloques de código**: colapsables para ajustar el espacio (los largos muestran un preview de las primeras líneas con desvanecido), con contador de líneas, botón **copiar** y opción de verlas todas.
+- **Banner opcional**: URL de imagen configurable por página; si la URL queda vacía o falla al cargar, la página se muestra como siempre. La posición vertical del recorte (arriba/centro/abajo) también se puede definir.
+- **Búsqueda**: insensible a mayúsculas y a acentos, sobre el título, resumen, etiqueta, categoría, autor y contenido de cada página.
+- **Importación**: archivos `.md` individuales (por diálogo o arrastrando para reemplazar el contenido) y **generación masiva** desde una carpeta: cada subcarpeta con un `.md` se convierte en una página (título = nombre de la carpeta) y, si contiene varios `.md`, la carpeta se crea como página y cada archivo como subpágina suya.
+
+La base de datos (`wiki.sqlite`) se guarda en el directorio local de datos de Electron.
+
 ### Gestor de descargas
 
 Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pestañas: Descargas, Identificador y Configuración.
@@ -177,6 +194,8 @@ Gestor inspirado en el flujo de JDownloader con una interfaz reducida a tres pes
 - Carpeta de destino individual, múltiple o predeterminada.
 - Prioridades urgente, alta, media y baja.
 - Renombrado antes de descargar y mientras la tarea no esté activa.
+- **Reglas de archivos**: editor de reglas reutilizables (pestaña Configuración) que transforman el nombre del archivo al terminar la descarga, antes de extraer. Cada regla es una secuencia de operaciones: cambiar o añadir extensión, mayúsculas/minúsculas/tipo título, recorte de espacios, reemplazo o eliminación de texto, prefijos y sufijos, operaciones matemáticas sobre el primer o último número del nombre, y desplazamiento o reformateo de fechas (YYYY-MM-DD, DD/MM/YYYY…). El editor muestra una vista previa en vivo del nombre resultante y cada tarea o candidato del Identificador puede elegir su regla desde el selector "Regla de nombre".
+- Ruta de destino visible en el encabezado de cada colección del Identificador una vez definida, además de la herramienta ▣ para elegirla en conjunto.
 - Cola persistente agrupada por carpeta de destino.
 - Grupos colapsables con barra de progreso general en el encabezado.
 - Los grupos y colecciones que dejes colapsados se mantienen así al navegar entre secciones o reiniciar la aplicación.
@@ -383,6 +402,8 @@ CHUCK's Tools Suite/
 │   ├── megaProvider.cjs     # Descarga y descifrado de enlaces MEGA (AES-CTR)
 │   ├── teraboxProvider.cjs  # Enlaces compartidos de TeraBox
 │   ├── chuckbot.cjs         # Ciclo de vida de chuckbot.exe, proxy de chat/SSE y envío a VS Code
+│   ├── rules.cjs            # Motor de reglas de archivos (operaciones, validación y RuleManager)
+│   ├── wikiManager.cjs      # Base de datos de la Wiki (páginas, categorías y estadísticas)
 │   └── trim.cjs             # Recorte de audio/video con FFmpeg
 ├── src/
 │   ├── App.tsx           # Layout principal y navegación lateral
@@ -400,6 +421,10 @@ CHUCK's Tools Suite/
 │   ├── WishlistView.tsx  # Wishlist con precios por tienda
 │   ├── AnalogReplayTool.tsx # Canales, programas y programación de TV
 │   ├── DownloadsTool.tsx # Gestor persistente de descargas
+│   ├── RuleEditor.tsx     # Editor de reglas de archivos y selector de reglas
+│   ├── WikiTool.tsx       # Wiki del equipo (categorías, subpáginas y Markdown)
+│   ├── wikiEmojis.ts      # Dataset de emojis con palabras clave para el selector
+│   ├── wikiHighlight.ts   # Resaltado de sintaxis con highlight.js (core + lenguajes)
 │   ├── MediaPlayerTool.tsx # Reproductor de medios del Inventario HDD
 │   ├── HddInventoryTool.tsx # Inventario y explorador de discos duros
 │   ├── mediaUrl.ts       # URLs del protocolo hddmedia://
@@ -408,7 +433,7 @@ CHUCK's Tools Suite/
 │   ├── styles.css        # Sistema visual, modo claro/oscuro y diseño responsive
 │   └── types.ts          # Contratos TypeScript de la API
 ├── eslint.config.js
-├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones (con metadata LaunchBox), imágenes, renombrado, inventario HDD y BinderTrack
+├── test/                    # Pruebas de URLs, descargas, MEGA/TeraBox, recorte, colecciones (con metadata LaunchBox), imágenes, renombrado, inventario HDD, BinderTrack, reglas de archivos y Wiki
 ├── vite.config.ts
 └── package.json
 ```
@@ -438,6 +463,8 @@ El gestor persiste su estado en `downloads.json` dentro de `app.getPath('userDat
 Inventario HDD guarda su catálogo en `hdd-inventory.sqlite` y sus miniaturas en la carpeta `hdd-thumbnails/`, ambos dentro de `app.getPath('userData')`. Contienen rutas completas del disco, nombres de archivos y miniaturas de su contenido; se mantienen únicamente en el equipo local.
 
 BinderTrack guarda su catálogo en `bindertrack.sqlite` y las imágenes importadas desde la app móvil en `bindertrack-media/`, ambos dentro de `app.getPath('userData')`. Contienen datos de la colección de cartas editados por el usuario; se mantienen únicamente en el equipo local.
+
+La Wiki guarda sus páginas en `wiki.sqlite` y las reglas de archivos en `rules.json`, ambos dentro de `app.getPath('userData')`; contienen el contenido documentado del equipo y las reglas de renombrado de descargas definidas por el usuario, sin sincronizar con ningún servicio externo.
 
 ### Dependencias conocidas
 

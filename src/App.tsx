@@ -12,6 +12,7 @@ import MediaPlayerTool from './MediaPlayerTool';
 import TrimTool from './TrimTool';
 import BinderTrackTool from './BinderTrackTool';
 import ChuckBotTool from './ChuckBotTool';
+import WikiTool from './WikiTool';
 import type {
   ChuckBotOllamaStatus,
   ChuckBotServerStatus,
@@ -38,7 +39,8 @@ type Tool =
   | 'media'
   | 'trim'
   | 'bindertrack'
-  | 'chuckbot';
+  | 'chuckbot'
+  | 'wiki';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -262,6 +264,15 @@ export default function App() {
               <small>IA local</small>
             </span>
           </button>
+          <button className={tool === 'wiki' ? 'active' : ''} onClick={() => setTool('wiki')}>
+            <i>
+              <WikiIcon />
+            </i>
+            <span>
+              <strong>Wiki</strong>
+              <small>Base de conocimiento</small>
+            </span>
+          </button>
           <button
             className={tool === 'downloads' ? 'active' : ''}
             onClick={() => {
@@ -410,6 +421,8 @@ export default function App() {
           <CollectionTool />
         ) : tool === 'bindertrack' ? (
           <BinderTrackTool />
+        ) : tool === 'wiki' ? (
+          <WikiTool />
         ) : tool === 'chuckbot' ? (
           <ChuckBotTool
             server={chuckbotServer}
@@ -520,6 +533,15 @@ function PlayIcon() {
   return (
     <SidebarIcon>
       <polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none" />
+    </SidebarIcon>
+  );
+}
+
+function WikiIcon() {
+  return (
+    <SidebarIcon>
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z" />
+      <path d="M9 7v10M9 7l3 2 3-2v10l-3-2-3 2" />
     </SidebarIcon>
   );
 }

@@ -6,3 +6,19 @@ run-chucks-tools.cmd
 wip_backend/
 TODO.txt
 BUGS.txt
+
+# Datos locales sensibles de la aplicación (userData): nunca deben subirse.
+downloads.json
+rules.json
+wiki.sqlite
+collections.sqlite
+hdd-inventory.sqlite
+bindertrack.sqlite
+analog-replay-tv.sqlite
+window-state.json
+schedule-config.json
+hdd-thumbnails/
+bindertrack-media/
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm

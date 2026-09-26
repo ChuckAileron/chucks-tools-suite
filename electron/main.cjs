@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, screen, shell } = require('electron');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const os = require('node:os');
@@ -15,8 +15,10 @@ const {
 } = require('./audioNormalizer.cjs');
 const { validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
+const { RuleManager, applyRule } = require('./rules.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
-const { scrapePrice } = require('./priceScraper.cjs');
+const { WikiManager } = require('./wikiManager.cjs');
+const { scrapeProduct } = require('./priceScraper.cjs');
 const { searchImages } = require('./imageSearch.cjs');
 const analogReplay = require('./analogReplay.cjs');
 const { listFiles, listFolders, renameFile } = require('./renameManager.cjs');
@@ -37,7 +39,9 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 let downloadManager;
+let rulesManager;
 let collectionManager;
+let wikiManager;
 let hddManager;
 let hddThumbnailsDir;
 let binderManager;
@@ -560,10 +564,58 @@ async function undoMove(data) {
   }
   return { moved, errors };
 }
+// ── Tamaño y posición de la ventana ─────────────────────────────────────────
+// Se persisten en window-state.json (userData) para que la app reabra con el
+// mismo tamaño/posición/maximizado de la última sesión.
+const DEFAULT_WINDOW_STATE = { width: 1440, height: 960, x: undefined, y: undefined, maximized: false };
+function windowStatePath() {
+  return path.join(app.getPath('userData'), 'window-state.json');
+}
+function loadWindowState() {
+  try {
+    const saved = JSON.parse(fsSync.readFileSync(windowStatePath(), 'utf8'));
+    const state = { ...DEFAULT_WINDOW_STATE, ...saved };
+    // Si la posición guardada quedó fuera de cualquier pantalla conectada
+    // (p. ej. se desconectó un segundo monitor), se ignora para que la
+    // ventana no se abra invisible fuera del área visible.
+    if (typeof state.x === 'number' && typeof state.y === 'number') {
+      const onScreen = screen.getAllDisplays().some((display) => {
+        const area = display.workArea;
+        return (
+          state.x >= area.x &&
+          state.y >= area.y &&
+          state.x < area.x + area.width &&
+          state.y < area.y + area.height
+        );
+      });
+      if (!onScreen) {
+        state.x = undefined;
+        state.y = undefined;
+      }
+    }
+    return state;
+  } catch {
+    return DEFAULT_WINDOW_STATE;
+  }
+}
+function saveWindowState(win) {
+  if (win.isDestroyed()) return;
+  const bounds = win.isMaximized() ? win.getNormalBounds() : win.getBounds();
+  const state = { ...bounds, maximized: win.isMaximized() };
+  try {
+    fsSync.mkdirSync(path.dirname(windowStatePath()), { recursive: true });
+    fsSync.writeFileSync(windowStatePath(), JSON.stringify(state));
+  } catch {
+    // Si no se puede escribir, la próxima sesión abre con el tamaño por defecto.
+  }
+}
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1440,
-    height: 960,
+  const state = loadWindowState();
+  const win   = new BrowserWindow({
+    width: state.width,
+    height: state.height,
+    x: state.x,
+    y: state.y,
     minWidth: 820,
     minHeight: 620,
     autoHideMenuBar: true,
@@ -575,14 +627,29 @@ function createWindow() {
       sandbox: true,
     },
   });
+  if (state.maximized) win.maximize();
+  // Debounce: resize/move disparan muchos eventos seguidos; se guarda solo
+  // cuando el usuario deja de mover/redimensionar durante 400ms.
+  let saveTimer = null;
+  const scheduleSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveWindowState(win), 400);
+  };
+  win.on('resize', scheduleSave);
+  win.on('move', scheduleSave);
+  win.on('close', () => {
+    clearTimeout(saveTimer);
+    saveWindowState(win);
+  });
   process.argv.includes('--dev')
     ? win.loadURL('http://localhost:5173')
     : win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 app.whenReady().then(async () => {
-  collectionManager = new CollectionManager(
-    path.join(app.getPath('userData'), 'collections.sqlite'),
-  );
+    collectionManager = new CollectionManager(
+      path.join(app.getPath('userData'), 'collections.sqlite'),
+    );
+    wikiManager = new WikiManager(path.join(app.getPath('userData'), 'wiki.sqlite'));
   hddThumbnailsDir = path.join(app.getPath('userData'), 'hdd-thumbnails');
   hddManager = new hddInventory.HddInventoryManager(
     path.join(app.getPath('userData'), 'hdd-inventory.sqlite'),
@@ -593,12 +660,14 @@ app.whenReady().then(async () => {
     path.join(app.getPath('userData'), 'bindertrack.sqlite'),
     binderTrackMediaDir,
   );
+  rulesManager = new RuleManager(path.join(app.getPath('userData'), 'rules.json'));
   downloadManager = new DownloadManager(
     path.join(app.getPath('userData'), 'downloads.json'),
     (state) => {
       for (const window of BrowserWindow.getAllWindows())
         window.webContents.send('downloads:state', state);
     },
+    rulesManager,
   );
   await downloadManager.recover();
   const { watcher, events } = require('./clipboardWatcher.cjs');
@@ -686,6 +755,12 @@ app.whenReady().then(async () => {
     return true;
   });
   ipcMain.handle('downloads:disk-info', (_event, directory) => downloadManager.diskInfo(directory));
+  ipcMain.handle('rules:list', () => rulesManager.list());
+  ipcMain.handle('rules:save', (_event, rule) => rulesManager.save(rule));
+  ipcMain.handle('rules:delete', (_event, id) => rulesManager.remove(id));
+  ipcMain.handle('rules:preview', (_event, { name, operations }) =>
+    applyRule(operations || [], String(name || 'archivo.rar')),
+  );
   ipcMain.handle('collections:list', () => collectionManager.listCollections());
   ipcMain.handle('collections:create', (_event, data) => collectionManager.createCollection(data));
   ipcMain.handle('collections:update', (_event, { id, patch }) =>
@@ -694,6 +769,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('collections:delete', (_event, id) => collectionManager.deleteCollection(id));
   ipcMain.handle('collections:reorder', (_event, ids) => collectionManager.reorderCollections(ids));
   ipcMain.handle('collections:column-types', () => COLUMN_TYPES);
+  ipcMain.handle('wiki:list', (_event, query) => wikiManager.listPages(query));
+  ipcMain.handle('wiki:categories', () => wikiManager.categories());
+  ipcMain.handle('wiki:stats', () => wikiManager.stats());
+  ipcMain.handle('wiki:get', (_event, id) => wikiManager.getPage(id));
+  ipcMain.handle('wiki:create', (_event, data) => wikiManager.createPage(data));
+  ipcMain.handle('wiki:update', (_event, { id, patch }) => wikiManager.updatePage(id, patch));
+  ipcMain.handle('wiki:delete', (_event, id) => wikiManager.deletePage(id));
   ipcMain.handle('collection-items:list', (_event, { collectionId, q }) =>
     collectionManager.listItems(collectionId, q),
   );
@@ -991,7 +1073,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('wishlist-prices:create', async (_event, { wishlistId, data }) => {
     const source = collectionManager.addWishlistPrice(wishlistId, data);
     try {
-      return collectionManager.updateWishlistPriceResult(source.id, await scrapePrice(source.url));
+      return collectionManager.updateWishlistPriceResult(source.id, await scrapeProduct(source.url));
     } catch (error) {
       return collectionManager.updateWishlistPriceResult(source.id, { error: error.message });
     }
@@ -1003,7 +1085,10 @@ app.whenReady().then(async () => {
     const source = collectionManager.getWishlistPrice(id);
     if (!source) throw new Error('La página de tienda no existe.');
     try {
-      return collectionManager.updateWishlistPriceResult(id, await scrapePrice(source.url));
+      const result = await scrapeProduct(source.url);
+      collectionManager.updateWishlistPriceResult(id, result);
+      if (result.error) throw new Error(result.error);
+      return collectionManager.getWishlistPrice(id);
     } catch (error) {
       collectionManager.updateWishlistPriceResult(id, { error: error.message });
       throw error;
@@ -1015,8 +1100,10 @@ app.whenReady().then(async () => {
     let failed = 0;
     for (const source of items.flatMap((item) => item.prices)) {
       try {
-        collectionManager.updateWishlistPriceResult(source.id, await scrapePrice(source.url));
-        updated += 1;
+        const result = await scrapeProduct(source.url);
+        collectionManager.updateWishlistPriceResult(source.id, result);
+        if (result.error) failed += 1;
+        else updated += 1;
       } catch (error) {
         collectionManager.updateWishlistPriceResult(source.id, { error: error.message });
         failed += 1;
@@ -1908,10 +1995,14 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => process.platform !== 'darwin' && app.quit());
 app.on('before-quit', () => {
-  if (collectionManager) {
-    collectionManager.close();
-    collectionManager = null;
-  }
+    if (collectionManager) {
+      collectionManager.close();
+      collectionManager = null;
+    }
+    if (wikiManager) {
+      wikiManager.close();
+      wikiManager = null;
+    }
   if (hddManager) {
     hddManager.close();
     hddManager = null;

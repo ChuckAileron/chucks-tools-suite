@@ -1,6 +1,6 @@
 {
   "name": "chucks-tools-suite",
-  "version": "1.12.2",
+  "version": "1.13.0",
   "private": true,
   "type": "module",
   "description": "Suite de herramientas locales para archivos",
@@ -36,6 +36,7 @@
     "cheerio": "latest",
     "clipboard-event": "^1.6.0",
     "handbrake-js": "8.0.2",
+    "highlight.js": "^11.12.0",
     "node-downloader-helper": "2.1.11",
     "normalize-url": "latest",
     "officeparser": "^8.0.0",

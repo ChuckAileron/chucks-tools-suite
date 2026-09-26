@@ -870,7 +870,7 @@ function ImageSearchModal({
             </button>
             <button
               type="button"
-              className="image-search-confirm"
+              className="prompt-confirm"
               disabled={!selected}
               onClick={() => selected && onConfirm(selected.imageUrl)}
             >

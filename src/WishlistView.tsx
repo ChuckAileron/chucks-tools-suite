@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WishlistItem, WishlistPrice } from './types';
 
 type Draft = {
@@ -6,10 +6,11 @@ type Draft = {
   name: string;
   manufacturer: string;
   year: string;
+  imageUrl: string;
   prices: WishlistPrice[];
 };
 
-const EMPTY: Draft = { name: '', manufacturer: '', year: '', prices: [] };
+const EMPTY: Draft = { name: '', manufacturer: '', year: '', imageUrl: '', prices: [] };
 
 export default function WishlistView() {
   const [items, setItems]     = useState<WishlistItem[]>([]);
@@ -19,6 +20,7 @@ export default function WishlistView() {
   const [url, setUrl]         = useState('');
   const [busy, setBusy]       = useState(false);
   const [message, setMessage] = useState('');
+  const attemptedImageItems   = useRef(new Set<number>());
 
   const load = async () => setItems(await window.tools.getWishlist(search));
   useEffect(() => {
@@ -27,6 +29,17 @@ export default function WishlistView() {
       .then(setItems)
       .catch((error) => setMessage(String(error)));
   }, [search]);
+  useEffect(() => {
+    for (const item of items) {
+      const firstPrice = item.prices[0];
+      if (item.imageUrl || !firstPrice || attemptedImageItems.current.has(item.id)) continue;
+      attemptedImageItems.current.add(item.id);
+      void window.tools
+        .refreshWishlistPrice(firstPrice.id)
+        .catch(() => undefined)
+        .then(() => window.tools.getWishlist(search).then(setItems).catch(() => undefined));
+    }
+  }, [items, search]);
   const run  = async (action: () => Promise<void>) => {
     setBusy(true);
     setMessage('');
@@ -44,6 +57,7 @@ export default function WishlistView() {
       name:         item.name,
       manufacturer: item.manufacturer,
       year:         item.year?.toString() || '',
+      imageUrl:     item.imageUrl || '',
       prices:       item.prices,
     });
     setStore('');
@@ -56,6 +70,7 @@ export default function WishlistView() {
         name:         draft.name,
         manufacturer: draft.manufacturer,
         year:         draft.year ? Number(draft.year) : null,
+        imageUrl:     draft.imageUrl.trim() || null,
       };
       const saved   = draft.id
         ? await window.tools.updateWishlistItem(draft.id, payload)
@@ -116,6 +131,7 @@ export default function WishlistView() {
       }
       setMessage(`${result.updated} precios actualizados; ${result.failed} sin reconocer.`);
     });
+  const summary = wishlistTotal(items);
 
   return (
     <div className="wishlist-view">
@@ -125,11 +141,20 @@ export default function WishlistView() {
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar por nombre o manufacturero..."
         />
-        <button disabled={busy || !items.length} onClick={refreshAll}>
-          Actualizar todos los precios
-        </button>
         <button disabled={busy} onClick={() => setDraft(EMPTY)}>
           + Agregar a wishlist
+        </button>
+      </div>
+      <div className="wishlist-summary">
+        <div>
+          <strong>{formatTotal(summary)}</strong>
+          <small>
+            Valor aprox. · promedio por artículo · {summary.items}{' '}
+            {summary.items === 1 ? 'artículo' : 'artículos'} con precio
+          </small>
+        </div>
+        <button disabled={busy || !items.length} onClick={refreshAll}>
+          Actualizar todos los precios
         </button>
       </div>
       {message && <p className="collection-message">{message}</p>}
@@ -165,6 +190,15 @@ export default function WishlistView() {
                 max="9999"
                 value={draft.year}
                 onChange={(e) => setDraft({ ...draft, year: e.target.value })}
+              />
+            </label>
+            <label>
+              <span>Imagen (URL)</span>
+              <input
+                type="url"
+                value={draft.imageUrl}
+                onChange={(e) => setDraft({ ...draft, imageUrl: e.target.value })}
+                placeholder="https://..."
               />
             </label>
           </div>
@@ -231,6 +265,9 @@ export default function WishlistView() {
             const lowest    = available.sort((a, b) => (a.price as number) - (b.price as number))[0];
             return (
               <article className="wishlist-card" key={item.id}>
+                <div className="wishlist-card-image">
+                  {item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : <span>WL</span>}
+                </div>
                 <div>
                   <span>{item.year || '—'}</span>
                   <small>{item.manufacturer || 'Sin manufacturero'}</small>
@@ -269,4 +306,25 @@ function formatPrice(price: WishlistPrice) {
   } catch {
     return `${price.price.toFixed(2)} ${price.currency || ''}`.trim();
   }
+}
+
+function wishlistTotal(items: WishlistItem[]) {
+  const currencies = items.flatMap((item) => item.prices).filter((price) => price.price !== null);
+  const currency   = currencies.map((price) => price.currency).filter(Boolean)[0] || 'USD';
+  const averages   = items
+    .map((item) => item.prices.filter((price) => price.price !== null).map((price) => price.price as number))
+    .filter((prices) => prices.length > 0)
+    .map((prices) => prices.reduce((sum, price) => sum + price, 0) / prices.length);
+  return {
+    total: averages.reduce((sum, average) => sum + average, 0),
+    currency,
+    items: averages.length,
+  };
+}
+
+function formatTotal(total: { total: number; currency: string; items: number }) {
+  if (!total.items) return '—';
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 0,
+  }).format(total.total);
 }

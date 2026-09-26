@@ -41,7 +41,15 @@ let priceScraper;
 delete require.cache[require.resolve('../electron/priceScraper.cjs')];
 priceScraper = require('../electron/priceScraper.cjs');
 
-const { scrapePrice, extractPrice, numberFromPrice, currencyFromText, findOffer } = priceScraper;
+const {
+  scrapePrice,
+  scrapeProduct,
+  extractPrice,
+  extractProductImage,
+  numberFromPrice,
+  currencyFromText,
+  findOffer,
+} = priceScraper;
 
 test('scrapePrice extrae el precio de un JSON-LD', async () => {
   resetStubs();
@@ -55,6 +63,46 @@ test('scrapePrice extrae el precio de un JSON-LD', async () => {
     currency: 'USD',
   });
   assert.equal(state.calls[0].maxBytes, 5 * 1024 * 1024);
+});
+
+test('scrapeProduct extrae la imagen del primer enlace incluso si no reconoce el precio', async () => {
+  resetStubs();
+  queueResponse(
+    textResponse('<meta property="og:image" content="/images/item.jpg"><title>Producto</title>'),
+  );
+  assert.deepEqual(await scrapeProduct('https://tienda.com/producto'), {
+    price: null,
+    currency: null,
+    imageUrl: 'https://tienda.com/images/item.jpg',
+    error: 'No se encontró un precio reconocible en la página.',
+  });
+});
+
+test('extractProductImage prioriza la imagen JSON-LD Product y resuelve su ruta', () => {
+  assert.equal(
+    extractProductImage(
+      '<script type="application/ld+json">{"@type":"Product","image":["../product.jpg"]}</script><meta property="og:image" content="/og.jpg">',
+      'https://shop.example.com/catalog/item',
+    ),
+    'https://shop.example.com/product.jpg',
+  );
+});
+
+test('extractProductImage reconoce los atributos de imagen de productos Amazon', () => {
+  assert.equal(
+    extractProductImage(
+      '<img id="landingImage" src="https://m.media-amazon.com/images/I/low.jpg" data-old-hires="https://m.media-amazon.com/images/I/full.jpg" data-a-dynamic-image="{&quot;https://m.media-amazon.com/images/I/full.jpg&quot;:[1200,1200]}">',
+      'https://www.amazon.com/dp/B000000000',
+    ),
+    'https://m.media-amazon.com/images/I/full.jpg',
+  );
+  assert.equal(
+    extractProductImage(
+      '<img id="landingImage" data-a-dynamic-image="{&quot;https://m.media-amazon.com/images/I/small.jpg&quot;:[300,300],&quot;https://m.media-amazon.com/images/I/large.jpg&quot;:[1000,1000]}">',
+      'https://www.amazon.com/dp/B000000000',
+    ),
+    'https://m.media-amazon.com/images/I/large.jpg',
+  );
 });
 
 test('scrapePrice continúa al metadata si el JSON-LD está malformado', async () => {
@@ -205,6 +253,22 @@ test('extractPrice usa la moneda declarada en el metadata', () => {
 test('extractPrice cae al texto de un elemento de precio', () => {
   const html = '<span class="price">199.00 USD</span>';
   assert.deepEqual(extractPrice(html), { price: 199, currency: 'USD' });
+});
+
+test('extractPrice lee el precio de Amazon (a-offscreen) sin contaminarlo', () => {
+  const html =
+    '<span class="a-price" data-a-size="m"><span class="a-offscreen">CLP 189,018</span>' +
+    '<span aria-hidden="true"><span class="a-price-symbol">$</span>' +
+    '<span class="a-price-whole">189,018</span></span></span>';
+  assert.deepEqual(extractPrice(html), { price: 189018, currency: 'CLP' });
+});
+
+test('extractPrice ignora precios en ofertas secundarias', () => {
+  const html =
+    '<span class="a-price" data-a-size="m"><span class="a-offscreen">CLP 189,018</span>' +
+    '<span class="a-price-whole">189,018</span></span>' +
+    '<span class="a-price"><span class="a-offscreen">CLP 170,000</span></span>';
+  assert.deepEqual(extractPrice(html), { price: 189018, currency: 'CLP' });
 });
 
 test('extractPrice devuelve null sin precio reconocible', () => {

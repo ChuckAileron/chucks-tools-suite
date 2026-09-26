@@ -131,7 +131,7 @@ test('las colecciones nuevas se agregan al final del orden', () => {
   }
 });
 
-test('wishlist persiste artículos y múltiples páginas de precio', () => {
+test('wishlist persiste artículos, imagen y múltiples páginas de precio', () => {
   const fixture = managerForTest();
   try {
     const item = fixture.manager.createWishlistItem({
@@ -143,8 +143,13 @@ test('wishlist persiste artículos y múltiples páginas de precio', () => {
       store: 'Tienda',
       url: 'https://example.com/steam-deck',
     });
-    fixture.manager.updateWishlistPriceResult(source.id, { price: 399.99, currency: 'USD' });
+    fixture.manager.updateWishlistPriceResult(source.id, {
+      price: 399.99,
+      currency: 'USD',
+      imageUrl: 'https://cdn.example.com/steam-deck.jpg',
+    });
     const saved = fixture.manager.getWishlistItem(item.id);
+    assert.equal(saved.imageUrl, 'https://cdn.example.com/steam-deck.jpg');
     assert.equal(saved.prices[0].price, 399.99);
     assert.equal(saved.prices[0].currency, 'USD');
     assert.equal(fixture.manager.listWishlist('valve')[0].name, 'Steam Deck');
@@ -154,6 +159,27 @@ test('wishlist persiste artículos y múltiples páginas de precio', () => {
     );
     assert.equal(fixture.manager.deleteWishlistItem(item.id), true);
     assert.equal(fixture.manager.getWishlistPrice(source.id), null);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('wishlist deriva imagen solo del primer enlace y conserva una imagen definida', () => {
+  const fixture = managerForTest();
+  try {
+    const item = fixture.manager.createWishlistItem({ name: 'Consola' });
+    const first = fixture.manager.addWishlistPrice(item.id, { url: 'https://a.example.com/item' });
+    const second = fixture.manager.addWishlistPrice(item.id, { url: 'https://b.example.com/item' });
+    fixture.manager.updateWishlistPriceResult(second.id, { imageUrl: 'https://b.example.com/b.jpg' });
+    assert.equal(fixture.manager.getWishlistItem(item.id).imageUrl, null);
+    fixture.manager.updateWishlistPriceResult(first.id, { imageUrl: 'https://a.example.com/a.jpg' });
+    assert.equal(fixture.manager.getWishlistItem(item.id).imageUrl, 'https://a.example.com/a.jpg');
+    fixture.manager.updateWishlistItem(item.id, { imageUrl: 'https://manual.example.com/custom.jpg' });
+    fixture.manager.updateWishlistPriceResult(first.id, { imageUrl: 'https://a.example.com/other.jpg' });
+    assert.equal(
+      fixture.manager.getWishlistItem(item.id).imageUrl,
+      'https://manual.example.com/custom.jpg',
+    );
   } finally {
     fixture.close();
   }

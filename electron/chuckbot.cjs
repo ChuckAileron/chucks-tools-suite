@@ -43,6 +43,11 @@ function binaryPath() {
 
 // ── Estado del servidor ─────────────────────────────────────────────────────
 let proc = null;
+// Flag global que indica si el bot se encendió en esta sesión. Mientras esté
+// inactiva, las consultas de estado de Ollama responden «apagado» sin tocar
+// la API local, evitando el ruido de "ChuckBot no está disponible: fetch
+// failed" en cada sondeo cuando el bot nunca se encendió (o ya se apagó).
+let startedOnce = false;
 const runningStreams = new Map(); // streamId -> AbortController
 let nextStreamId = 1;
 
@@ -57,7 +62,10 @@ async function serverReachable() {
 
 async function startServer() {
   if (proc) return { running: true };
-  if (await serverReachable()) return { running: true, external: true };
+  if (await serverReachable()) {
+    startedOnce = true;
+    return { running: true, external: true };
+  }
 
   const bin = binaryPath();
   if (!fs.existsSync(bin)) {
@@ -83,21 +91,29 @@ async function startServer() {
 
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
-    if (await serverReachable()) return { running: true };
+    if (await serverReachable()) {
+      startedOnce = true;
+      return { running: true };
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   const up = await serverReachable();
-  if (up) return { running: true };
+  if (up) {
+    startedOnce = true;
+    return { running: true };
+  }
   return { running: false, error: 'El servidor ChuckBot no respondió a tiempo.' };
 }
 
 async function stopServer() {
   if (!proc) {
     const external = await serverReachable();
+    startedOnce = external;
     return { running: external, external };
   }
   const child = proc;
   proc = null;
+  startedOnce = false;
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       try {
@@ -131,7 +147,10 @@ async function status() {
 
 // ── Control de Ollama (proxea a la API) ────────────────────────────────────
 async function ollamaAction(action) {
-  const method = action === 'status' ? 'GET' : 'POST';
+  // Si la flag global sigue inactiva, el bot nunca se encendió (o ya se
+  // apagó): el estado se responde «apagado» sin consultar la API local.
+  if (action === 'status' && !startedOnce) return { running: false };
+  const method    = action === 'status' ? 'GET' : 'POST';
   const timeoutMs = action === 'start' ? 90000 : action === 'stop' ? 20000 : 8000;
   let res;
   try {
@@ -140,13 +159,17 @@ async function ollamaAction(action) {
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
+    if (action === 'status') return { running: false };
     if (error.name === 'TimeoutError') {
       throw new Error('Ollama tardó demasiado en responder.');
     }
     throw new Error(`ChuckBot no está disponible: ${error.message}`);
   }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Ollama respondió con HTTP ${res.status}.`);
+  if (!res.ok) {
+    if (action === 'status') return { running: false };
+    throw new Error(body.error || `Ollama respondió con HTTP ${res.status}.`);
+  }
   return body;
 }
 

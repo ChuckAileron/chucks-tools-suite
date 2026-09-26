@@ -8,6 +8,7 @@ const { resolveUrl } = require('./urlResolver.cjs');
 const videoProvider = require('./videoProvider.cjs');
 const megaProvider = require('./megaProvider.cjs');
 const teraboxProvider = require('./teraboxProvider.cjs');
+const rulesProvider = require('./rules.cjs');
 
 function resolveSevenZa() {
   const resourcesPath = process.resourcesPath || '';
@@ -137,9 +138,12 @@ function extractLinks(text) {
 }
 
 class DownloadManager {
-  constructor(dataFile, send) {
+  constructor(dataFile, send, rules) {
     this.dataFile = dataFile;
     this.send = send;
+    // RuleManager opcional: si se pasa, las tareas que tengan ruleId renombran
+    // el archivo al terminar la descarga aplicando las operaciones de la regla.
+    this.rules = rules || null;
     this.tasks = new Map();
     this.active = new Map();
     this.starting = new Set();
@@ -1120,6 +1124,7 @@ class DownloadManager {
         videoUrl: item.videoUrl || '',
         videoFormat: item.videoFormat || '',
         providerData: item.providerData || undefined,
+        ruleId: item.ruleId || '',
         status: 'pending',
         progress: 0,
         speed: 0,
@@ -1141,6 +1146,7 @@ class DownloadManager {
       const safe = {};
       if (typeof changes.password === 'string') safe.password = changes.password;
       if (changes.name) safe.name = this.sanitize(changes.name);
+      if (typeof changes.ruleId === 'string') safe.ruleId = changes.ruleId;
       if (!Object.keys(safe).length) return false;
       Object.assign(task, safe);
       this.emit();
@@ -1446,6 +1452,27 @@ class DownloadManager {
   // Post-descarga común a todos los descargadores (node-downloader-helper,
   // video, MEGA): revisa que el archivo sea real, extrae comprimidos (incluyendo
   // volúmenes multiparte) y marca la tarea como completada.
+  // Aplica la regla asignada a la tarea renombrando el archivo ya descargado.
+  // Se llama tras la descarga (y antes de extraer) para que la extracción
+  // tome el nombre ya transformado. Si el destino ya existe o falla el
+  // renombrado, se deja el nombre original.
+  applyRuleRename(task) {
+    if (!task.ruleId || !task.filePath || !this.rules) return;
+    const rule = this.rules.get(task.ruleId);
+    if (!rule || !rule.operations.length) return;
+    const next = this.sanitize(
+      rulesProvider.applyRule(rule.operations, path.basename(task.filePath)),
+    );
+    const target = path.join(path.dirname(task.filePath), next);
+    if (target === task.filePath || fs.existsSync(target)) return;
+    try {
+      fs.renameSync(task.filePath, target);
+      task.filePath = target;
+      task.name = path.basename(target);
+    } catch {
+      // Si el archivo está en uso o el FS lo rechaza, se mantiene el nombre.
+    }
+  }
   async finish(task) {
     this.active.delete(task.id);
     // Google Drive a veces responde 200 con una página HTML de error (cuota
@@ -1468,6 +1495,8 @@ class DownloadManager {
         return;
       }
     }
+    // La regla de la tarea puede transformar el nombre/extension final.
+    this.applyRuleRename(task);
     const volume = archiveVolume(task.filePath);
     if (this.settings.autoExtract && task.extract && ARCHIVE.test(task.filePath)) {
       if (volume) {
@@ -1519,6 +1548,7 @@ class DownloadManager {
         this.active.delete(task.id);
         task.progress = 100;
         task.filePath = filePath || task.filePath || '';
+        this.applyRuleRename(task);
         task.status = 'completed';
         task.error = '';
         this.emit();

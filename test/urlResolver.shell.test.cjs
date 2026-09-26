@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
+const zlib = require('node:zlib');
 const { installHooks } = require('./helpers/moduleHooks.cjs');
 
 function setup() {
@@ -122,6 +123,28 @@ test('requestPage usa HTTP para enlaces http', async () => {
   assert.equal(state.requests[0].client, 'http');
   htmlResponse(state.requests[0], '<html>x</html>');
   await promise;
+});
+
+test('requestPage descomprime respuestas gzip', async () => {
+  const { provider, state } = setup();
+  const promise = provider.requestPage(new URL('https://ejemplo.com/landing'));
+  const request = state.requests[0];
+  const res = response(request, { headers: { 'content-encoding': 'gzip' } });
+  res.emit('data', zlib.gzipSync(Buffer.from('<title>comprimido</title>')));
+  res.emit('end');
+  const result = await promise;
+  assert.equal(result.body, '<title>comprimido</title>');
+});
+
+test('requestPage descomprime respuestas brotli', async () => {
+  const { provider, state } = setup();
+  const promise = provider.requestPage(new URL('https://ejemplo.com/landing'));
+  const request = state.requests[0];
+  const res = response(request, { headers: { 'content-encoding': 'br' } });
+  res.emit('data', zlib.brotliCompressSync(Buffer.from('<span class="price">$ 5</span>')));
+  res.emit('end');
+  const result = await promise;
+  assert.equal(result.body, '<span class="price">$ 5</span>');
 });
 
 test('requestPage detecta respuestas binarias sin leer el cuerpo', async () => {

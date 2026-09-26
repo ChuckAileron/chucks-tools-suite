@@ -284,7 +284,7 @@ function RegisterModal({
             <button disabled={busy} onClick={onClose}>
               Cancelar
             </button>
-            <button disabled={busy || !code.trim()} onClick={submit}>
+            <button className="prompt-confirm" disabled={busy || !code.trim()} onClick={submit}>
               Registrar
             </button>
           </div>
@@ -340,7 +340,7 @@ function EditDriveModal({
             <button disabled={busy} onClick={onClose}>
               Cancelar
             </button>
-            <button disabled={busy || !code.trim()} onClick={submit}>
+            <button className="prompt-confirm" disabled={busy || !code.trim()} onClick={submit}>
               Guardar
             </button>
           </div>
@@ -608,7 +608,7 @@ function HddExplorer({
               <span />
               <div>
                 <button onClick={() => setRenaming(null)}>Cancelar</button>
-                <button onClick={confirmRename}>Guardar</button>
+                <button className="prompt-confirm" onClick={confirmRename}>Guardar</button>
               </div>
             </footer>
           </div>
@@ -650,7 +650,7 @@ function HddExplorer({
             <footer>
               <span />
               <div>
-                <button onClick={() => setDetail(null)}>Cerrar</button>
+                <button className="prompt-confirm" onClick={() => setDetail(null)}>Cerrar</button>
               </div>
             </footer>
           </div>

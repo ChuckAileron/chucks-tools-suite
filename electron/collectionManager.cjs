@@ -119,6 +119,7 @@ class CollectionManager {
         name TEXT NOT NULL,
         manufacturer TEXT NOT NULL DEFAULT '',
         year INTEGER,
+        image_url TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -138,6 +139,9 @@ class CollectionManager {
     const columns = this.db.prepare('PRAGMA table_info(collections)').all();
     if (!columns.some((column) => column.name === 'position'))
       this.db.exec('ALTER TABLE collections ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
+    const wishlistColumns = this.db.prepare('PRAGMA table_info(wishlist_items)').all();
+    if (!wishlistColumns.some((column) => column.name === 'image_url'))
+      this.db.exec('ALTER TABLE wishlist_items ADD COLUMN image_url TEXT');
   }
 
   close() {
@@ -351,9 +355,10 @@ class CollectionManager {
       name: row.name,
       manufacturer: row.manufacturer,
       year: row.year === null ? null : integer(row.year),
+      imageUrl: row.image_url,
       prices: this.db
         .prepare(
-          'SELECT * FROM wishlist_prices WHERE wishlist_id = ? ORDER BY store COLLATE NOCASE',
+          'SELECT * FROM wishlist_prices WHERE wishlist_id = ? ORDER BY id',
         )
         .all(id)
         .map((price) => this.mapWishlistPrice(price)),
@@ -382,14 +387,16 @@ class CollectionManager {
     const year = rawYear === '' || rawYear === null ? null : Number(rawYear);
     if (year !== null && (!Number.isInteger(year) || year < 1000 || year > 9999))
       throw new Error('El año debe contener cuatro dígitos.');
-    return { name, manufacturer, year };
+    const imageUrl = data.imageUrl !== undefined ? data.imageUrl : current?.imageUrl;
+    if (imageUrl && !validUrl(imageUrl)) throw new Error('La imagen debe ser una URL HTTP válida.');
+    return { name, manufacturer, year, imageUrl: imageUrl || null };
   }
 
   createWishlistItem(data) {
     const item = this.sanitizeWishlist(data);
     const result = this.db
-      .prepare('INSERT INTO wishlist_items (name, manufacturer, year) VALUES (?, ?, ?)')
-      .run(item.name, item.manufacturer, item.year);
+      .prepare('INSERT INTO wishlist_items (name, manufacturer, year, image_url) VALUES (?, ?, ?, ?)')
+      .run(item.name, item.manufacturer, item.year, item.imageUrl);
     return this.getWishlistItem(integer(result.lastInsertRowid));
   }
 
@@ -399,10 +406,10 @@ class CollectionManager {
     const item = this.sanitizeWishlist(patch, current);
     this.db
       .prepare(
-        `UPDATE wishlist_items SET name = ?, manufacturer = ?, year = ?,
+        `UPDATE wishlist_items SET name = ?, manufacturer = ?, year = ?, image_url = ?,
          updated_at = datetime('now') WHERE id = ?`,
       )
-      .run(item.name, item.manufacturer, item.year, id);
+      .run(item.name, item.manufacturer, item.year, item.imageUrl, id);
     return this.getWishlistItem(id);
   }
 
@@ -439,7 +446,8 @@ class CollectionManager {
   }
 
   updateWishlistPriceResult(id, result) {
-    const price = Number(result.price);
+    const source = this.getWishlistPrice(id);
+    const price = result.price === null || result.price === undefined ? NaN : Number(result.price);
     this.db
       .prepare(
         `UPDATE wishlist_prices SET price = COALESCE(?, price), currency = COALESCE(?, currency),
@@ -452,6 +460,19 @@ class CollectionManager {
         result.error || null,
         id,
       );
+    if (result.imageUrl && source) {
+      const first = this.db
+        .prepare('SELECT id FROM wishlist_prices WHERE wishlist_id = ? ORDER BY id LIMIT 1')
+        .get(source.wishlistId);
+      if (first && integer(first.id) === source.id) {
+        this.db
+          .prepare(
+            `UPDATE wishlist_items SET image_url = ?, updated_at = datetime('now')
+             WHERE id = ? AND (image_url IS NULL OR image_url = '')`,
+          )
+          .run(result.imageUrl, source.wishlistId);
+      }
+    }
     const row = this.db.prepare('SELECT * FROM wishlist_prices WHERE id = ?').get(id);
     return row ? this.mapWishlistPrice(row) : null;
   }

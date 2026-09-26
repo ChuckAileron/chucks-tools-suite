@@ -142,6 +142,7 @@ function AddToCollectionModal({
               Cancelar
             </button>
             <button
+              className="prompt-confirm"
               disabled={busy || !collectionId}
               onClick={() => collectionId && onConfirm(collectionId)}
             >
@@ -431,7 +432,7 @@ function SetsPanel({
               <span />
               <div>
                 <button onClick={() => setEditing(null)}>Cancelar</button>
-                <button disabled={busy || !editing.draft.name.trim()} onClick={saveSet}>
+                <button className="prompt-confirm" disabled={busy || !editing.draft.name.trim()} onClick={saveSet}>
                   Guardar
                 </button>
               </div>
@@ -839,7 +840,7 @@ function CardsPanel({
               <span />
               <div>
                 <button onClick={() => setEditing(null)}>Cancelar</button>
-                <button disabled={busy || !editing.draft.name.trim()} onClick={saveCard}>
+                <button className="prompt-confirm" disabled={busy || !editing.draft.name.trim()} onClick={saveCard}>
                   Guardar
                 </button>
               </div>
@@ -1130,7 +1131,7 @@ function ListsPanel() {
               <span />
               <div>
                 <button onClick={() => setEditing(null)}>Cancelar</button>
-                <button disabled={busy || !editing.draft.name.trim()} onClick={saveList}>
+                <button className="prompt-confirm" disabled={busy || !editing.draft.name.trim()} onClick={saveList}>
                   Guardar
                 </button>
               </div>

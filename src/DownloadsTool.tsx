@@ -7,9 +7,11 @@ import type {
   DownloadSettings,
   DownloadsState,
   DownloadTask,
+  FileRule,
   VideoQualityOption,
 } from './types';
 import { loadCollapsed, saveCollapsed } from './collapseState';
+import { RuleEditor, RulePickerModal, describeRule } from './RuleEditor';
 
 type Tab = 'downloads' | 'collector' | 'settings';
 const EMPTY: DownloadsState                            = {
@@ -68,7 +70,13 @@ export default function DownloadsTool({
   const [tab, setTab]             = useState<Tab>(candidates.length ? 'collector' : 'downloads');
   const [state, setState]         = useState<DownloadsState>(EMPTY);
   const [disk, setDisk]           = useState<DownloadDiskInfo | null>(null);
+  const [rules, setRules]         = useState<FileRule[]>([]);
   const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed('downloads'));
+  const reloadRules               = () =>
+    window.tools.getRules().then(setRules).catch(() => setRules([]));
+  useEffect(() => {
+    void reloadRules();
+  }, []);
   useEffect(() => {
     saveCollapsed('downloads', collapsed);
   }, [collapsed]);
@@ -218,6 +226,9 @@ export default function DownloadsTool({
             disk={disk}
             isCollapsed={isCollapsed}
             toggleCollapsed={toggleCollapsed}
+            rules={rules}
+            onManageRules={() => setTab('settings')}
+            reloadRules={reloadRules}
           />
         ) : tab === 'collector' ? (
           <CollectorTab
@@ -236,11 +247,15 @@ export default function DownloadsTool({
             toggleCollapsed={toggleCollapsed}
             deleteCandidates={deleteCandidates}
             deleteCollection={deleteCollection}
+            rules={rules}
+            onManageRules={() => setTab('settings')}
           />
         ) : (
           <SettingsTab
             settings={state.settings}
             save={(changes) => window.tools.setDownloadSettings({ ...state.settings, ...changes })}
+            rules={rules}
+            reloadRules={reloadRules}
           />
         )}
       </div>
@@ -356,7 +371,9 @@ function LinksModal({
             <button onClick={copyAll} disabled={!links.length}>
               Copiar todos
             </button>
-            <button onClick={onClose}>Cerrar</button>
+            <button className="prompt-confirm" onClick={onClose}>
+              Cerrar
+            </button>
           </div>
         </footer>
       </div>
@@ -369,22 +386,29 @@ function DownloadsTab({
   disk,
   isCollapsed,
   toggleCollapsed,
+  rules,
+  onManageRules,
+  reloadRules,
 }: {
   tasks: DownloadTask[];
   disk: DownloadDiskInfo | null;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  rules: FileRule[];
+  onManageRules: () => void;
+  reloadRules: () => Promise<void>;
 }) {
-  const [linksModal, setLinksModal] = useState<LinksModalData | null>(null);
-  const { ask, dialog }             = usePrompt();
-  const showLinksFor                = (title: string, groupTasks: DownloadTask[]) =>
+  const [linksModal, setLinksModal]     = useState<LinksModalData | null>(null);
+  const [managingRule, setManagingRule] = useState(false);
+  const { ask, dialog }                 = usePrompt();
+  const showLinksFor                    = (title: string, groupTasks: DownloadTask[]) =>
     setLinksModal({
       title,
       description: `${groupTasks.length} enlace${groupTasks.length === 1 ? '' : 's'} en la cola de descargas.`,
       links:       groupTasks.map((task) => task.originalUrl),
     });
-  const groups                      = Map.groupBy(tasks, (task) => task.destination);
-  const setGroupPassword            = async (groupTasks: DownloadTask[], label: string) => {
+  const groups                          = Map.groupBy(tasks, (task) => task.destination);
+  const setGroupPassword                = async (groupTasks: DownloadTask[], label: string) => {
     const eligible = groupTasks.filter((task) => task.status !== 'completed');
     if (!eligible.length) return;
     const value = await ask({
@@ -449,6 +473,15 @@ function DownloadsTab({
   return (
     <>
       {linksModal && <LinksModal {...linksModal} onClose={() => setLinksModal(null)} />}
+      {managingRule && (
+        <RuleEditor
+          onSave={async (rule) => {
+            await window.tools.saveRule(rule);
+            await reloadRules();
+          }}
+          onClose={() => setManagingRule(false)}
+        />
+      )}
       {dialog}
       <div className="downloads-total-speed">
         <span>Velocidad total</span>
@@ -688,7 +721,14 @@ function DownloadsTab({
                           </button>
                         </div>
                         {!isCollapsed(collectionKey) &&
-                          collectionTasks.map((task) => <DownloadRow task={task} key={task.id} />)}
+                          collectionTasks.map((task) => (
+                            <DownloadRow
+                              task={task}
+                              rules={rules}
+                              onManageRules={onManageRules}
+                              key={task.id}
+                            />
+                          ))}
                       </div>
                     );
                   },
@@ -707,9 +747,19 @@ function DownloadsTab({
   );
 }
 
-function DownloadRow({ task }: { task: DownloadTask }) {
-  const { ask, dialog } = usePrompt();
-  const askPassword     = async () => {
+function DownloadRow({
+  task,
+  rules,
+  onManageRules,
+}: {
+  task: DownloadTask;
+  rules: FileRule[];
+  onManageRules: () => void;
+}) {
+  const { ask, dialog }           = usePrompt();
+  const [pickerFor, setPickerFor] = useState(false);
+  const currentRule               = rules.find((rule) => rule.id === task.ruleId) || null;
+  const askPassword               = async () => {
     const value = await ask({ title: 'Contraseña del archivo comprimido', secret: true });
     if (value === null) return;
     await window.tools.retryExtraction(task.id, value);
@@ -733,6 +783,16 @@ function DownloadRow({ task }: { task: DownloadTask }) {
   return (
     <>
       {dialog}
+      {pickerFor && (
+        <RulePickerModal
+          fileName={task.name || task.originalUrl}
+          currentId={task.ruleId || ''}
+          rules={rules}
+          onPick={(ruleId) => window.tools.updateDownload(task.id, { ruleId: ruleId || '' })}
+          onManage={onManageRules}
+          onClose={() => setPickerFor(false)}
+        />
+      )}
       <article className={`download-row status-${task.status}`}>
         <div className="download-file">
           <input
@@ -742,6 +802,7 @@ function DownloadRow({ task }: { task: DownloadTask }) {
           />
           <span>
             {task.host} · {PRIORITY_LABEL[task.priority]} · {formatSize(task.total)}
+            {currentRule && ` · Regla: ${currentRule.name}`}
           </span>
         </div>
         <div className="download-meter">
@@ -791,6 +852,13 @@ function DownloadRow({ task }: { task: DownloadTask }) {
               ⌑
             </button>
           )}
+          <button
+            className={`download-rule${currentRule ? ' active' : ''}`}
+            title={currentRule ? `Regla: ${currentRule.name}` : 'Definir regla de nombre'}
+            onClick={() => setPickerFor(true)}
+          >
+            ⚙
+          </button>
           <button title="Abrir enlace" onClick={() => window.tools.openUrl(task.originalUrl)}>
             ↗
           </button>
@@ -873,6 +941,8 @@ type CollectorProps = {
   toggleCollapsed: (key: string) => void;
   deleteCandidates: (ids: string[]) => void;
   deleteCollection: (collection: string) => void;
+  rules: FileRule[];
+  onManageRules: () => void;
 };
 function CollectorTab({
   candidates,
@@ -890,6 +960,8 @@ function CollectorTab({
   toggleCollapsed,
   deleteCandidates,
   deleteCollection,
+  rules,
+  onManageRules,
 }: CollectorProps) {
   const { ask, dialog }   = usePrompt();
   const setSharedPassword = async () => {
@@ -958,6 +1030,9 @@ function CollectorTab({
             onClick={setSharedCollection}
           >
             Colección
+          </button>
+          <button type="button" onClick={onManageRules} title="Definir o editar reglas de archivos">
+            ⚙ Reglas
           </button>
           <button disabled={!candidates.length} onClick={clear}>
             Limpiar
@@ -1039,6 +1114,15 @@ function CollectorTab({
                     ×
                   </button>
                 </div>
+                {(() => {
+                  const destinations      = new Set(items.map((item) => item.destination || ''));
+                  const commonDestination = destinations.size === 1 ? items[0]?.destination : '';
+                  return commonDestination ? (
+                    <div className="collector-group-destination" title={commonDestination}>
+                      📁 {commonDestination}
+                    </div>
+                  ) : null;
+                })()}
                 {!isCollapsed(groupKey) &&
                   items.map((item) => (
                     <article className={`candidate ${item.online ? '' : 'offline'}`} key={item.id}>
@@ -1106,6 +1190,22 @@ function CollectorTab({
                           </option>
                         ))}
                       </select>
+                      <select
+                        className="candidate-rule"
+                        value={item.ruleId || ''}
+                        disabled={!item.online}
+                        title="Regla de nombre que se aplicará al descargar"
+                        onChange={(event) =>
+                          update(item.id, { ruleId: event.target.value || undefined })
+                        }
+                      >
+                        <option value="">Sin regla</option>
+                        {rules.map((rule) => (
+                          <option value={rule.id} key={rule.id}>
+                            {rule.name}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         className="candidate-password"
                         type="password"
@@ -1147,16 +1247,77 @@ function CollectorTab({
 function SettingsTab({
   settings,
   save,
+  rules,
+  reloadRules,
 }: {
   settings: DownloadSettings;
   save: (changes: Partial<DownloadSettings>) => void;
+  rules: FileRule[];
+  reloadRules: () => Promise<void>;
 }) {
   const choose = async () => {
     const directory = await window.tools.selectDownloadDirectory();
     if (directory) save({ defaultDirectory: directory });
   };
+  const [editing, setEditing] = useState<FileRule | 'new' | null>(null);
+  const removeRule            = async (id: string) => {
+    try {
+      await window.tools.deleteRule(id);
+      await reloadRules();
+    } catch {
+      // Se mantiene la lista vigente si el borrado falla.
+    }
+  };
   return (
     <div className="download-settings">
+      <section>
+        <h3>Reglas de archivos</h3>
+        <p className="download-rules-hint">
+          Las reglas se guardan como JSON y renombran los archivos al terminar la descarga. Se
+          pueden asignar en cada descarga (⚙) o desde Identificador.
+        </p>
+        {rules.length ? (
+          <ul className="download-rules-list">
+            {rules.map((rule) => (
+              <li key={rule.id}>
+                <div>
+                  <strong>{rule.name}</strong>
+                  <small>{describeRule(rule)}</small>
+                </div>
+                <button type="button" onClick={() => setEditing(rule)}>
+                  Editar
+                </button>
+                <button
+                  className="download-rules-delete"
+                  type="button"
+                  title={`Borrar la regla "${rule.name}"`}
+                  onClick={() => {
+                    if (confirm(`¿Borrar la regla "${rule.name}"?`)) void removeRule(rule.id);
+                  }}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="download-rules-empty">Aún no hay reglas definidas.</p>
+        )}
+        <button className="download-rules-new" type="button" onClick={() => setEditing('new')}>
+          + Nueva regla
+        </button>
+        {editing && (
+          <RuleEditor
+            initial={editing === 'new' ? undefined : editing}
+            onSave={async (rule) => {
+              await window.tools.saveRule(rule);
+              await reloadRules();
+            }}
+            onDelete={editing === 'new' ? undefined : removeRule}
+            onClose={() => setEditing(null)}
+          />
+        )}
+      </section>
       <section>
         <h3>Carpeta predeterminada</h3>
         <div>

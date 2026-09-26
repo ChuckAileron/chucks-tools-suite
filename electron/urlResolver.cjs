@@ -3,6 +3,7 @@ const dns = dnsModule.promises;
 const http = require('node:http');
 const https = require('node:https');
 const net = require('node:net');
+const zlib = require('node:zlib');
 const { load } = require('cheerio');
 const { getDomain } = require('tldts');
 
@@ -78,6 +79,35 @@ function isTextualContentType(contentType) {
   );
 }
 
+// La mayoría de las tiendas sirven el HTML comprimido (gzip/br/deflate)
+// aunque no se anuncie accept-encoding. Sin descomprimir, el body queda como
+// binario y el scraper no encuentra nada  en la página.
+function decodeBody(buffer, encoding) {
+  if (!encoding) return buffer;
+  try {
+    switch (encoding.toLowerCase()) {
+      case 'gzip':
+      case 'x-gzip':
+        return zlib.gunzipSync(buffer);
+      case 'deflate':
+        try {
+          return zlib.inflateSync(buffer);
+        } catch {
+          return zlib.inflateRawSync(buffer);
+        }
+      case 'br':
+        return zlib.brotliDecompressSync(buffer);
+      case 'zstd':
+        return zlib.zstdDecompressSync(buffer);
+      default:
+        return buffer;
+    }
+  } catch {
+    // Si el servidor mandó un encoding mal declarado, se deja el body crudo.
+    return buffer;
+  }
+}
+
 function requestPage(url, maxBytes = 1024 * 1024, options = {}) {
   return new Promise((resolve, reject) => {
     const client = url.protocol === 'https:' ? https : http;
@@ -125,16 +155,18 @@ function requestPage(url, maxBytes = 1024 * 1024, options = {}) {
             request.destroy(new Error('La respuesta supera el límite de tamaño permitido.'));
           else chunks.push(chunk);
         });
-        response.on('end', () =>
+        response.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          const body = decodeBody(buffer, response.headers['content-encoding']);
           resolve({
             status: response.statusCode || 0,
             location: response.headers.location,
             contentType,
-            body: Buffer.concat(chunks).toString('utf8'),
+            body: body.toString('utf8'),
             headers: response.headers,
             cookies: extractCookies(response),
-          }),
-        );
+          });
+        });
       },
     );
     request.setTimeout(12000, () =>

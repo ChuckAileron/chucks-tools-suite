@@ -27,6 +27,13 @@ contextBridge.exposeInMainWorld('tools', {
   deleteCollection: (id) => ipcRenderer.invoke('collections:delete', id),
   reorderCollections: (ids) => ipcRenderer.invoke('collections:reorder', ids),
   getCollectionColumnTypes: () => ipcRenderer.invoke('collections:column-types'),
+  getWikiPages: (query = '') => ipcRenderer.invoke('wiki:list', query),
+  getWikiCategories: () => ipcRenderer.invoke('wiki:categories'),
+  getWikiStats: () => ipcRenderer.invoke('wiki:stats'),
+  getWikiPage: (id) => ipcRenderer.invoke('wiki:get', id),
+  createWikiPage: (data) => ipcRenderer.invoke('wiki:create', data),
+  updateWikiPage: (id, patch) => ipcRenderer.invoke('wiki:update', { id, patch }),
+  deleteWikiPage: (id) => ipcRenderer.invoke('wiki:delete', id),
   getCollectionItems: (collectionId, q = '') =>
     ipcRenderer.invoke('collection-items:list', { collectionId, q }),
   createCollectionItem: (data) => ipcRenderer.invoke('collection-items:create', data),
@@ -84,6 +91,10 @@ contextBridge.exposeInMainWorld('tools', {
     ipcRenderer.on('downloads:state', listener);
     return () => ipcRenderer.removeListener('downloads:state', listener);
   },
+  getRules: () => ipcRenderer.invoke('rules:list'),
+  saveRule: (rule) => ipcRenderer.invoke('rules:save', rule),
+  deleteRule: (id) => ipcRenderer.invoke('rules:delete', id),
+  previewRule: (name, operations) => ipcRenderer.invoke('rules:preview', { name, operations }),
   onClipboardLinks: (callback) => {
     const listener = (_event, text) => callback(text);
     ipcRenderer.on('downloads:clipboard', listener);

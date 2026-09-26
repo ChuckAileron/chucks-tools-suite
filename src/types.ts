@@ -28,6 +28,7 @@ export type DownloadCandidate = {
   videoUrl?: string;
   videoFormat?: string;
   providerData?: DownloadProviderData;
+  ruleId?: string;
 };
 export type DownloadProviderData = {
   terabox?: {
@@ -38,6 +39,22 @@ export type DownloadProviderData = {
     fsId: string;
   };
 };
+export type FileRulePosition = 'first' | 'last';
+export type FileRuleOperation = {
+  type: string;
+  search?: string;
+  replace?: string;
+  text?: string;
+  extension?: string;
+  op?: 'add' | 'subtract' | 'multiply' | 'divide';
+  value?: number;
+  amount?: number;
+  unit?: 'days' | 'months' | 'years';
+  decimals?: number;
+  position?: FileRulePosition;
+  target?: string;
+};
+export type FileRule = { id: string; name: string; operations: FileRuleOperation[] };
 export type VideoQualityOption = { label: string; videoFormat: string };
 export type DownloadTask = {
   id: string;
@@ -62,6 +79,7 @@ export type DownloadTask = {
   videoUrl?: string;
   videoFormat?: string;
   providerData?: DownloadProviderData;
+  ruleId?: string;
 };
 export type DownloadSettings = {
   defaultDirectory: string;
@@ -426,10 +444,30 @@ export type WishlistItem = {
   name: string;
   manufacturer: string;
   year: number | null;
+  imageUrl: string | null;
   prices: WishlistPrice[];
   createdAt: string;
   updatedAt: string;
 };
+export type WikiPage = {
+  id: number;
+  title: string;
+  slug: string;
+  category: string;
+  icon: string;
+  summary: string;
+  content: string;
+  tag: string;
+  pinned: boolean;
+  author: string;
+  banner: string;
+  bannerPosition: string;
+  parentId: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type WikiCategory = { name: string; total: number; icon: string };
+export type WikiStats = { total: number; contributors: number; lastUpdated: string | null };
 export type HddCategory = 'folder' | 'video' | 'image' | 'audio' | 'document' | 'other';
 export type HddDrive = {
   id: number;
@@ -539,6 +577,13 @@ declare global {
       deleteCollection(id: number): Promise<boolean>;
       reorderCollections(ids: number[]): Promise<Collection[]>;
       getCollectionColumnTypes(): Promise<CollectionColumnType[]>;
+      getWikiPages(query?: string): Promise<WikiPage[]>;
+      getWikiCategories(): Promise<WikiCategory[]>;
+      getWikiStats(): Promise<WikiStats>;
+      getWikiPage(id: number): Promise<WikiPage | null>;
+      createWikiPage(data: Partial<WikiPage>): Promise<WikiPage>;
+      updateWikiPage(id: number, patch: Partial<WikiPage>): Promise<WikiPage>;
+      deleteWikiPage(id: number): Promise<boolean>;
       getCollectionItems(collectionId: number, q?: string): Promise<CollectionItem[]>;
       createCollectionItem(data: {
         collectionId: number;
@@ -623,6 +668,7 @@ declare global {
         name: string;
         manufacturer: string;
         year: number | null;
+        imageUrl?: string | null;
       }): Promise<WishlistItem>;
       updateWishlistItem(id: number, patch: Partial<WishlistItem>): Promise<WishlistItem>;
       deleteWishlistItem(id: number): Promise<boolean>;
@@ -639,6 +685,10 @@ declare global {
       }>;
       onDownloadsState(callback: (state: DownloadsState) => void): () => void;
       onClipboardLinks(callback: (text: string) => void): () => void;
+      getRules(): Promise<FileRule[]>;
+      saveRule(rule: { id?: string; name: string; operations: FileRuleOperation[] }): Promise<FileRule>;
+      deleteRule(id: string): Promise<boolean>;
+      previewRule(name: string, operations: FileRuleOperation[]): Promise<string>;
       list(directories: string[]): Promise<{ folder: string; name: string }[]>;
       listFolders(directories: string[]): Promise<{ folder: string; name: string }[]>;
       rename(data: { folder: string; oldName: string; newName: string }): Promise<boolean>;
