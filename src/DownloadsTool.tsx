@@ -233,8 +233,10 @@ export default function DownloadsTool({
         ) : tab === 'collector' ? (
           <CollectorTab
             candidates={candidates}
+            defaultDirectory={state.settings.defaultDirectory}
             text={text}
             message={message}
+            setMessage={setMessage}
             analyzing={analyzing}
             setText={setText}
             analyze={analyze}
@@ -927,8 +929,10 @@ function QualitySelect({
 
 type CollectorProps = {
   candidates: DownloadCandidate[];
+  defaultDirectory: string;
   text: string;
   message: string;
+  setMessage: (value: string) => void;
   analyzing: boolean;
   setText: (value: string) => void;
   analyze: () => void;
@@ -946,8 +950,10 @@ type CollectorProps = {
 };
 function CollectorTab({
   candidates,
+  defaultDirectory,
   text,
   message,
+  setMessage,
   analyzing,
   setText,
   analyze,
@@ -981,6 +987,31 @@ function CollectorTab({
       candidates.forEach(
         (item) => item.selected && update(item.id, { collection: collection.trim() }),
       );
+  };
+  const createDownloadFolder = async () => {
+    if (!defaultDirectory) return;
+    const name = await ask({
+      title:       'Crear carpeta de descarga',
+      description: `Se creará dentro de ${defaultDirectory} y se asignará a los enlaces seleccionados.`,
+      placeholder: 'Nombre de la carpeta',
+    });
+    if (name === null) return;
+    if (!name.trim()) {
+      setMessage('Ingresa un nombre de carpeta.');
+      return;
+    }
+    try {
+      const result   = await window.tools.createDownloadFolder(name.trim());
+      const selected = candidates.filter((item) => item.selected);
+      selected.forEach((item) => update(item.id, { destination: result.path }));
+      setMessage(
+        `${result.created ? 'Carpeta creada' : 'Carpeta existente'}: ${result.path}${
+          selected.length ? ` · asignada a ${selected.length} enlace${selected.length === 1 ? '' : 's'}` : ''
+        }`,
+      );
+    } catch (error) {
+      setMessage(String(error));
+    }
   };
   const online       = candidates.filter((item) => item.online);
   const allSelected  = online.length > 0 && online.every((item) => item.selected);
@@ -1019,6 +1050,14 @@ function CollectorTab({
           </span>
         )}
         <div>
+          <button
+            type="button"
+            disabled={!defaultDirectory}
+            title={defaultDirectory ? `Crear una carpeta dentro de ${defaultDirectory}` : 'Configura primero la carpeta predeterminada de descargas'}
+            onClick={() => void createDownloadFolder()}
+          >
+            + Crear carpeta
+          </button>
           <button disabled={!candidates.length} onClick={() => chooseFolder()}>
             Destino para seleccionados
           </button>

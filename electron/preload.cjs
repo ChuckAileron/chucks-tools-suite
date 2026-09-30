@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('tools', {
   controlDownloads: (ids, action) => ipcRenderer.invoke('downloads:control-many', { ids, action }),
   clearCompletedDownloads: () => ipcRenderer.invoke('downloads:clear-completed'),
   setDownloadSettings: (settings) => ipcRenderer.invoke('downloads:settings', settings),
+  createDownloadFolder: (name) => ipcRenderer.invoke('downloads:create-folder', name),
   retryExtraction: (id, password) =>
     ipcRenderer.invoke('downloads:retry-extraction', { id, password }),
   selectDownloadDirectory: () => ipcRenderer.invoke('downloads:select-directory'),
@@ -27,8 +28,36 @@ contextBridge.exposeInMainWorld('tools', {
   deleteCollection: (id) => ipcRenderer.invoke('collections:delete', id),
   reorderCollections: (ids) => ipcRenderer.invoke('collections:reorder', ids),
   getCollectionColumnTypes: () => ipcRenderer.invoke('collections:column-types'),
+  cuentasList: () => ipcRenderer.invoke('cuentas:list'),
+  cuentasCreate: (data) => ipcRenderer.invoke('cuentas:create', data),
+  cuentasUpdate: (id, patch) => ipcRenderer.invoke('cuentas:update', { id, patch }),
+  cuentasDelete: (id) => ipcRenderer.invoke('cuentas:delete', id),
+  cuentasReorder: (ids) => ipcRenderer.invoke('cuentas:reorder', ids),
+  cuentasColumnTypes: () => ipcRenderer.invoke('cuentas:column-types'),
+  cuentasRegisters: (accountId, q = '') =>
+    ipcRenderer.invoke('cuentas:registers', { accountId, q }),
+  cuentasRegisterCreate: (data) => ipcRenderer.invoke('cuentas:register-create', data),
+  cuentasRegisterUpdate: (id, patch) =>
+    ipcRenderer.invoke('cuentas:register-update', { id, patch }),
+  cuentasRegisterDelete: (id) => ipcRenderer.invoke('cuentas:register-delete', id),
+  cuentasYears: (accountId) => ipcRenderer.invoke('cuentas:years', accountId),
+  cuentasMonthly: (accountId, year) =>
+    ipcRenderer.invoke('cuentas:monthly', { accountId, year }),
+  calendarioEvents: (start, end) =>
+    ipcRenderer.invoke('calendario:list', { start, end }),
+  calendarioCreate: (data) => ipcRenderer.invoke('calendario:create', data),
+  calendarioUpdate: (id, patch) =>
+    ipcRenderer.invoke('calendario:update', { id, patch }),
+  calendarioDelete: (id) => ipcRenderer.invoke('calendario:delete', id),
+  calendarioColors: () => ipcRenderer.invoke('calendario:colors'),
+  calendarioReadImage: (filePath) =>
+    ipcRenderer.invoke('calendario:read-image', filePath),
+  calendarioUpdateHolidays: (year) =>
+    ipcRenderer.invoke('calendario:update-holidays', year),
   getWikiPages: (query = '') => ipcRenderer.invoke('wiki:list', query),
   getWikiCategories: () => ipcRenderer.invoke('wiki:categories'),
+  setWikiCategoryBanner: (category, banner) =>
+    ipcRenderer.invoke('wiki:set-category-banner', { category, banner }),
   getWikiStats: () => ipcRenderer.invoke('wiki:stats'),
   getWikiPage: (id) => ipcRenderer.invoke('wiki:get', id),
   createWikiPage: (data) => ipcRenderer.invoke('wiki:create', data),
@@ -50,6 +79,9 @@ contextBridge.exposeInMainWorld('tools', {
   hijitosReadBanner: (filePath) => ipcRenderer.invoke('hijitos:read-banner', filePath),
   imagesSelect: () => ipcRenderer.invoke('images:select'),
   imagesConvert: (format, files) => ipcRenderer.invoke('images:convert', { format, files }),
+  getImagesState: () => ipcRenderer.invoke('images:state'),
+  startImageConversion: (format, files) => ipcRenderer.invoke('images:start', { format, files }),
+  cancelImageConversion: () => ipcRenderer.invoke('images:cancel'),
   getCollectionItems: (collectionId, q = '') =>
     ipcRenderer.invoke('collection-items:list', { collectionId, q }),
   createCollectionItem: (data) => ipcRenderer.invoke('collection-items:create', data),
@@ -140,6 +172,25 @@ contextBridge.exposeInMainWorld('tools', {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('video:state-changed', listener);
     return () => ipcRenderer.removeListener('video:state-changed', listener);
+  },
+  onImagesState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('images:state-changed', listener);
+    return () => ipcRenderer.removeListener('images:state-changed', listener);
+  },
+  getBotsState: () => ipcRenderer.invoke('bots:state'),
+  botsRecipes: () => ipcRenderer.invoke('bots:recipes'),
+  botsData: (preset) => ipcRenderer.invoke('bots:data', { preset }),
+  botsRun: (recipe, config) => ipcRenderer.invoke('bots:run', { recipe, config }),
+  botsCancel: () => ipcRenderer.invoke('bots:cancel'),
+  botsSessions: () => ipcRenderer.invoke('bots:sessions:list'),
+  botsSessionSave: (data) => ipcRenderer.invoke('bots:sessions:save', data),
+  botsSessionDelete: (id) => ipcRenderer.invoke('bots:sessions:delete', id),
+  botsSessionRun: (id) => ipcRenderer.invoke('bots:sessions:run', { id }),
+  onBotsState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('bots:state-changed', listener);
+    return () => ipcRenderer.removeListener('bots:state-changed', listener);
   },
   selectNormalizeFolders: () => ipcRenderer.invoke('normalizer:select-folders'),
   scanNormalizeFiles: (data) => ipcRenderer.invoke('normalizer:scan', data),

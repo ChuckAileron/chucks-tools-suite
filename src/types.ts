@@ -1,3 +1,5 @@
+import type { AnalogBroadcastBlock } from './analogBroadcastBlocks';
+
 export type FileType = 'video' | 'audio' | 'image' | 'document' | 'archive';
 export type ScannedFile = {
   path: string;
@@ -297,6 +299,53 @@ export type CollectionItem = {
   createdAt: string;
   updatedAt: string;
 };
+export type CuentaColumnType = 'string' | 'number' | 'boolean' | 'date' | 'url' | 'tags';
+export type CuentaColumn = {
+  name: string;
+  label: string;
+  type: CuentaColumnType;
+  required: boolean;
+};
+export type Cuenta = {
+  id: number;
+  name: string;
+  description: string;
+  columns: CuentaColumn[];
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+export type CuentaRegister = {
+  id: number;
+  accountId: number;
+  name: string;
+  date: string;
+  amount: number;
+  values: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+export type MonthlyTotal = {
+  month: number;
+  total: number;
+  count: number;
+};
+export type CalendarioEvent = {
+  id: number;
+  title: string;
+  label: string;
+  color: string;
+  startDate: string;
+  endDate: string;
+  allDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  description: string;
+  images: string[];
+  isHoliday: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 export type LaunchBoxMetadata = {
   boxartUrl: string;
   releaseDate: string;
@@ -388,6 +437,15 @@ export type AnalogShow = {
   airYears?: number[];
   airUntilToDate?: boolean;
   episodeAiringMode?: 'daily-repeat' | 'once-per-day';
+  /**
+   * Restringe la emisión del programa a un único bloque horario del día.
+   * Límites canónicos (ver `analogBroadcastBlocks.ts`):
+   * - 'morning'   06:00 (inclusive) .. 14:00 (exclusive)
+   * - 'afternoon' 14:00 (inclusive) .. 22:00 (exclusive)
+   * - 'night'     22:00 (inclusive) .. 06:00 (exclusive)
+   * - 'all'       sin restricción (valor por defecto)
+   */
+  broadcastBlock?: AnalogBroadcastBlock;
 };
 export type AnalogScheduleEntry = {
   id: string;
@@ -466,7 +524,7 @@ export type WikiPage = {
   createdAt: string;
   updatedAt: string;
 };
-export type WikiCategory = { name: string; total: number; icon: string };
+export type WikiCategory = { name: string; total: number; icon: string; banner: string };
 export type WikiStats = { total: number; contributors: number; lastUpdated: string | null };
 export type HijitoPriority = 'bajo' | 'medio' | 'alto';
 export type HijitoSubtask = {
@@ -514,6 +572,15 @@ export type ImageConvertResult = {
   error?: string;
 };
 export type ImageConvertOutcome = { format: ImageFormat; results: ImageConvertResult[] };
+export type ImageState = {
+  running: boolean;
+  format: ImageFormat;
+  files: string[];
+  globalProgress: number;
+  fileProgress: number;
+  activeFile: string;
+  results: ImageConvertResult[];
+};
 export type HddCategory = 'folder' | 'video' | 'image' | 'audio' | 'document' | 'other';
 export type HddDrive = {
   id: number;
@@ -563,6 +630,58 @@ export type HddScanState = {
 };
 export type MediaOrigin = 'hdd' | null;
 export type NowPlaying = { drive: HddDrive; entry: HddEntry };
+export type BotState = {
+  running: boolean;
+  recipe: string;
+  stepIndex: number;
+  stepTotal: number;
+  message: string;
+  log: { text: string; tone?: string }[];
+};
+export type BotRecipe = { id: string; title: string; blurb: string; cacheLabel: string };
+export type SteamDeal = {
+  id: number;
+  title: string;
+  price: string;
+  original: string;
+  discount: string;
+  tag: string;
+  currency: string;
+  priceFinal: number | null;
+  priceInitial: number | null;
+  url: string;
+  fetched: string;
+};
+export type AmazonPrice = {
+  id: number;
+  url: string;
+  title: string;
+  price: number | null;
+  currency: string;
+  image: string;
+  fetched: string;
+};
+export type DownloadLink = {
+  id: number;
+  url: string;
+  sourceTitle: string;
+  sourceUrl: string;
+  fetched: string;
+};
+export type BotSession = {
+  id: number;
+  portal: string;
+  url: string;
+  username: string;
+  password: string;
+  userField: string;
+  passField: string;
+  submitSelector: string;
+  successSelector: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BotRunResult = { fromCache: boolean; data: unknown };
 declare global {
   interface Window {
     tools: {
@@ -607,6 +726,7 @@ declare global {
       controlDownloads(ids: string[], action: string): Promise<boolean>;
       clearCompletedDownloads(): Promise<void>;
       setDownloadSettings(settings: Partial<DownloadSettings>): Promise<void>;
+      createDownloadFolder(name: string): Promise<{ path: string; created: boolean }>;
       retryExtraction(id: string, password: string): Promise<boolean>;
       selectDownloadDirectory(): Promise<string | null>;
       showDownloadedFile(filePath: string): Promise<boolean>;
@@ -623,8 +743,55 @@ declare global {
       deleteCollection(id: number): Promise<boolean>;
       reorderCollections(ids: number[]): Promise<Collection[]>;
       getCollectionColumnTypes(): Promise<CollectionColumnType[]>;
+      cuentasList(): Promise<Cuenta[]>;
+      cuentasCreate(data: {
+        name: string;
+        description: string;
+        columns: CuentaColumn[];
+      }): Promise<Cuenta>;
+      cuentasUpdate(id: number, patch: Partial<Cuenta>): Promise<Cuenta>;
+      cuentasDelete(id: number): Promise<boolean>;
+      cuentasReorder(ids: number[]): Promise<Cuenta[]>;
+      cuentasColumnTypes(): Promise<CuentaColumnType[]>;
+      cuentasRegisters(accountId: number, q?: string): Promise<CuentaRegister[]>;
+      cuentasRegisterCreate(data: {
+        accountId: number;
+        name: string;
+        date: string;
+        amount: number;
+        values: Record<string, unknown>;
+      }): Promise<CuentaRegister>;
+      cuentasRegisterUpdate(
+        id: number,
+        patch: Partial<CuentaRegister>,
+      ): Promise<CuentaRegister>;
+      cuentasRegisterDelete(id: number): Promise<boolean>;
+      cuentasYears(accountId: number): Promise<number[]>;
+      cuentasMonthly(accountId: number, year: number): Promise<MonthlyTotal[]>;
+      calendarioEvents(start: string, end: string): Promise<CalendarioEvent[]>;
+      calendarioCreate(data: {
+        title: string;
+        label: string;
+        color: string;
+        startDate: string;
+        endDate: string;
+        allDay: boolean;
+        startTime: string | null;
+        endTime: string | null;
+        description: string;
+        images: string[];
+      }): Promise<CalendarioEvent>;
+      calendarioUpdate(
+        id: number,
+        patch: Partial<CalendarioEvent>,
+      ): Promise<CalendarioEvent>;
+      calendarioDelete(id: number): Promise<boolean>;
+      calendarioColors(): Promise<string[]>;
+      calendarioReadImage(filePath: string): Promise<string | null>;
+      calendarioUpdateHolidays(year: number): Promise<{ year: number; total: number }>;
       getWikiPages(query?: string): Promise<WikiPage[]>;
       getWikiCategories(): Promise<WikiCategory[]>;
+      setWikiCategoryBanner(category: string, banner: string): Promise<string>;
       getWikiStats(): Promise<WikiStats>;
       getWikiPage(id: number): Promise<WikiPage | null>;
       createWikiPage(data: Partial<WikiPage>): Promise<WikiPage>;
@@ -655,6 +822,20 @@ declare global {
       hijitosReadBanner(filePath: string): Promise<string | null>;
       imagesSelect(): Promise<string[]>;
       imagesConvert(format: ImageFormat, files: string[]): Promise<ImageConvertOutcome>;
+      getImagesState(): Promise<ImageState>;
+      startImageConversion(format: ImageFormat, files: string[]): Promise<void>;
+      cancelImageConversion(): Promise<boolean>;
+      onImagesState(callback: (state: ImageState) => void): () => void;
+      getBotsState(): Promise<BotState>;
+      botsRecipes(): Promise<BotRecipe[]>;
+      botsData(preset: string): Promise<SteamDeal[] | AmazonPrice[] | DownloadLink[]>;
+      botsRun(recipe: string, config?: Record<string, unknown>): Promise<BotRunResult>;
+      botsCancel(): Promise<boolean>;
+      botsSessions(): Promise<BotSession[]>;
+      botsSessionSave(data: Record<string, unknown>): Promise<BotSession>;
+      botsSessionDelete(id: number): Promise<boolean>;
+      botsSessionRun(id: number): Promise<{ authed: { ok: boolean; title?: string; url?: string } }>;
+      onBotsState(callback: (state: BotState) => void): () => void;
       getCollectionItems(collectionId: number, q?: string): Promise<CollectionItem[]>;
       createCollectionItem(data: {
         collectionId: number;

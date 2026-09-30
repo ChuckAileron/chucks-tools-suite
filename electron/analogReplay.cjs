@@ -5,6 +5,13 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const {
+  getBroadcastBlockAt,
+  getBroadcastBlockEnd,
+  getRemainingBlockSeconds,
+  isBroadcastBlockAllowed,
+  normalizeBroadcastBlock,
+} = require('./analogBroadcastBlocks.cjs');
 
 const DB_FILE = 'analog-replay-tv.sqlite';
 const MONTH_NAMES = [
@@ -431,6 +438,7 @@ function normalizeShow(data, id) {
       : [],
     airUntilToDate: !!data.airUntilToDate,
     episodeAiringMode: data.episodeAiringMode === 'once-per-day' ? 'once-per-day' : 'daily-repeat',
+    broadcastBlock: normalizeBroadcastBlock(data.broadcastBlock),
   };
 }
 
@@ -698,6 +706,7 @@ function buildChannelYearEntries(channel, shows, year) {
       episodes: flattenShowEpisodes(show),
       pointer: 0,
       mode: show.episodeAiringMode === 'once-per-day' ? 'once-per-day' : 'daily-repeat',
+      block: normalizeBroadcastBlock(show.broadcastBlock),
     }))
     .filter((state) => state.episodes.length > 0);
   if (showStates.length === 0) return [];
@@ -727,9 +736,43 @@ function buildChannelYearEntries(channel, shows, year) {
       cursor = dayEnd;
       continue;
     }
-    const state = queue.shift();
+    // Bloque horario vigente para el cursor actual (06:00 / 14:00 / 22:00).
+    // Segundos que quedan hasta el fin de ese bloque: un show restringido solo
+    // puede emitirse si su episodio COMPLETO cabe dentro.
+    const remainingInBlock = getRemainingBlockSeconds(cursor);
+
+    // Buscar el primer show de la cola que sea elegible en el bloque actual y
+    // que entre completo en lo que resta del bloque, preservando el orden
+    // round-robin entre los que sí son elegibles.
+    let selectedIndex = -1;
+    let occupiedSlots = 0;
+    for (let i = 0; i < queue.length; i += 1) {
+      const candidate = queue[i];
+      if (!isBroadcastBlockAllowed(candidate.block, cursor)) continue;
+      const candidateEpisode = candidate.episodes[candidate.pointer % candidate.episodes.length];
+      const candidateSlots = Math.max(1, Math.ceil(candidateEpisode.durationSeconds / SLOT_SECONDS));
+      if (candidateSlots * SLOT_SECONDS > remainingInBlock) continue;
+      selectedIndex = i;
+      occupiedSlots = candidateSlots;
+      break;
+    }
+
+    if (selectedIndex === -1) {
+      // Ningún show de la cola es elegible en este bloque, o ninguno cabe
+      // completo: rellenar hasta el fin del bloque con el logo de identificación
+      // de estación, para que el siguiente bloque se evalúe con la cola intacta.
+      const blockEnd = getBroadcastBlockEnd(cursor);
+      const fillerEnd =
+        blockEnd.getTime() > cursor.getTime()
+          ? blockEnd
+          : new Date(cursor.getTime() + SLOT_SECONDS * 1000);
+      entries.push(buildFillerEntry(channelIdentifier, channel.name, cursor, fillerEnd));
+      cursor = fillerEnd;
+      continue;
+    }
+
+    const [state] = queue.splice(selectedIndex, 1);
     const flatEpisode = state.episodes[state.pointer % state.episodes.length];
-    const occupiedSlots = Math.max(1, Math.ceil(flatEpisode.durationSeconds / SLOT_SECONDS));
     const totalSlotSeconds = occupiedSlots * SLOT_SECONDS;
     const showStart = new Date(cursor);
     const showEnd = new Date(cursor.getTime() + flatEpisode.durationSeconds * 1000);
@@ -1011,4 +1054,10 @@ module.exports = {
   flattenShowEpisodes,
   isShowAssignedToChannel,
   isShowEligibleForYear,
+  // Contrato de bloques de emisión por horario (ver ./analogBroadcastBlocks.cjs).
+  normalizeBroadcastBlock,
+  isBroadcastBlockAllowed,
+  getBroadcastBlockAt,
+  getBroadcastBlockEnd,
+  getRemainingBlockSeconds,
 };

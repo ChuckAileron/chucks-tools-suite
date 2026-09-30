@@ -17,6 +17,11 @@ const { validatePublicUrl } = require('./urlResolver.cjs');
 const { DownloadManager } = require('./downloadManager.cjs');
 const { RuleManager, applyRule } = require('./rules.cjs');
 const { CollectionManager, COLUMN_TYPES } = require('./collectionManager.cjs');
+const {
+  CuentasManager,
+  COLUMN_TYPES: CUENTAS_COLUMN_TYPES,
+} = require('./cuentasManager.cjs');
+const { CalendarioManager, EVENT_COLORS } = require('./calendarioManager.cjs');
 const { WikiManager } = require('./wikiManager.cjs');
 const { HijitosManager } = require('./hijitosManager.cjs');
 const { scrapeProduct } = require('./priceScraper.cjs');
@@ -30,6 +35,7 @@ const binderTrack = require('./binderTrack.cjs');
 const launchboxMetadata = require('./launchboxMetadata.cjs');
 const chuckbot = require('./chuckbot.cjs');
 const imageConverter = require('./imageConverter.cjs');
+const { createBots } = require('./bots.cjs');
 // Esquema privilegiado usado para transmitir video/audio/imágenes desde un
 // HDD catalogado directamente al reproductor, con soporte de rango (Range)
 // para permitir búsqueda (seek). Debe registrarse antes de que la app esté
@@ -43,8 +49,11 @@ protocol.registerSchemesAsPrivileged([
 let downloadManager;
 let rulesManager;
 let collectionManager;
+let cuentasManager;
+let calendarioManager;
 let wikiManager;
 let hijitosManager;
+let bots;
 let hddManager;
 let hddThumbnailsDir;
 let binderManager;
@@ -78,6 +87,32 @@ function looksLikeDownloadText(text) {
   );
 }
 const createdDestinationFolders = new Set();
+async function createChildDirectory(source, name, trackForUndo = false) {
+  if (!source) throw new Error('Selecciona primero una carpeta de origen.');
+  if (typeof name !== 'string') throw new Error('Ingresa un nombre de carpeta válido.');
+  const normalized = name.trim();
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === '..' ||
+    path.basename(normalized) !== normalized ||
+    /[<>:"/\\|?*]/.test(normalized) ||
+    /[. ]$/.test(normalized) ||
+    /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(normalized)
+  )
+    throw new Error('Ingresa un nombre de carpeta válido.');
+
+  const destination = path.join(path.resolve(source), normalized);
+  let created = false;
+  try {
+    await fs.access(destination);
+  } catch {
+    created = true;
+  }
+  await fs.mkdir(destination, { recursive: true });
+  if (created && trackForUndo) createdDestinationFolders.add(destination);
+  return { path: destination, created };
+}
 // Concurrencia de conversión de video: la transcodificación con x264/x265 es
 // CPU-bound y ya aprovecha todos los hilos por proceso, así que el paralelismo
 // solo aporta cuando sobran núcleos. Se recomienda ~1 proceso por cada 4
@@ -370,6 +405,62 @@ function emitTrimProgress(data) {
     window.webContents.send('trim:state-changed', trimState);
   }
 }
+// Estado de la conversión de imágenes. Vive en el proceso principal para que
+// las conversiones sigan corriendo aunque el usuario navegue a otra sección
+// (igual que la conversión de video a SD).
+let imageCancelled = false;
+let imageState = {
+  running: false,
+  format: 'webp',
+  files: [],
+  globalProgress: 0,
+  fileProgress: 0,
+  activeFile: 'Sin procesos activos',
+  results: [],
+};
+function emitImageProgress(data) {
+  if (data.type === 'file-start') {
+    imageState = {
+      ...imageState,
+      running: true,
+      fileProgress: 0,
+      activeFile: data.file || 'Archivo',
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+    };
+  } else if (data.type === 'file-done') {
+    imageState = {
+      ...imageState,
+      fileProgress: 100,
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      results: [
+        ...imageState.results,
+        { input: data.file, output: data.output, ok: true },
+      ],
+    };
+  } else if (data.type === 'file-error') {
+    imageState = {
+      ...imageState,
+      fileProgress: 100,
+      globalProgress: data.total ? Math.floor(((data.current || 0) / data.total) * 100) : 0,
+      results: [
+        ...imageState.results,
+        { input: data.file, output: null, ok: false, error: data.message },
+      ],
+    };
+  } else if (data.type === 'all-done' || data.type === 'cancelled') {
+    imageState = {
+      ...imageState,
+      running: false,
+      fileProgress: 0,
+      activeFile: data.type === 'cancelled' ? 'Conversión cancelada' : 'Conversión finalizada',
+      globalProgress: data.type === 'all-done' ? 100 : imageState.globalProgress,
+    };
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('images:progress', data);
+    window.webContents.send('images:state-changed', imageState);
+  }
+}
 const TYPES = {
   video: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.m4v', '.flv'],
   audio: ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma', '.opus'],
@@ -654,6 +745,14 @@ app.whenReady().then(async () => {
     );
     wikiManager = new WikiManager(path.join(app.getPath('userData'), 'wiki.sqlite'));
     hijitosManager = new HijitosManager(path.join(app.getPath('userData'), 'hijitos.sqlite'));
+    cuentasManager = new CuentasManager(path.join(app.getPath('userData'), 'cuentas.sqlite'));
+    calendarioManager = new CalendarioManager(path.join(app.getPath('userData'), 'calendario.sqlite'));
+  bots = createBots(path.join(app.getPath('userData'), 'bots.sqlite'), (data) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send('bots:progress', { type: 'state' });
+      window.webContents.send('bots:state-changed', data);
+    }
+  });
   hddThumbnailsDir = path.join(app.getPath('userData'), 'hdd-thumbnails');
   hddManager = new hddInventory.HddInventoryManager(
     path.join(app.getPath('userData'), 'hdd-inventory.sqlite'),
@@ -695,30 +794,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('mover:scan', (_e, data) => scan(data));
   ipcMain.handle('mover:move', (_e, data) => move(data));
   ipcMain.handle('mover:undo', (_e, data) => undoMove(data));
-  ipcMain.handle('directory:create-child', async (_event, { source, name }) => {
-    if (!source) throw new Error('Selecciona primero una carpeta de origen.');
-    const normalized = name.trim();
-    if (
-      !normalized ||
-      normalized === '.' ||
-      normalized === '..' ||
-      path.basename(normalized) !== normalized ||
-      /[<>:"/\\|?*]/.test(normalized) ||
-      /[. ]$/.test(normalized) ||
-      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(normalized)
-    )
-      throw new Error('Ingresa un nombre de carpeta válido.');
-    const destination = path.join(path.resolve(source), normalized);
-    let created = false;
-    try {
-      await fs.access(destination);
-    } catch {
-      created = true;
-    }
-    await fs.mkdir(destination, { recursive: true });
-    if (created) createdDestinationFolders.add(destination);
-    return { path: destination, created };
-  });
+  ipcMain.handle('directory:create-child', (_event, { source, name }) =>
+    createChildDirectory(source, name, true),
+  );
   ipcMain.handle('url:open', async (_event, value) => {
     const url = await validatePublicUrl(value);
     await shell.openExternal(url.href);
@@ -741,6 +819,14 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle('downloads:clear-completed', () => downloadManager.clearCompleted());
   ipcMain.handle('downloads:settings', (_event, settings) => downloadManager.setSettings(settings));
+  ipcMain.handle('downloads:create-folder', async (_event, name) => {
+    const root = downloadManager.settings.defaultDirectory;
+    if (!root) throw new Error('Configura primero la carpeta predeterminada de descargas.');
+    const rootStat = await fs.stat(root).catch(() => null);
+    if (!rootStat?.isDirectory())
+      throw new Error('La carpeta predeterminada de descargas no existe o no es válida.');
+    return createChildDirectory(root, name);
+  });
   ipcMain.handle('downloads:retry-extraction', (_event, { id, password }) =>
     downloadManager.retryExtraction(id, password),
   );
@@ -773,8 +859,97 @@ app.whenReady().then(async () => {
   ipcMain.handle('collections:delete', (_event, id) => collectionManager.deleteCollection(id));
   ipcMain.handle('collections:reorder', (_event, ids) => collectionManager.reorderCollections(ids));
   ipcMain.handle('collections:column-types', () => COLUMN_TYPES);
+  ipcMain.handle('cuentas:list', () => cuentasManager.listAccounts());
+  ipcMain.handle('cuentas:create', (_event, data) => cuentasManager.createAccount(data));
+  ipcMain.handle('cuentas:update', (_event, { id, patch }) =>
+    cuentasManager.updateAccount(id, patch),
+  );
+  ipcMain.handle('cuentas:delete', (_event, id) => cuentasManager.deleteAccount(id));
+  ipcMain.handle('cuentas:reorder', (_event, ids) => cuentasManager.reorderAccounts(ids));
+  ipcMain.handle('cuentas:column-types', () => CUENTAS_COLUMN_TYPES);
+  ipcMain.handle('cuentas:registers', (_event, { accountId, q }) =>
+    cuentasManager.listRegisters(accountId, q),
+  );
+  ipcMain.handle('cuentas:register-create', (_event, data) => cuentasManager.addRegister(data));
+  ipcMain.handle('cuentas:register-update', (_event, { id, patch }) =>
+    cuentasManager.updateRegister(id, patch),
+  );
+  ipcMain.handle('cuentas:register-delete', (_event, id) => cuentasManager.deleteRegister(id));
+  ipcMain.handle('cuentas:years', (_event, accountId) => cuentasManager.registeredYears(accountId));
+  ipcMain.handle('cuentas:monthly', (_event, { accountId, year }) =>
+    cuentasManager.monthlyTotals(accountId, year),
+  );
+  ipcMain.handle('calendario:list', (_event, { start, end }) =>
+    calendarioManager.eventsForRange(start, end),
+  );
+  ipcMain.handle('calendario:create', (_event, data) => calendarioManager.createEvent(data));
+  ipcMain.handle('calendario:update', (_event, { id, patch }) =>
+    calendarioManager.updateEvent(id, patch),
+  );
+  ipcMain.handle('calendario:delete', (_event, id) => calendarioManager.deleteEvent(id));
+  ipcMain.handle('calendario:colors', () => EVENT_COLORS);
+  ipcMain.handle('calendario:read-image', async (_event, filePath) => {
+    if (!filePath || typeof filePath !== 'string') return null;
+    try {
+      return await imageConverter.previewDataUrl(filePath);
+    } catch {
+      return null;
+    }
+  });
+  const FERIADOS_API_URL = 'https://api.roison.cl/feriados.json';
+
+ipcMain.handle('calendario:update-holidays', async (_event, year) => {
+    const target = Number(year);
+    if (!Number.isInteger(target)) throw new Error('El año solicitado es inválido.');
+    let response;
+    try {
+      response = await fetch(FERIADOS_API_URL, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      if (error.name === 'TimeoutError') {
+        throw new Error('La API de feriados tardó demasiado en responder.');
+      }
+      throw new Error('No fue posible contactar la API de feriados: ' + error.message);
+    }
+    if (!response.ok) {
+      throw new Error(
+        `La API de feriados respondió con ${response.status}: ${response.statusText}`,
+      );
+    }
+    const resultado = await response.json();
+    if (!Array.isArray(resultado.data)) {
+      throw new Error('La respuesta de la API de feriados no contiene un arreglo data.');
+    }
+    const feriados = resultado.data
+      .filter((feriado) => feriado.date?.startsWith(`${target}-`))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+      .map((feriado) => {
+        const detalles = [
+          'Feriado',
+          feriado.type ? `Tipo: ${feriado.type}` : null,
+          feriado.scope ? `Alcance: ${feriado.scope}` : null,
+          feriado.is_irrenunciable ? 'Irrenunciable' : null,
+        ]
+          .filter(Boolean)
+          .join('\n');
+        return {
+          title: String(feriado.title || 'Feriado'),
+          date: String(feriado.date || ''),
+          label: 'Feriado',
+          color: 'rojo',
+          description: detalles,
+        };
+      });
+    const total = calendarioManager.replaceHolidays(target, feriados);
+    return { year: target, total };
+  });
   ipcMain.handle('wiki:list', (_event, query) => wikiManager.listPages(query));
   ipcMain.handle('wiki:categories', () => wikiManager.categories());
+  ipcMain.handle('wiki:set-category-banner', (_event, { category, banner }) =>
+    wikiManager.setCategoryBanner(category, banner),
+  );
   ipcMain.handle('wiki:stats', () => wikiManager.stats());
   ipcMain.handle('wiki:get', (_event, id) => wikiManager.getPage(id));
   ipcMain.handle('wiki:create', (_event, data) => wikiManager.createPage(data));
@@ -817,6 +992,63 @@ app.whenReady().then(async () => {
     }
     return { format: selectedFormat, results };
   });
+  ipcMain.handle('images:state', () => imageState);
+  ipcMain.handle('images:start', async (_event, { format, files }) => {
+    if (imageState.running) throw new Error('Ya hay una conversión de imágenes en curso.');
+    const selectedFormat = String(format ?? '');
+    const validFiles     = Array.isArray(files) ? files.filter((file) => typeof file === 'string') : [];
+    if (!imageConverter.isSupportedOutput(selectedFormat)) {
+      throw new Error('El formato de salida no es soportado.');
+    }
+    if (!validFiles.length) throw new Error('Selecciona al menos una imagen para convertir.');
+    imageCancelled = false;
+    imageState = {
+      running: false,
+      format: selectedFormat,
+      files: validFiles,
+      globalProgress: 0,
+      fileProgress: 0,
+      activeFile: 'Sin procesos activos',
+      results: [],
+    };
+    const total = validFiles.length;
+    let completed = 0;
+    try {
+      for (const filePath of validFiles) {
+        if (imageCancelled) break;
+        emitImageProgress({ type: 'file-start', file: filePath, current: completed, total });
+        try {
+          const output = await imageConverter.convertFile(filePath, selectedFormat);
+          completed += 1;
+          emitImageProgress({ type: 'file-done', file: filePath, output, current: completed, total });
+        } catch (error) {
+          completed += 1;
+          emitImageProgress({
+            type: 'file-error',
+            file: filePath,
+            message: (error && error.message) || String(error),
+            current: completed,
+            total,
+          });
+        }
+      }
+    } finally {
+      emitImageProgress({ type: imageCancelled ? 'cancelled' : 'all-done' });
+    }
+  });
+  ipcMain.handle('images:cancel', () => {
+    imageCancelled = true;
+    return true;
+  });
+  ipcMain.handle('bots:state', () => bots.state);
+  ipcMain.handle('bots:recipes', () => bots.recipes());
+  ipcMain.handle('bots:data', (_event, { preset }) => bots.data(preset));
+  ipcMain.handle('bots:run', (_event, { recipe, config }) => bots.run(recipe, config));
+  ipcMain.handle('bots:cancel', () => bots.cancel());
+  ipcMain.handle('bots:sessions:list', () => bots.sessionsList());
+  ipcMain.handle('bots:sessions:save', (_event, data) => bots.sessionSave(data));
+  ipcMain.handle('bots:sessions:delete', (_event, id) => bots.sessionDelete(id));
+  ipcMain.handle('bots:sessions:run', (_event, { id }) => bots.sessionRun(id));
   ipcMain.handle('hijitos:update-task', (_event, { id, patch }) =>
     hijitosManager.updateTask(id, patch),
   );
@@ -2082,6 +2314,18 @@ app.on('before-quit', () => {
       hijitosManager.close();
       hijitosManager = null;
     }
+    if (cuentasManager) {
+      cuentasManager.close();
+      cuentasManager = null;
+    }
+    if (calendarioManager) {
+      calendarioManager.close();
+      calendarioManager = null;
+    }
+  if (bots) {
+    bots.close();
+    bots = null;
+  }
   if (hddManager) {
     hddManager.close();
     hddManager = null;

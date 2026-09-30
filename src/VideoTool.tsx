@@ -1,11 +1,63 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { VideoFolder, VideoState, VideoTrack } from './types';
 import { loadCollapsed, saveCollapsed } from './collapseState';
 
 type Codec = 'h264' | 'h265';
 type Selections = Record<string, { audio: number[]; subtitles: number[] }>;
+type GlobalTrack = {
+  index: number;
+  label: string;
+  present: number;
+  selected: number;
+  incompatible: boolean;
+};
 const MP4_SUBTITLE_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
-const extensionLabel      = (name: string) => {
+
+const collectGlobalTracks = (
+  folder: VideoFolder,
+  selections: Selections,
+  type: 'audio' | 'subtitles',
+): GlobalTrack[] => {
+  type Entry = GlobalTrack & { langs: Set<string>; codecs: Set<string>; titles: Set<string> };
+  const byIndex = new Map<number, Entry>();
+  for (const video of folder.videos) {
+    if (video.probeError) continue;
+    for (const track of video[type]) {
+      let entry = byIndex.get(track.index);
+      if (!entry) {
+        entry = {
+          index:        track.index,
+          label:        '',
+          present:      0,
+          selected:     0,
+          incompatible: false,
+          langs:        new Set(),
+          codecs:       new Set(),
+          titles:       new Set(),
+        };
+        byIndex.set(track.index, entry);
+      }
+      const incompatible = type === 'subtitles' && !MP4_SUBTITLE_CODECS.has(track.codec);
+      if (incompatible) entry.incompatible = true;
+      entry.present += 1;
+      if (
+        !incompatible &&
+        (selections[video.path]?.[type]?.includes(track.index) ?? false)
+      )
+        entry.selected += 1;
+      if (track.language) entry.langs.add(track.language);
+      if (track.codec) entry.codecs.add(track.codec);
+      if (track.title) entry.titles.add(track.title);
+    }
+  }
+  return [...byIndex.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, { langs, codecs, titles, ...meta }]) => ({
+      ...meta,
+      label: [...langs, ...codecs, ...titles].join(' · ') || 'sin etiquetas',
+    }));
+};
+const extensionLabel = (name: string) => {
   const index = name.lastIndexOf('.');
   return index > 0 && index < name.length - 1 ? name.slice(index + 1, index + 4).toUpperCase() : '';
 };
@@ -141,6 +193,28 @@ export default function VideoTool() {
       return { ...current, [videoPath]: { ...current[videoPath], [type]: [...selected] } };
     });
 
+  const toggleFolderTrack = (folder: VideoFolder, type: 'audio' | 'subtitles', index: number) =>
+    setSelections((current) => {
+      const next    = { ...current };
+      const targets = folder.videos.filter(
+        (video) =>
+          !video.probeError &&
+          video[type].some(
+            (track) =>
+              track.index === index &&
+              (type !== 'subtitles' || MP4_SUBTITLE_CODECS.has(track.codec)),
+          ),
+      );
+      const allOn   = targets.every((video) => next[video.path]?.[type]?.includes(index) ?? false);
+      for (const video of targets) {
+        const selected = new Set(next[video.path]?.[type] ?? []);
+        if (allOn) selected.delete(index);
+        else selected.add(index);
+        next[video.path] = { ...next[video.path], [type]: [...selected] };
+      }
+      return next;
+    });
+
   const selectTracks = (videoPath: string, type: 'audio' | 'subtitles', indices: number[]) =>
     setSelections((current) => ({
       ...current,
@@ -243,6 +317,7 @@ export default function VideoTool() {
                   onRemove={() => removeFolder(folder.folder)}
                   onToggle={toggleTrack}
                   onSelect={selectTracks}
+                  onToggleGlobal={toggleFolderTrack}
                 />
               ))}
             </section>
@@ -403,6 +478,7 @@ function FolderCard({
   onRemove,
   onToggle,
   onSelect,
+  onToggleGlobal,
 }: {
   folder: VideoFolder;
   selections: Selections;
@@ -413,8 +489,14 @@ function FolderCard({
   onRemove: () => void;
   onToggle: (path: string, type: 'audio' | 'subtitles', index: number) => void;
   onSelect: (path: string, type: 'audio' | 'subtitles', indices: number[]) => void;
+  onToggleGlobal: (folder: VideoFolder, type: 'audio' | 'subtitles', index: number) => void;
 }) {
-  const doneCount = folder.videos.filter((video) => video.processed).length;
+  const doneCount    = folder.videos.filter((video) => video.processed).length;
+  const audioGlobals = collectGlobalTracks(folder, selections, 'audio');
+  const subtGlobals  = collectGlobalTracks(folder, selections, 'subtitles');
+  const mixedCount   = [...audioGlobals, ...subtGlobals].filter(
+    (track) => track.selected > 0 && track.selected < track.present,
+  ).length;
   return (
     <article className={`${folder.processed ? 'processed' : ''} ${collapsed ? 'collapsed' : ''}`}>
       <header>
@@ -443,6 +525,36 @@ function FolderCard({
           {folder.processed ? ' · Completada' : ''}
         </em>
       </header>
+      {!collapsed && (audioGlobals.length > 0 || subtGlobals.length > 0) && (
+        <details className="folder-global-tracks" open>
+          <summary>
+            <i>▾</i>
+            <strong>Pistas globales de la carpeta</strong>
+            <span>
+              {audioGlobals.length} audio · {subtGlobals.length} subtítulos
+            </span>
+            {mixedCount > 0 && (
+              <em title="Algunos archivos tienen pistas elegidas distintas del resto">
+                {mixedCount} pista{mixedCount === 1 ? '' : 's'} mixta{mixedCount === 1 ? '' : 's'}
+              </em>
+            )}
+          </summary>
+          <div className="tracks global-tracks">
+            <GlobalTrackGroup
+              title="Audio"
+              tracks={audioGlobals}
+              disabled={controlsDisabled}
+              onToggle={(index) => onToggleGlobal(folder, 'audio', index)}
+            />
+            <GlobalTrackGroup
+              title="Subtítulos"
+              tracks={subtGlobals}
+              disabled={controlsDisabled}
+              onToggle={(index) => onToggleGlobal(folder, 'subtitles', index)}
+            />
+          </div>
+        </details>
+      )}
       {!collapsed &&
         folder.videos.map((video) => (
           <details key={video.path}>
@@ -550,6 +662,77 @@ function TrackGroup({
             {[track.language, track.codec, track.title].filter(Boolean).join(' · ')}
             {track.default ? ' (predeterminada)' : ''}
             {incompatible ? ' · no compatible con MP4' : ''}
+          </label>
+        );
+      })}
+    </section>
+  );
+}
+
+function TriCheckbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  );
+}
+
+function GlobalTrackGroup({
+  title,
+  tracks,
+  disabled,
+  onToggle,
+}: {
+  title: string;
+  tracks: GlobalTrack[];
+  disabled: boolean;
+  onToggle: (index: number) => void;
+}) {
+  if (!tracks.length) return null;
+  return (
+    <section>
+      <div className="tracks-header">
+        <strong>{title}</strong>
+        <span>{tracks.length} pista{tracks.length === 1 ? '' : 's'}</span>
+      </div>
+      {tracks.map((track) => {
+        const mixed = track.selected > 0 && track.selected < track.present;
+        const allOn = track.selected === track.present;
+        return (
+          <label
+            className={`${track.incompatible ? 'track-incompatible' : ''} ${mixed ? 'track-mixed' : ''}`}
+            key={`${title}-${track.index}`}
+            title={mixed ? 'No todos los archivos usan esta pista' : undefined}
+          >
+            <TriCheckbox
+              checked={allOn}
+              indeterminate={mixed}
+              disabled={disabled}
+              onChange={() => onToggle(track.index)}
+            />{' '}
+            Pista {track.index}: {track.label}
+            {track.incompatible ? ' · no compatible con MP4' : ''}
+            <small className="global-track-count">
+              {track.selected}/{track.present}
+            </small>
           </label>
         );
       })}

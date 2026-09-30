@@ -47,6 +47,10 @@ class WikiManager {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS wiki_category_banners (
+        category TEXT PRIMARY KEY,
+        banner TEXT NOT NULL DEFAULT ''
+      );
       CREATE INDEX IF NOT EXISTS idx_wiki_pages_category ON wiki_pages(category);
     `);
     // Migración: bases creadas antes de soportar subpáginas no tienen parent_id.
@@ -236,15 +240,36 @@ class WikiManager {
   categories() {
     const rows = this.db
       .prepare(
-        `SELECT category, COUNT(*) AS total, MAX(icon) AS icon
-         FROM wiki_pages GROUP BY category ORDER BY category COLLATE NOCASE`,
+        `SELECT p.category, COUNT(*) AS total, MAX(p.icon) AS icon,
+                COALESCE(b.banner, '') AS banner
+         FROM wiki_pages p
+         LEFT JOIN wiki_category_banners b ON b.category = p.category
+         GROUP BY p.category ORDER BY p.category COLLATE NOCASE`,
       )
       .all();
     return rows.map((row) => ({
       name:  row.category,
       total: integer(row.total),
       icon:  row.icon || DEFAULT_ICONS[row.category] || '📄',
+      banner: row.banner,
     }));
+  }
+
+  setCategoryBanner(category, banner) {
+    const name = String(category ?? '').trim();
+    if (!name) throw new Error('La categoría es obligatoria.');
+    const value = String(banner ?? '').trim();
+    if (value.length > 2000) throw new Error('El banner no puede superar los 2000 caracteres.');
+    if (!value) {
+      this.db.prepare('DELETE FROM wiki_category_banners WHERE category = ?').run(name);
+      return '';
+    }
+    this.db
+      .prepare(
+        'INSERT INTO wiki_category_banners (category, banner) VALUES (?, ?) ON CONFLICT(category) DO UPDATE SET banner = excluded.banner',
+      )
+      .run(name, value);
+    return value;
   }
 
   stats() {

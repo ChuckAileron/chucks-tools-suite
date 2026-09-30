@@ -8,6 +8,12 @@ import type {
   AnalogScheduleStatus,
   AnalogShow,
 } from './types';
+import {
+  ANALOG_BROADCAST_BLOCK_LABELS,
+  ANALOG_BROADCAST_BLOCK_SHORT_LABELS,
+  ANALOG_BROADCAST_BLOCK_VALUES,
+  normalizeAnalogBroadcastBlock,
+} from './analogBroadcastBlocks';
 
 type Screen = 'home' | 'channels' | 'shows' | 'schedule';
 const SCREENS: Record<Screen, { title: string; subtitle: string }> = {
@@ -478,6 +484,7 @@ const EMPTY_SHOW: ShowDraft = {
   airYears:          [],
   airUntilToDate:    false,
   episodeAiringMode: 'daily-repeat',
+  broadcastBlock:    'all',
 };
 type ShowView = 'list' | 'create' | 'edit' | 'import';
 type ShowSort = 'channel-name' | 'name' | 'year';
@@ -689,6 +696,7 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
         airYears:          draft.airYears || [],
         airUntilToDate:    !!draft.airUntilToDate,
         episodeAiringMode: draft.episodeAiringMode || 'daily-repeat',
+        broadcastBlock:    normalizeAnalogBroadcastBlock(draft.broadcastBlock),
       };
       if (view === 'edit' && draft.id) await window.tools.analogUpdateShow(draft.id, payload);
       else await window.tools.analogCreateShow(payload);
@@ -790,6 +798,11 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
                   <h3>
                     {show.name}
                     {show.airUntilToDate && <em className="analog-badge">Hasta la fecha</em>}
+                    {normalizeAnalogBroadcastBlock(show.broadcastBlock) !== 'all' && (
+                      <em className="analog-badge">
+                        {ANALOG_BROADCAST_BLOCK_SHORT_LABELS[normalizeAnalogBroadcastBlock(show.broadcastBlock)]}
+                      </em>
+                    )}
                   </h3>
                   {!!show.channel.length && (
                     <p>
@@ -967,6 +980,26 @@ function ShowsScreen({ refreshCounts }: { refreshCounts: () => void }) {
                   Solo una vez al día
                 </button>
               </div>
+            </div>
+            <div className="analog-field">
+              <span>Bloque horario de emisión</span>
+              <div className="analog-inline">
+                {ANALOG_BROADCAST_BLOCK_VALUES.map((block) => (
+                  <button
+                    key={block}
+                    type="button"
+                    title={ANALOG_BROADCAST_BLOCK_LABELS[block]}
+                    className={normalizeAnalogBroadcastBlock(draft.broadcastBlock) === block ? 'active' : ''}
+                    onClick={() => setDraft({ ...draft, broadcastBlock: block })}
+                  >
+                    {ANALOG_BROADCAST_BLOCK_SHORT_LABELS[block]}
+                  </button>
+                ))}
+              </div>
+              <small>
+                Si se elige un bloque distinto de "Todo el día", el programa solo se transmitirá
+                dentro de ese horario; nunca se emitirá un episodio a medias para cruzarlo.
+              </small>
             </div>
           </div>
           {draft.seasons.map((season, seasonIndex) => (

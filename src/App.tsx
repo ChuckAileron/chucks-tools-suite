@@ -7,6 +7,8 @@ import NormalizeTool from './NormalizeTool';
 import AnalogReplayTool from './AnalogReplayTool';
 import DownloadsTool from './DownloadsTool';
 import CollectionTool from './CollectionTool';
+import CuentasTool from './CuentasTool';
+import CalendarioTool from './CalendarioTool';
 import HddInventoryTool from './HddInventoryTool';
 import MediaPlayerTool from './MediaPlayerTool';
 import TrimTool from './TrimTool';
@@ -15,6 +17,7 @@ import ChuckBotTool from './ChuckBotTool';
 import WikiTool from './WikiTool';
 import HijitosTool from './HijitosTool';
 import ImageTool from './ImageTool';
+import BotsTool from './BotsTool';
 import type {
   ChuckBotOllamaStatus,
   ChuckBotServerStatus,
@@ -23,6 +26,8 @@ import type {
   DownloadsState,
   HddDrive,
   HddEntry,
+  ImageState,
+  BotState,
   MediaOrigin,
   NormalizeState,
   NowPlaying,
@@ -36,6 +41,8 @@ type Tool =
   | 'normalize'
   | 'downloads'
   | 'collection'
+  | 'cuentas'
+  | 'calendario'
   | 'replay'
   | 'hdd'
   | 'media'
@@ -44,7 +51,8 @@ type Tool =
   | 'chuckbot'
   | 'wiki'
   | 'hijitos'
-  | 'image';
+  | 'image'
+  | 'bots';
 type Theme = 'light' | 'dark';
 const THEME_KEY = 'chucks-tools-theme';
 function readInitialTheme(): Theme {
@@ -110,6 +118,23 @@ const EMPTY_TRIM: TrimState           = {
   settings:       {},
   logs:           [],
 };
+const EMPTY_IMAGE: ImageState         = {
+  running:        false,
+  format:         'webp',
+  files:          [],
+  globalProgress: 0,
+  fileProgress:   0,
+  activeFile:     'Sin procesos activos',
+  results:        [],
+};
+const EMPTY_BOTS: BotState            = {
+  running:   false,
+  recipe:    '',
+  stepIndex: 0,
+  stepTotal: 0,
+  message:   'Sin procesos activos',
+  log:       [],
+};
 export default function App() {
   const [tool, setTool]   = useState<Tool>('hijitos');
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
@@ -126,6 +151,8 @@ export default function App() {
   const [video, setVideo]                   = useState<VideoState>(EMPTY_VIDEO);
   const [normalize, setNormalize]           = useState<NormalizeState>(EMPTY_NORMALIZE);
   const [trim, setTrim]                     = useState<TrimState>(EMPTY_TRIM);
+  const [image, setImage]                   = useState<ImageState>(EMPTY_IMAGE);
+  const [bots, setBots]                     = useState<BotState>(EMPTY_BOTS);
   const [candidates, setCandidates]         = useState<DownloadCandidate[]>([]);
   const [downloadNotice, setDownloadNotice] = useState(0);
   // Estado del Inventario HDD elevado a App para poder recordar la
@@ -199,16 +226,22 @@ export default function App() {
     window.tools.getVideoState().then(setVideo);
     window.tools.getNormalizeState().then(setNormalize);
     window.tools.getTrimState().then(setTrim);
+    window.tools.getImagesState().then(setImage);
+    window.tools.getBotsState().then(setBots);
     const stopDownloads = window.tools.onDownloadsState(setDownloads);
     const stopVideo     = window.tools.onVideoState(setVideo);
     const stopNormalize = window.tools.onNormalizeState(setNormalize);
     const stopTrim      = window.tools.onTrimState(setTrim);
+    const stopImage     = window.tools.onImagesState(setImage);
+    const stopBots      = window.tools.onBotsState(setBots);
     const stopClipboard = window.tools.onClipboardLinks(captureClipboard);
     return () => {
       stopDownloads();
       stopVideo();
       stopNormalize();
       stopTrim();
+      stopImage();
+      stopBots();
       stopClipboard();
     };
   }, []);
@@ -251,6 +284,27 @@ export default function App() {
             <span>
               <strong>Colección</strong>
               <small>Catálogo local</small>
+            </span>
+          </button>
+          <button className={tool === 'cuentas' ? 'active' : ''} onClick={() => setTool('cuentas')}>
+            <i>
+              <CuentasIcon />
+            </i>
+            <span>
+              <strong>Cuentas</strong>
+              <small>Gastos y ahorros</small>
+            </span>
+          </button>
+          <button
+            className={tool === 'calendario' ? 'active' : ''}
+            onClick={() => setTool('calendario')}
+          >
+            <i>
+              <CalendarioIcon />
+            </i>
+            <span>
+              <strong>Calendario</strong>
+              <small>Eventos y fechas</small>
             </span>
           </button>
           <button
@@ -370,15 +424,6 @@ export default function App() {
               />
             </span>
           </button>
-          <button className={tool === 'replay' ? 'active' : ''} onClick={() => setTool('replay')}>
-            <i>
-              <TvIcon />
-            </i>
-            <span>
-              <strong>AnalogReplayTV</strong>
-              <small>Configuración TV</small>
-            </span>
-          </button>
           <button className={tool === 'image' ? 'active' : ''} onClick={() => setTool('image')}>
             <i>
               <ImageIcon />
@@ -386,6 +431,34 @@ export default function App() {
             <span>
               <strong>Convertir imágenes</strong>
               <small>Cambio de formato</small>
+              <SidebarProgress
+                value={image.globalProgress}
+                label={image.running ? `${image.globalProgress}% global` : 'Sin tareas'}
+                active={image.running}
+              />
+            </span>
+          </button>
+          <button className={tool === 'bots' ? 'active' : ''} onClick={() => setTool('bots')}>
+            <i>
+              <RobotIcon />
+            </i>
+            <span>
+              <strong>Bots de navegación</strong>
+              <small>Automatización web</small>
+              <SidebarProgress
+                value={bots.stepTotal ? (bots.stepIndex * 100) / bots.stepTotal : 0}
+                label={bots.running ? bots.message : 'Sin procesos'}
+                active={bots.running}
+              />
+            </span>
+          </button>
+          <button className={tool === 'replay' ? 'active' : ''} onClick={() => setTool('replay')}>
+            <i>
+              <TvIcon />
+            </i>
+            <span>
+              <strong>AnalogReplayTV</strong>
+              <small>Configuración TV</small>
             </span>
           </button>
           <button className={tool === 'hdd' ? 'active' : ''} onClick={() => setTool('hdd')}>
@@ -443,6 +516,10 @@ export default function App() {
           <AnalogReplayTool />
         ) : tool === 'collection' ? (
           <CollectionTool />
+        ) : tool === 'cuentas' ? (
+          <CuentasTool />
+        ) : tool === 'calendario' ? (
+          <CalendarioTool />
         ) : tool === 'bindertrack' ? (
           <BinderTrackTool />
         ) : tool === 'wiki' ? (
@@ -470,6 +547,8 @@ export default function App() {
           />
         ) : tool === 'image' ? (
           <ImageTool />
+        ) : tool === 'bots' ? (
+          <BotsTool />
         ) : (
           <DownloadsTool candidates={candidates} setCandidates={setCandidates} />
         )}
@@ -501,6 +580,31 @@ function BookIcon() {
     <SidebarIcon>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </SidebarIcon>
+  );
+}
+
+function CuentasIcon() {
+  return (
+    <SidebarIcon>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </SidebarIcon>
+  );
+}
+
+function CalendarioIcon() {
+  return (
+    <SidebarIcon>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <path d="m8 14 .01 0" />
+      <path d="m12 14 .01 0" />
+      <path d="m16 14 .01 0" />
+      <path d="m8 17 .01 0" />
+      <path d="m12 17 .01 0" />
     </SidebarIcon>
   );
 }
@@ -622,6 +726,18 @@ function ImageIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <path d="m21 15-5-5L5 21" />
+    </SidebarIcon>
+  );
+}
+
+function RobotIcon() {
+  return (
+    <SidebarIcon>
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M12 4v4" />
+      <circle cx="12" cy="3" r="1" />
+      <path d="M8 13h.01M16 13h.01" />
+      <path d="M8 17h8" />
     </SidebarIcon>
   );
 }

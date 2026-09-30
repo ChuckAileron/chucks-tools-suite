@@ -574,6 +574,175 @@ function SidePageNode({
   );
 }
 
+function useWikiBannerSource(banner: string) {
+  const isRemote                  = /^(?:https?:|data:)/i.test(banner);
+  const [localSrc, setLocalSrc]   = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const [failedFor, setFailedFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!banner || isRemote) return;
+    let active = true;
+    window.tools
+      .hijitosReadBanner(banner)
+      .then((data) => {
+        if (!active) return;
+        setLoadedFor(banner);
+        setLocalSrc(data);
+        setFailedFor((previous) => (previous === banner ? null : previous));
+      })
+      .catch(() => {
+        if (active) setFailedFor(banner);
+      });
+    return () => {
+      active = false;
+    };
+  }, [banner, isRemote]);
+  return {
+    source: isRemote ? banner : loadedFor === banner ? localSrc : null,
+    failed: failedFor === banner,
+    setFailedFor,
+  };
+}
+
+function WikiCategoryBannerEditor({
+  category,
+  onClose,
+  onSave,
+}: {
+  category: WikiCategory;
+  onClose: () => void;
+  onSave: (banner: string) => Promise<void>;
+}) {
+  const [value, setValue]                = useState(category.banner);
+  const [busy, setBusy]                  = useState(false);
+  const [error, setError]                = useState('');
+  const { source, failed, setFailedFor } = useWikiBannerSource(value);
+  const pickImage                        = async () => {
+    const picked = await window.tools.hijitosSelectBanner();
+    if (picked) setValue(picked);
+  };
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSave(value.trim());
+      onClose();
+    } catch (saveError) {
+      setError(String((saveError as Error).message || saveError));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      className="image-search-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="image-search-modal hijito-editor">
+        <header>
+          <div>
+            <h2>Banner de {category.name}</h2>
+            <p>Imagen de cabecera de esta categoría, por URL o ruta local.</p>
+          </div>
+        </header>
+        <div className="collection-form-grid">
+          <label className="wide">
+            <span>Banner (URL o ruta local)</span>
+            <div className="collection-image-row">
+              <input
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                placeholder="https://… o C:\\carpeta\\imagen.png"
+              />
+              <button type="button" onClick={pickImage}>
+                Elegir imagen…
+              </button>
+            </div>
+          </label>
+          {value && (
+            <label className="wide">
+              <span>Vista previa</span>
+              <div className="wiki-category-banner-preview">
+                {source && !failed ? (
+                  <img src={source} alt="" onError={() => setFailedFor(value)} />
+                ) : (
+                  <span>Vista previa no disponible</span>
+                )}
+              </div>
+            </label>
+          )}
+        </div>
+        {error && <p className="hijito-form-error">{error}</p>}
+        <footer>
+          <span>Déjalo vacío para quitar el banner.</span>
+          <div>
+            <button type="button" onClick={onClose} disabled={busy}>
+              Cancelar
+            </button>
+            <button type="button" className="prompt-confirm" onClick={() => void save()} disabled={busy}>
+              {busy ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function WikiCategoryBanner({
+  category,
+  onSave,
+}: {
+  category: WikiCategory;
+  onSave: (banner: string) => Promise<void>;
+}) {
+  const [editing, setEditing]            = useState(false);
+  const { source, failed, setFailedFor } = useWikiBannerSource(category.banner);
+  return (
+    <>
+      <div className="hijito-banner wiki-category-banner">
+        {source && !failed ? (
+          <img src={source} alt="" onError={() => setFailedFor(category.banner)} />
+        ) : (
+          <div className="wiki-category-banner-empty">
+            <span>{category.icon}</span>
+            <strong>{category.name}</strong>
+          </div>
+        )}
+        <div className="wiki-category-banner-title">
+          <span>{category.icon}</span>
+          <strong>{category.name}</strong>
+        </div>
+        <button
+          type="button"
+          className="hijito-banner-edit"
+          title={category.banner ? 'Cambiar banner' : 'Agregar banner'}
+          aria-label={category.banner ? 'Cambiar banner' : 'Agregar banner'}
+          onClick={() => setEditing(true)}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="m21 15-5-5L5 21" />
+          </svg>
+          <span className="hijito-banner-edit-label">
+            {category.banner ? 'Cambiar banner' : 'Agregar banner'}
+          </span>
+        </button>
+      </div>
+      {editing && (
+        <WikiCategoryBannerEditor
+          key={category.name}
+          category={category}
+          onClose={() => setEditing(false)}
+          onSave={onSave}
+        />
+      )}
+    </>
+  );
+}
+
 export default function WikiTool() {
   const [pages, setPages]                           = useState<WikiPage[]>([]);
   const [categories, setCategories]                 = useState<WikiCategory[]>([]);
@@ -757,6 +926,13 @@ export default function WikiTool() {
     load();
     goHome();
   };
+  const saveCategoryBanner = async (category: string, banner: string) => {
+    await window.tools.setWikiCategoryBanner(category, banner);
+    setCategories((current) =>
+      current.map((item) => (item.name === category ? { ...item, banner } : item)),
+    );
+    setMessage('Banner de categoría guardado.');
+  };
 
   // Etiqueta/objetivo del botón de generación masiva: depende del nivel en
   // el que está posicionado el usuario (categoría → páginas raíz de esa
@@ -886,13 +1062,14 @@ export default function WikiTool() {
     excludedFromParent.add(draft.id);
     for (const id of descendantIds(draft.id, pages)) excludedFromParent.add(id);
   }
-  const parentOptions = pages
+  const parentOptions      = pages
     .filter((page) => !excludedFromParent.has(page.id))
     .map((page) => ({
       id:    page.id,
       label: [...ancestorsOf(page, pages).map((p) => p.title), page.title].join(' / '),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
+  const activeCategoryData = categories.find((category) => category.name === activeCategory) ?? null;
 
   return (
     <div className="wiki-tool">
@@ -1258,36 +1435,44 @@ export default function WikiTool() {
             })()}
           </article>
         ) : view === 'browse' || view === 'category' || searching ? (
-          <section className="wiki-list-view">
-            {filtered.length ? (
-              <ul className="wiki-page-list">
-                {filtered.map((page) => (
-                  <li key={page.id} onClick={() => openPage(page)}>
-                    <span className={`wiki-badge ${toneFor(page.category)}`}>{page.icon}</span>
-                    <div>
-                      <strong>{page.title}</strong>
-                      <small>{page.summary || 'Sin resumen todavía.'}</small>
-                    </div>
-                    <em>
-                      {page.parentId !== null
-                        ? [...ancestorsOf(page, pages).map((p) => p.title)].join(' / ')
-                        : page.category}
-                    </em>
-                    <small>{relativeTime(page.updatedAt)}</small>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="wiki-empty">
-                {searching
-                  ? 'Sin resultados para tu búsqueda.'
-                  : 'Aún no hay páginas en esta sección.'}{' '}
-                <button type="button" onClick={startCreate}>
-                  Crear la primera página
-                </button>
-              </p>
+          <>
+            {view === 'category' && !searching && activeCategory !== PINNED && activeCategoryData && (
+              <WikiCategoryBanner
+                category={activeCategoryData}
+                onSave={(banner) => saveCategoryBanner(activeCategoryData.name, banner)}
+              />
             )}
-          </section>
+            <section className="wiki-list-view">
+              {filtered.length ? (
+                <ul className="wiki-page-list">
+                  {filtered.map((page) => (
+                    <li key={page.id} onClick={() => openPage(page)}>
+                      <span className={`wiki-badge ${toneFor(page.category)}`}>{page.icon}</span>
+                      <div>
+                        <strong>{page.title}</strong>
+                        <small>{page.summary || 'Sin resumen todavía.'}</small>
+                      </div>
+                      <em>
+                        {page.parentId !== null
+                          ? [...ancestorsOf(page, pages).map((p) => p.title)].join(' / ')
+                          : page.category}
+                      </em>
+                      <small>{relativeTime(page.updatedAt)}</small>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="wiki-empty">
+                  {searching
+                    ? 'Sin resultados para tu búsqueda.'
+                    : 'Aún no hay páginas en esta sección.'}{' '}
+                  <button type="button" onClick={startCreate}>
+                    Crear la primera página
+                  </button>
+                </p>
+              )}
+            </section>
+          </>
         ) : (
           <>
             <section className="wiki-welcome-card">

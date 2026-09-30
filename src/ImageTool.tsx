@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { ImageConvertOutcome, ImageConvertResult, ImageFormat } from './types';
+import { useEffect, useState } from 'react';
+import type { ImageConvertResult, ImageFormat, ImageState } from './types';
 
 const FORMAT_OPTIONS: { id: ImageFormat; label: string; description: string }[] = [
   { id: 'jpg', label: 'JPEG', description: 'Fotografía liviana con pérdida' },
@@ -44,19 +44,22 @@ function extensionOf(name: string) {
   return index > 0 ? name.slice(index + 1).toUpperCase() : '';
 }
 
-function ResultRow({ result }: { result: ImageConvertResult }) {
-  const { name, dir } = splitPath(result.output ?? result.input);
+function StatusRow({ file, result }: { file: string; result?: ImageConvertResult }) {
+  const { name, dir } = splitPath(file);
+  const status        = !result ? 'pending' : result.ok ? 'ok' : 'fail';
   return (
-    <div className={`image-result-row${result.ok ? ' ok' : ' fail'}`}>
-      <i>{result.ok ? '✓' : '✗'}</i>
+    <div className={`image-file-row status-${status}`}>
+      <i>{!result ? '…' : result.ok ? '✓' : '✗'}</i>
       <span>
         <strong>{name}</strong>
         <small>{dir}</small>
       </span>
-      {result.ok ? (
-        <b>{extensionOf(name)}</b>
+      {result?.ok && result.output ? (
+        <em className="image-output-name">{splitPath(result.output).name}</em>
+      ) : result && !result.ok ? (
+        <em className="image-error">{result.error ?? 'Error desconocido'}</em>
       ) : (
-        <em>{result.error ?? 'Error desconocido'}</em>
+        <b>{extensionOf(name)}</b>
       )}
     </div>
   );
@@ -65,16 +68,34 @@ function ResultRow({ result }: { result: ImageConvertResult }) {
 export default function ImageTool() {
   const [files, setFiles]     = useState<string[]>([]);
   const [format, setFormat]   = useState<ImageFormat>('webp');
-  const [running, setRunning] = useState(false);
   const [message, setMessage] = useState('');
-  const [outcome, setOutcome] = useState<ImageConvertOutcome | null>(null);
+  const [state, setState]     = useState<ImageState | null>(null);
+
+  const running     = state?.running ?? false;
+  const showLocal   = files.length > 0;
+  const hasJob      = !showLocal && (running || (state?.files.length ?? 0) > 0 || (state?.results.length ?? 0) > 0);
+  const jobFiles    = showLocal ? files : state?.files ?? [];
+  const formatLabel = FORMAT_OPTIONS.find((option) => option.id === format)?.label ?? format;
+  const formatState = FORMAT_OPTIONS.find((option) => option.id === (state?.format ?? format))?.label ?? format;
+
+  useEffect(() => {
+    window.tools
+      .getImagesState()
+      .then(setState)
+      .catch(() => setState(null));
+    return window.tools.onImagesState(setState);
+  }, []);
+
+  const resultsByInput = new Map<string, ImageConvertResult>();
+  for (const result of state?.results ?? []) resultsByInput.set(result.input, result);
+  const completed = state ? state.results.filter((item) => item.ok).length : 0;
+  const failed    = state && state.results.length > 0 ? state.results.length - completed : 0;
 
   const pickFiles = async () => {
     try {
       const picked = await window.tools.imagesSelect();
       if (!picked.length) return;
       setFiles((current) => [...new Set([...current, ...picked])]);
-      setOutcome(null);
       setMessage('');
     } catch (error) {
       setMessage((error as Error).message);
@@ -87,26 +108,25 @@ export default function ImageTool() {
 
   const clearList = () => {
     setFiles([]);
-    setOutcome(null);
   };
 
   const convert = async () => {
     if (!files.length || running) return;
-    setRunning(true);
     setMessage('');
-    setOutcome(null);
     try {
-      setOutcome(await window.tools.imagesConvert(format, files));
+      await window.tools.startImageConversion(format, files);
+      setFiles([]);
     } catch (error) {
       setMessage((error as Error).message);
-    } finally {
-      setRunning(false);
     }
   };
 
-  const completed   = outcome ? outcome.results.filter((item) => item.ok).length : 0;
-  const failedCount = outcome ? outcome.results.length - completed : 0;
-  const formatLabel = FORMAT_OPTIONS.find((option) => option.id === format)?.label ?? format;
+  const cancel = () => {
+    window.tools
+      .cancelImageConversion()
+      .then(() => setMessage('Conversión cancelada por el usuario.'))
+      .catch(() => {});
+  };
 
   return (
     <section className="tool image-tool">
@@ -132,29 +152,33 @@ export default function ImageTool() {
           <button onClick={pickFiles} disabled={running}>
             + Agregar imágenes
           </button>
-          <button onClick={clearList} disabled={running || !files.length}>
+          <button onClick={clearList} disabled={running || !showLocal || !files.length}>
             Limpiar
           </button>
         </div>
-        {files.length ? (
+        {jobFiles.length ? (
           <div className="results image-results">
             <div>
               <label>
-                {files.length} imagen{files.length === 1 ? '' : 'es'} seleccionada
-                {files.length === 1 ? '' : 's'}
+                {jobFiles.length} imagen{jobFiles.length === 1 ? '' : 'es'}
               </label>
-              <span>Salida en la misma carpeta</span>
+              <span>
+                {running
+                  ? `Convirtiendo a ${formatState}…`
+                  : showLocal
+                    ? 'Salida en la misma carpeta'
+                    : `Lote a ${formatState}`}
+              </span>
             </div>
             <section className="image-file-list">
-              {files.map((filePath) => {
-                const { name, dir } = splitPath(filePath);
-                return (
+              {jobFiles.map((filePath) =>
+                showLocal ? (
                   <div className="image-file-row" key={filePath}>
                     <span>
-                      <strong>{name}</strong>
-                      <small>{dir}</small>
+                      <strong>{splitPath(filePath).name}</strong>
+                      <small>{splitPath(filePath).dir}</small>
                     </span>
-                    <b>{extensionOf(name)}</b>
+                    <b>{extensionOf(splitPath(filePath).name)}</b>
                     <button
                       type="button"
                       title="Quitar de la lista"
@@ -164,12 +188,45 @@ export default function ImageTool() {
                       ×
                     </button>
                   </div>
-                );
-              })}
+                ) : (
+                  <StatusRow key={filePath} file={filePath} result={resultsByInput.get(filePath)} />
+                ),
+              )}
             </section>
           </div>
         ) : (
           <div className="video-empty">Aún no hay imágenes seleccionadas.</div>
+        )}
+        {running && (
+          <div className="normalize-progress">
+            <span>
+              <strong>Progreso global</strong>
+              <b>{state?.globalProgress ?? 0}%</b>
+            </span>
+            <i>
+              <b style={{ width: `${state?.globalProgress ?? 0}%` }} />
+            </i>
+            <em>
+              {state?.results.length ?? 0} de {jobFiles.length} imágenes procesadas
+            </em>
+            <span>
+              <strong>{state?.activeFile ?? 'Sin procesos activos'}</strong>
+              <b>{state?.fileProgress ?? 0}%</b>
+            </span>
+            <i>
+              <b style={{ width: `${state?.fileProgress ?? 0}%` }} />
+            </i>
+          </div>
+        )}
+        {!running && !showLocal && state && state.results.length > 0 && (
+          <div className="image-outcome">
+            <div className="image-outcome-head">
+              <strong>
+                {completed} convertida{completed === 1 ? '' : 's'} a {formatState}
+              </strong>
+              {failed > 0 && <em>{failed} con errores</em>}
+            </div>
+          </div>
         )}
         <div className="divider" />
         <div className="step">
@@ -185,10 +242,10 @@ export default function ImageTool() {
               type="button"
               key={option.id}
               className={format === option.id ? 'active' : ''}
-              disabled={running || !files.length}
+              disabled={running}
               onClick={() => {
                 setFormat(option.id);
-                setOutcome(null);
+                setMessage('');
               }}
             >
               <strong>{option.label}</strong>
@@ -207,31 +264,26 @@ export default function ImageTool() {
           </span>
         </aside>
         {message && <p className="image-message error">{message}</p>}
-        {outcome && (
-          <div className="image-outcome">
-            <div className="image-outcome-head">
-              <strong>
-                {completed} convertida{completed === 1 ? '' : 's'} a {formatLabel}
-              </strong>
-              {failedCount > 0 && <em>{failedCount} con errores</em>}
-            </div>
-            <div className="image-outcome-list">
-              {outcome.results.map((result) => (
-                <ResultRow key={result.input} result={result} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
       <div className="tool-action simple">
         <span>
-          {files.length
-            ? `${files.length} imagen${files.length === 1 ? '' : 'es'} → ${formatLabel}`
-            : 'Selecciona imágenes para convertir'}
+          {running
+            ? 'La conversión continúa aunque cambies de sección'
+            : hasJob
+              ? `${completed} convertidas en el último lote`
+              : files.length
+                ? `${files.length} imagen${files.length === 1 ? '' : 'es'} → ${formatLabel}`
+                : 'Selecciona imágenes para convertir'}
         </span>
-        <button disabled={!files.length} onClick={convert}>
-          {running ? 'Convirtiendo…' : `Convertir a ${formatLabel} →`}
-        </button>
+        {running ? (
+          <button className="cancel-button" onClick={cancel}>
+            Cancelar conversión
+          </button>
+        ) : (
+          <button disabled={!files.length} onClick={convert}>
+            Convertir a {formatLabel} →
+          </button>
+        )}
       </div>
     </section>
   );
